@@ -13,7 +13,7 @@ check-app-syntax:
 	./scripts/check-swift-syntax.sh
 
 test-core:
-	./scripts/swift.sh test --parallel --disable-sandbox --disable-index-store
+	./scripts/swift.sh test --parallel --disable-sandbox
 
 build:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh build

@@ -26,7 +26,7 @@ for script in \
   /bin/bash -n "${script}"
 done
 
-expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox --disable-index-store'
+expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'
 actual_fast_verify="$(make --no-print-directory --dry-run verify)"
 [[ "${actual_fast_verify}" == "${expected_fast_verify}" ]] ||
   fail "make verify must remain the fast infrastructure and core-test gate."
