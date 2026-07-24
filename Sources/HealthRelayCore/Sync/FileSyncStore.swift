@@ -26,25 +26,7 @@ public actor FileSyncStore {
         self.rootDirectory = rootDirectory
         dailyDirectory = rootDirectory.appendingPathComponent("daily", isDirectory: true)
         stateFile = rootDirectory.appendingPathComponent("sync-state.json", isDirectory: false)
-
-        try FileManager.default.createDirectory(
-            at: dailyDirectory,
-            withIntermediateDirectories: true
-        )
-        #if os(iOS)
-        try Self.protectAndExcludeFromBackup(rootDirectory)
-        try Self.protectAndExcludeFromBackup(dailyDirectory)
-        #endif
-        if FileManager.default.fileExists(atPath: stateFile.path) {
-            let data = try Data(contentsOf: stateFile)
-            let decoded = try CanonicalJSON.decode(PersistedState.self, from: data)
-            guard decoded.schemaVersion == 1 else {
-                throw FileSyncStoreError.unsupportedStateVersion(decoded.schemaVersion)
-            }
-            state = decoded
-        } else {
-            state = PersistedState()
-        }
+        state = PersistedState()
     }
 
     public func recover() throws {
@@ -442,6 +424,26 @@ public actor FileSyncStore {
 
     private func ensureRecovered() throws {
         guard !hasRecovered else { return }
+        try FileManager.default.createDirectory(
+            at: dailyDirectory,
+            withIntermediateDirectories: true
+        )
+        #if os(iOS)
+        try Self.protectAndExcludeFromBackup(rootDirectory)
+        try Self.protectAndExcludeFromBackup(dailyDirectory)
+        #endif
+        if FileManager.default.fileExists(atPath: stateFile.path) {
+            let data = try Data(contentsOf: stateFile)
+            let decoded = try CanonicalJSON.decode(PersistedState.self, from: data)
+            guard decoded.schemaVersion == 1 else {
+                throw FileSyncStoreError.unsupportedStateVersion(
+                    decoded.schemaVersion
+                )
+            }
+            state = decoded
+        } else {
+            state = PersistedState()
+        }
         var nextState = state
         var dailyChanged = false
 

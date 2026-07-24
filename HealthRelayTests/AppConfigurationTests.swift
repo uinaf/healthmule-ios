@@ -28,8 +28,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertTrue(HealthMetric.readTypes(for: []).isEmpty)
     }
 
-    @MainActor
-    func testQueryableMetricsUseRequestedSubsetAndMigrateLegacyState() throws {
+    func testQueryableMetricsUseRequestedSubsetAndMigrateLegacyState() async throws {
         let suiteName = "HealthRelayTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer {
@@ -47,26 +46,23 @@ final class AppConfigurationTests: XCTestCase {
         }
         let client = HealthKitClient(
             store: HKHealthStore(),
-            anchorStore: HealthAnchorStore(),
-            dayBoundaryStore: DayBoundaryStore(
-                directoryURL: boundaryDirectory
+            anchorDirectoryURL: boundaryDirectory.appendingPathComponent(
+                "anchors",
+                isDirectory: true
             ),
-            defaults: defaults
+            dayBoundaryDirectoryURL: boundaryDirectory,
+            defaultsSuiteName: suiteName
         )
         let enabled: Set<HealthMetric> = [.stepCount, .sleep]
 
-        XCTAssertEqual(
-            client.queryableMetrics(from: enabled),
-            [.stepCount]
-        )
+        let requestedSubset = await client.queryableMetrics(from: enabled)
+        XCTAssertEqual(requestedSubset, [.stepCount])
 
         defaults.removeObject(
             forKey: "health.authorization.requestedMetrics"
         )
-        XCTAssertEqual(
-            client.queryableMetrics(from: enabled),
-            enabled
-        )
+        let migratedSubset = await client.queryableMetrics(from: enabled)
+        XCTAssertEqual(migratedSubset, enabled)
     }
 
     func testDisabledMetricStatusIsExplicit() {
@@ -101,6 +97,34 @@ final class AppConfigurationTests: XCTestCase {
         queue.enqueue(.historySelection)
 
         XCTAssertEqual(queue.followUpTrigger, .historySelection)
+    }
+
+    func testObserverFlushRequestsCoalesceWhileDrainIsActive() {
+        var queue = ObserverFlushQueue()
+
+        XCTAssertTrue(queue.request())
+        XCTAssertFalse(queue.request())
+        XCTAssertTrue(queue.isDraining)
+        XCTAssertTrue(queue.beginPass())
+        XCTAssertFalse(queue.beginPass())
+        queue.finish()
+
+        XCTAssertFalse(queue.isDraining)
+        XCTAssertTrue(queue.request())
+    }
+
+    func testObserverFlushRequestDuringPassCreatesOneFollowUp() {
+        var queue = ObserverFlushQueue()
+
+        XCTAssertTrue(queue.request())
+        XCTAssertTrue(queue.beginPass())
+        XCTAssertFalse(queue.request())
+        XCTAssertFalse(queue.request())
+        XCTAssertTrue(queue.beginPass())
+        XCTAssertFalse(queue.beginPass())
+        queue.finish()
+
+        XCTAssertFalse(queue.isDraining)
     }
 
     func testDriveReadinessRequiresVerifiedFolder() {
@@ -349,6 +373,20 @@ final class AppConfigurationTests: XCTestCase {
             replacing: .succeeded(
                 .diagnostics,
                 "Diagnostics are ready to share."
+            ),
+            report: SyncReport(),
+            summary: .empty
+        )
+
+        XCTAssertNil(state)
+    }
+
+    @MainActor
+    func testObserverCompletionDoesNotRepublishIdenticalSyncBanner() {
+        let state = AppModel.observerSyncCompletionState(
+            replacing: .succeeded(
+                .sync,
+                "Everything is up to date."
             ),
             report: SyncReport(),
             summary: .empty

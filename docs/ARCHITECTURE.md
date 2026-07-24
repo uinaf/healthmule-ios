@@ -47,7 +47,7 @@ Solid arrows are implemented runtime paths.
 | Aggregation | Pure Swift inputs cover latest values, stable arithmetic means, asleep-interval unioning, workout de-duplication, derived totals, and deterministic source ordering. |
 | Durable sync | `SyncEngine` and `FileSyncStore` implement semantic no-op detection, artifact revisions, a persistent retry queue, manifest ordering, retry backoff, reauthorization blocking, and full republishing when the destination account or managed folder identity changes. |
 | Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
-| HealthKit | The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
+| HealthKit | A dedicated `HealthKitClient` actor keeps queries, sample transformation, aggregation, and anchor/day-boundary persistence off the UI actor. The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
 | Google | GoogleSignIn restores and refreshes credentials, distinguishing a revoked grant, an account change, and a temporary network failure. OAuth authorization and verified Drive readiness are separate states. Every token refresh and Drive request is bound to its expected stable account ID. `DriveArtifactDestination` maps core artifacts and retry classifications onto account-scoped folder discovery and stable-ID multipart upserts. |
 | Background refresh | The app registers a SwiftUI `BGAppRefreshTask` handler, bootstraps the same services if launched cold, and submits a best-effort request with a one-hour earliest start. |
 | Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, and redacted sync counts. |
@@ -201,17 +201,19 @@ the next Drive upsert. Settings prevents changes during a visible operation;
 each accepted change also queues a serialized reconciliation, including a
 follow-up pass if the selection changes while another sync is suspended.
 
-Observer queries are registered at the start of bootstrap, before its first
-suspension point, but only for enabled types that have completed the system
-request. `HealthAnchorStore` archives one anchor per metric and keeps a
+Observer queries are registered as bootstrap's first asynchronous action, but
+only for enabled types that have completed the system request.
+`HealthAnchorStore` archives one anchor per metric and keeps a
 UUID-to-date index so a later `HKDeletedObject` can identify an older affected
 day. Enabled observations stage their affected dates plus the rolling
 reconciliation window, commit the anchor, and attempt to flush pending uploads
-when Google is connected. New sample mappings are persisted and published to
-the live store before the anchor, while deletion mappings are retained until
-that anchor is durable; an interrupted anchor write therefore replays the
-deletion with its affected date still available both immediately and after a
-relaunch.
+when Google is connected. Concurrent observer uploads use a single-flight
+drain: requests received during one upload produce at most one follow-up pass,
+while every observer still waits for its own durable staging before completing.
+New sample mappings are persisted and published to the live store before the
+anchor, while deletion mappings are retained until that anchor is durable; an
+interrupted anchor write therefore replays the deletion with its affected date
+still available both immediately and after a relaunch.
 
 Bootstrap resolves the Apple Health request state before replaying any pending
 uploads unblocked by restored Google credentials. A non-empty restored queue is

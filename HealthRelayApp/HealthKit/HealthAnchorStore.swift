@@ -1,19 +1,16 @@
 @preconcurrency import HealthKit
 import Foundation
 
-@MainActor
 final class HealthAnchorStore {
     private struct SampleIndex: Codable {
         var datesByUUID: [String: [String]] = [:]
     }
 
     private let directory: URL
-    private var index: SampleIndex
+    private var index: SampleIndex?
 
-    init(
-        fileManager: FileManager = .default,
-        directoryURL: URL? = nil
-    ) {
+    init(directoryURL: URL? = nil) {
+        let fileManager = FileManager.default
         let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -21,25 +18,6 @@ final class HealthAnchorStore {
         directory = directoryURL ?? applicationSupport
             .appendingPathComponent("HealthRelay", isDirectory: true)
             .appendingPathComponent("Anchors", isDirectory: true)
-
-        try? fileManager.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-        )
-        var resourceValues = URLResourceValues()
-        resourceValues.isExcludedFromBackup = true
-        var mutableDirectory = directory
-        try? mutableDirectory.setResourceValues(resourceValues)
-
-        let indexURL = directory.appendingPathComponent("sample-index.json")
-        if let data = try? Data(contentsOf: indexURL),
-           let decoded = try? JSONDecoder().decode(SampleIndex.self, from: data)
-        {
-            index = decoded
-        } else {
-            index = SampleIndex()
-        }
     }
 
     func anchor(for metric: HealthMetric) -> HKQueryAnchor? {
@@ -58,7 +36,7 @@ final class HealthAnchorStore {
     }
 
     func dates(forDeletedUUID uuid: UUID) -> Set<String> {
-        Set(index.datesByUUID[uuid.uuidString] ?? [])
+        Set(loadIndex().datesByUUID[uuid.uuidString] ?? [])
     }
 
     func commit(
@@ -68,7 +46,7 @@ final class HealthAnchorStore {
         sampleDates: [UUID: Set<String>],
         deletedUUIDs: Set<UUID>
     ) throws {
-        var nextIndex = index
+        var nextIndex = loadIndex()
         for (uuid, dates) in sampleDates {
             nextIndex.datesByUUID[uuid.uuidString] = dates.sorted()
         }
@@ -145,6 +123,7 @@ final class HealthAnchorStore {
     }
 
     private func persist(_ candidate: SampleIndex) throws {
+        try prepareDirectory()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(candidate)
@@ -152,5 +131,37 @@ final class HealthAnchorStore {
             data,
             to: directory.appendingPathComponent("sample-index.json")
         )
+    }
+
+    private func loadIndex() -> SampleIndex {
+        if let index {
+            return index
+        }
+        let indexURL = directory.appendingPathComponent("sample-index.json")
+        let loaded: SampleIndex
+        if let data = try? Data(contentsOf: indexURL),
+           let decoded = try? JSONDecoder().decode(SampleIndex.self, from: data)
+        {
+            loaded = decoded
+        } else {
+            loaded = SampleIndex()
+        }
+        index = loaded
+        return loaded
+    }
+
+    private func prepareDirectory() throws {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [
+                .protectionKey:
+                    FileProtectionType.completeUntilFirstUserAuthentication
+            ]
+        )
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        var mutableDirectory = directory
+        try mutableDirectory.setResourceValues(resourceValues)
     }
 }

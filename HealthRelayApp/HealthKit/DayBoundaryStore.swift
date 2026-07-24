@@ -8,46 +8,29 @@ struct StoredDayBoundary: Codable, Equatable, Sendable {
     let end: Date
 }
 
-@MainActor
 final class DayBoundaryStore {
+    private let directory: URL
     private let fileURL: URL
-    private var boundaries: [String: StoredDayBoundary]
+    private var boundaries: [String: StoredDayBoundary]?
 
-    init(
-        fileManager: FileManager = .default,
-        directoryURL: URL? = nil
-    ) {
+    init(directoryURL: URL? = nil) {
+        let fileManager = FileManager.default
         let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first ?? fileManager.temporaryDirectory
-        let directory = directoryURL ?? applicationSupport.appendingPathComponent(
+        directory = directoryURL ?? applicationSupport.appendingPathComponent(
             "HealthRelay",
             isDirectory: true
         )
-        try? fileManager.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-        )
         fileURL = directory.appendingPathComponent("day-boundaries.json")
-
-        if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode(
-               [String: StoredDayBoundary].self,
-               from: data
-           )
-        {
-            boundaries = decoded
-        } else {
-            boundaries = [:]
-        }
     }
 
     func boundary(
         for date: LocalDate,
         currentTimeZone: TimeZone
     ) throws -> StoredDayBoundary {
+        let boundaries = loadBoundaries()
         if let existing = boundaries[date.rawValue] {
             guard let storedTimeZone = TimeZone(
                 identifier: existing.timeZoneIdentifier
@@ -64,7 +47,7 @@ final class DayBoundaryStore {
                 var nextBoundaries = boundaries
                 nextBoundaries[date.rawValue] = normalized
                 try persist(nextBoundaries)
-                boundaries = nextBoundaries
+                self.boundaries = nextBoundaries
             }
             return normalized
         }
@@ -99,7 +82,7 @@ final class DayBoundaryStore {
         var nextBoundaries = boundaries
         nextBoundaries[date.rawValue] = boundary
         try persist(nextBoundaries)
-        boundaries = nextBoundaries
+        self.boundaries = nextBoundaries
         return boundary
     }
 
@@ -132,6 +115,7 @@ final class DayBoundaryStore {
         end: Date,
         fallbackCalendar: Calendar
     ) -> Set<String> {
+        let boundaries = loadBoundaries()
         let endProbe = max(start, end.addingTimeInterval(-0.001))
         let storedMatches = boundaries.values.compactMap { boundary -> String? in
             guard start < boundary.end, endProbe >= boundary.start else {
@@ -157,6 +141,14 @@ final class DayBoundaryStore {
     private func persist(
         _ candidate: [String: StoredDayBoundary]
     ) throws {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [
+                .protectionKey:
+                    FileProtectionType.completeUntilFirstUserAuthentication
+            ]
+        )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(candidate)
@@ -168,5 +160,24 @@ final class DayBoundaryStore {
         values.isExcludedFromBackup = true
         var mutableURL = fileURL
         try mutableURL.setResourceValues(values)
+    }
+
+    private func loadBoundaries() -> [String: StoredDayBoundary] {
+        if let boundaries {
+            return boundaries
+        }
+        let loaded: [String: StoredDayBoundary]
+        if let data = try? Data(contentsOf: fileURL),
+           let decoded = try? JSONDecoder().decode(
+               [String: StoredDayBoundary].self,
+               from: data
+           )
+        {
+            loaded = decoded
+        } else {
+            loaded = [:]
+        }
+        boundaries = loaded
+        return loaded
     }
 }

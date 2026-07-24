@@ -56,6 +56,33 @@ struct SelectionReconciliationQueue: Equatable, Sendable {
     }
 }
 
+struct ObserverFlushQueue: Equatable, Sendable {
+    private(set) var isDraining = false
+    private var hasPendingPass = false
+
+    mutating func request() -> Bool {
+        hasPendingPass = true
+        guard !isDraining else {
+            return false
+        }
+        isDraining = true
+        return true
+    }
+
+    mutating func beginPass() -> Bool {
+        guard hasPendingPass else {
+            return false
+        }
+        hasPendingPass = false
+        return true
+    }
+
+    mutating func finish() {
+        precondition(!hasPendingPass)
+        isDraining = false
+    }
+}
+
 enum OperationKind: Equatable {
     case healthAuthorization
     case googleConnection

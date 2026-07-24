@@ -95,14 +95,13 @@ enum HealthChangeDateMapper {
     }
 }
 
-@MainActor
-final class HealthKitClient {
+actor HealthKitClient {
     private static let authorizationRequestedKey =
         "health.authorization.requested"
     private static let requestedMetricsKey =
         "health.authorization.requestedMetrics"
 
-    struct AnchoredChangeBatch {
+    struct AnchoredChangeBatch: Sendable {
         let metric: HealthMetric
         let affectedDates: Set<String>
         let anchor: HKQueryAnchor
@@ -120,26 +119,22 @@ final class HealthKitClient {
     private var observerQueries: [HKObserverQuery] = []
     private var observationHandler: ObservationHandler?
 
-    init() {
-        store = HKHealthStore()
-        anchorStore = HealthAnchorStore()
-        dayBoundaryStore = DayBoundaryStore()
-        defaults = .standard
-    }
-
     init(
-        store: HKHealthStore,
-        anchorStore: HealthAnchorStore,
-        dayBoundaryStore: DayBoundaryStore,
-        defaults: UserDefaults = .standard
+        store: HKHealthStore = HKHealthStore(),
+        anchorDirectoryURL: URL? = nil,
+        dayBoundaryDirectoryURL: URL? = nil,
+        defaultsSuiteName: String? = nil
     ) {
         self.store = store
-        self.anchorStore = anchorStore
-        self.dayBoundaryStore = dayBoundaryStore
-        self.defaults = defaults
+        anchorStore = HealthAnchorStore(directoryURL: anchorDirectoryURL)
+        dayBoundaryStore = DayBoundaryStore(
+            directoryURL: dayBoundaryDirectoryURL
+        )
+        defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:))
+            ?? .standard
     }
 
-    var isAvailable: Bool {
+    nonisolated var isAvailable: Bool {
         HKHealthStore.isHealthDataAvailable()
     }
 
@@ -316,14 +311,18 @@ final class HealthKitClient {
                     completion()
                     return
                 }
-                Task { @MainActor in
+                Task {
                     defer { completion() }
-                    await self.observationHandler?(metric)
+                    await self.deliverObservation(metric)
                 }
             }
             observerQueries.append(query)
             store.execute(query)
         }
+    }
+
+    private func deliverObservation(_ metric: HealthMetric) async {
+        await observationHandler?(metric)
     }
 
     func changedDates(

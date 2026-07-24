@@ -66,6 +66,7 @@ final class AppModel {
     private var healthRefreshEpoch: UInt64 = 0
     private var operationEpoch: UInt64 = 0
     private var selectionReconciliationQueue = SelectionReconciliationQueue()
+    private var observerFlushQueue = ObserverFlushQueue()
     private let isUITesting: Bool
     // The calendar date is authoritative; `Date` is only a live UI projection.
     private var customBackfillStartValue: String
@@ -227,7 +228,7 @@ final class AppModel {
             return
         }
         bootstrapInProgress = true
-        registerHealthObservers()
+        await registerHealthObservers()
 
         await diagnostics.record(category: "lifecycle", event: "bootstrap-started")
         await recoverSyncCoordinatorIfNeeded()
@@ -344,7 +345,7 @@ final class AppModel {
             guard operationEpoch == expectedOperationEpoch else {
                 return
             }
-            registerHealthObservers()
+            await registerHealthObservers()
             operationState = .succeeded(
                 .healthAuthorization,
                 "Apple Health request complete. Apple does not report which read permissions were approved."
@@ -378,7 +379,7 @@ final class AppModel {
         operationState = checkingState
         let expectedOperationEpoch = operationEpoch
         await refreshHealthStatuses()
-        registerHealthObservers()
+        await registerHealthObservers()
         await healthKit.updateBackgroundDelivery(for: enabledMetrics)
         guard
             operationEpoch == expectedOperationEpoch,
@@ -678,7 +679,7 @@ final class AppModel {
 
         do {
             let backfillStart = try resolvedBackfillStart()
-            let queryableMetrics = healthKit.queryableMetrics(
+            let queryableMetrics = await healthKit.queryableMetrics(
                 from: enabledMetrics
             )
             let outcome = try await syncCoordinator.reconcile(
@@ -942,7 +943,6 @@ final class AppModel {
             }
             return status
         }
-        registerHealthObservers()
         guard !isUITesting else { return }
         Task { [weak self] in
             await self?.applyHealthMetricSelection()
@@ -991,17 +991,16 @@ final class AppModel {
             "Resetting local sync state"
         )
         do {
-            if let syncCoordinator {
-                try await syncCoordinator.reset()
+            let candidate = if let syncCoordinator {
+                syncCoordinator
             } else {
-                try healthKit.resetAnchors()
-                if FileManager.default.fileExists(atPath: stagingRoot.path) {
-                    try FileManager.default.removeItem(at: stagingRoot)
-                }
-                LiveSyncCoordinator.clearPersistedResetMetadata()
-                try rebuildSyncCoordinator()
+                try makeSyncCoordinator()
             }
-            syncSummary = try await syncCoordinator?.summary() ?? .empty
+            try await candidate.reset()
+            let refreshedSummary = try await candidate.summary()
+            syncCoordinator = candidate
+            syncInitializationError = nil
+            syncSummary = refreshedSummary
             diagnosticsURL = nil
             operationState = .succeeded(
                 .localReset,
@@ -1009,6 +1008,8 @@ final class AppModel {
             )
             await diagnostics.record(category: "state", event: "local-reset")
         } catch {
+            syncCoordinator = nil
+            syncInitializationError = error.localizedDescription
             operationState = .failed(
                 .localReset,
                 error.localizedDescription
@@ -1058,8 +1059,12 @@ final class AppModel {
         guard healthRefreshEpoch == refreshEpoch else {
             return
         }
-        healthAuthorizationState = refreshedState
-        metricStatuses = refreshedStatuses
+        if healthAuthorizationState != refreshedState {
+            healthAuthorizationState = refreshedState
+        }
+        if metricStatuses != refreshedStatuses {
+            metricStatuses = refreshedStatuses
+        }
     }
 
     static func refreshHealthBeforeCredentialReplay(
@@ -1076,7 +1081,7 @@ final class AppModel {
         await refreshHealthStatuses(
             publishingCheckingState: publishingCheckingState
         )
-        registerHealthObservers()
+        await registerHealthObservers()
         await healthKit.updateBackgroundDelivery(for: enabledMetrics)
     }
 
@@ -1176,8 +1181,8 @@ final class AppModel {
         }
     }
 
-    private func registerHealthObservers() {
-        healthKit.registerObservers(
+    private func registerHealthObservers() async {
+        await healthKit.registerObservers(
             for: enabledMetrics
         ) { [weak self] metric in
             await self?.handleHealthObservation(metric)
@@ -1188,7 +1193,7 @@ final class AppModel {
         await refreshHealthStatuses(
             publishingCheckingState: !operationState.isWorking
         )
-        registerHealthObservers()
+        await registerHealthObservers()
         var appliedMetrics = enabledMetrics
         while true {
             await healthKit.updateBackgroundDelivery(
@@ -1299,39 +1304,42 @@ final class AppModel {
         }
     }
 
-    private func rebuildSyncCoordinator() throws {
+    private func makeSyncCoordinator() throws -> LiveSyncCoordinator {
         let recordProvider = HealthKitDailyRecordProvider(
             healthKit: healthKit
         )
-        do {
-            syncCoordinator = try LiveSyncCoordinator(
-                rootDirectory: stagingRoot,
-                healthKit: healthKit,
-                recordProvider: recordProvider,
-                destination: DriveArtifactDestination(
-                    driveClient: driveClient
-                ),
-                diagnostics: diagnostics
-            )
-            syncInitializationError = nil
-        } catch {
-            syncCoordinator = nil
-            syncInitializationError = error.localizedDescription
-            throw error
-        }
+        return try LiveSyncCoordinator(
+            rootDirectory: stagingRoot,
+            healthKit: healthKit,
+            recordProvider: recordProvider,
+            destination: DriveArtifactDestination(
+                driveClient: driveClient
+            ),
+            diagnostics: diagnostics
+        )
     }
 
     private func recoverSyncCoordinatorIfNeeded() async {
-        guard syncCoordinator == nil else {
-            return
-        }
+        let wasUnavailable =
+            syncCoordinator == nil || syncInitializationError != nil
         do {
-            try rebuildSyncCoordinator()
-            await diagnostics.record(
-                category: "state",
-                event: "local-storage-restored"
-            )
+            let candidate = if let syncCoordinator {
+                syncCoordinator
+            } else {
+                try makeSyncCoordinator()
+            }
+            try await candidate.prepare()
+            syncCoordinator = candidate
+            syncInitializationError = nil
+            if wasUnavailable {
+                await diagnostics.record(
+                    category: "state",
+                    event: "local-storage-restored"
+                )
+            }
         } catch {
+            syncInitializationError = error.localizedDescription
+            syncCoordinator = nil
             await diagnostics.record(
                 category: "state",
                 event: "local-storage-restore-failed",
@@ -1479,7 +1487,7 @@ final class AppModel {
         }
         do {
             let backfillStart = try resolvedBackfillStart()
-            let queryableMetrics = healthKit.queryableMetrics(
+            let queryableMetrics = await healthKit.queryableMetrics(
                 from: enabledMetrics
             )
             try await syncCoordinator.stageObservedChange(
@@ -1487,70 +1495,16 @@ final class AppModel {
                 enabledMetrics: queryableMetrics,
                 backfillStart: backfillStart
             )
-            syncSummary = try await syncCoordinator.summary()
+            publishSyncSummaryIfChanged(
+                try await syncCoordinator.summary()
+            )
             guard
                 googleConnection.isDriveReady,
                 !operationState.isWorking(.googleConnection)
             else {
                 return
             }
-            let expectedGoogleEpoch = googleTransitionEpoch
-            Task { [weak self] in
-                guard let self else { return }
-                guard
-                    isGoogleTransitionCurrent(expectedGoogleEpoch),
-                    googleConnection.isDriveReady,
-                    !operationState.isWorking(.googleConnection)
-                else {
-                    return
-                }
-                do {
-                    let outcome = try await syncCoordinator.flushPendingUploads()
-                    guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
-                        return
-                    }
-                    syncSummary = outcome.summary
-                    let requiresReconnect = await requireGoogleReconnect(
-                        for: outcome.report,
-                        expectedEpoch: expectedGoogleEpoch
-                    )
-                    if requiresReconnect {
-                        publishObserverSyncCompletionIfAppropriate(outcome)
-                        return
-                    }
-                    if Self.driveDestinationChanged(in: outcome.report) {
-                        let markedUnavailable =
-                            await markDriveUnavailableIfNeeded(
-                                expectedEpoch: expectedGoogleEpoch
-                            )
-                        if markedUnavailable {
-                            publishObserverSyncCompletionIfAppropriate(outcome)
-                        }
-                        return
-                    }
-                    guard
-                        isGoogleTransitionCurrent(expectedGoogleEpoch)
-                    else {
-                        return
-                    }
-                    publishObserverSyncCompletionIfAppropriate(outcome)
-                } catch {
-                    guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
-                        return
-                    }
-                    _ = await requireGoogleReconnect(
-                        for: error,
-                        expectedEpoch: expectedGoogleEpoch
-                    )
-                    await diagnostics.record(
-                        category: "sync",
-                        event: "observer-upload-failed",
-                        fields: [
-                            "errorCode": String(describing: type(of: error))
-                        ]
-                    )
-                }
-            }
+            requestObserverFlush()
         } catch {
             await diagnostics.record(
                 category: "sync",
@@ -1558,6 +1512,83 @@ final class AppModel {
                 fields: ["errorCode": String(describing: type(of: error))]
             )
         }
+    }
+
+    private func requestObserverFlush() {
+        guard observerFlushQueue.request() else {
+            return
+        }
+        Task { [weak self] in
+            await self?.drainObserverFlushes()
+        }
+    }
+
+    private func drainObserverFlushes() async {
+        while observerFlushQueue.beginPass() {
+            await performObserverFlushPass()
+        }
+        observerFlushQueue.finish()
+    }
+
+    private func performObserverFlushPass() async {
+        guard
+            let syncCoordinator,
+            googleConnection.isDriveReady,
+            !operationState.isWorking(.googleConnection)
+        else {
+            return
+        }
+        let expectedGoogleEpoch = googleTransitionEpoch
+        do {
+            let outcome = try await syncCoordinator.flushPendingUploads()
+            guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
+                return
+            }
+            publishSyncSummaryIfChanged(outcome.summary)
+            let requiresReconnect = await requireGoogleReconnect(
+                for: outcome.report,
+                expectedEpoch: expectedGoogleEpoch
+            )
+            if requiresReconnect {
+                publishObserverSyncCompletionIfAppropriate(outcome)
+                return
+            }
+            if Self.driveDestinationChanged(in: outcome.report) {
+                let markedUnavailable = await markDriveUnavailableIfNeeded(
+                    expectedEpoch: expectedGoogleEpoch
+                )
+                if markedUnavailable {
+                    publishObserverSyncCompletionIfAppropriate(outcome)
+                }
+                return
+            }
+            guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
+                return
+            }
+            publishObserverSyncCompletionIfAppropriate(outcome)
+        } catch {
+            guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
+                return
+            }
+            _ = await requireGoogleReconnect(
+                for: error,
+                expectedEpoch: expectedGoogleEpoch
+            )
+            await diagnostics.record(
+                category: "sync",
+                event: "observer-upload-failed",
+                fields: [
+                    "errorCode": String(describing: type(of: error))
+                ]
+            )
+        }
+    }
+
+    private func publishSyncSummaryIfChanged(_ summary: SyncSummary) {
+        guard syncSummary != summary else {
+            return
+        }
+        syncSummary = summary
     }
 
     private func publishObserverSyncCompletionIfAppropriate(
@@ -1625,7 +1656,11 @@ final class AppModel {
         case .working:
             return nil
         }
-        return syncCompletionState(report: report, summary: summary)
+        let nextState = syncCompletionState(
+            report: report,
+            summary: summary
+        )
+        return nextState == currentState ? nil : nextState
     }
 
     private static func successMessage(for report: SyncReport) -> String {

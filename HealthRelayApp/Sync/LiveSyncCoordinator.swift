@@ -68,6 +68,10 @@ actor LiveSyncCoordinator {
         )
     }
 
+    func prepare() async throws {
+        try await runtime.store.recover()
+    }
+
     func reconcile(
         trigger: SyncTrigger,
         enabledMetrics: Set<HealthMetric>,
@@ -457,7 +461,6 @@ actor LiveSyncCoordinator {
         recordProvider: HealthKitDailyRecordProvider,
         destination: DriveArtifactDestination
     ) throws -> Runtime {
-        try prepareProtectedDirectory(rootDirectory)
         let store = try FileSyncStore(rootDirectory: rootDirectory)
         let engine = SyncEngine(
             configuration: SyncEngine.Configuration(
@@ -471,17 +474,5 @@ actor LiveSyncCoordinator {
             store: store
         )
         return Runtime(store: store, engine: engine)
-    }
-
-    private static func prepareProtectedDirectory(_ url: URL) throws {
-        try FileManager.default.createDirectory(
-            at: url,
-            withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-        )
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableURL = url
-        try mutableURL.setResourceValues(values)
     }
 }
