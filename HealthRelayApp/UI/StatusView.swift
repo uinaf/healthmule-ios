@@ -195,52 +195,70 @@ struct StatusView: View {
     }
 
     private var summaryCard: some View {
-        VStack(spacing: 16) {
-            HStack {
+        VStack(spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Sync details")
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
 
-            if dynamicTypeSize.isAccessibilitySize {
+            if dynamicTypeSize > .large {
                 VStack(spacing: 14) {
                     summaryValue(
                         "Last sync",
                         value: lastSyncValue
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Divider()
                     summaryValue(
                         "Latest day",
                         value: model.syncSummary.latestExportedDate ?? "None"
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Divider()
                     summaryValue(
                         "Pending",
                         value: model.syncSummary.pendingUploadCount.formatted()
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
                 HStack(alignment: .top, spacing: 0) {
-                    summaryValue("Last sync", value: lastSyncValue)
+                    summaryValue(
+                        "Last sync",
+                        value: compactLastSyncValue,
+                        accessibilityValue: lastSyncValue,
+                        staysOnOneLine: true
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 10)
                     Divider()
                     summaryValue(
                         "Latest day",
-                        value: model.syncSummary.latestExportedDate ?? "None"
+                        value: compactLatestDayValue,
+                        accessibilityValue:
+                            model.syncSummary.latestExportedDate ?? "None",
+                        staysOnOneLine: true
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
                     Divider()
                     summaryValue(
                         "Pending",
-                        value: model.syncSummary.pendingUploadCount.formatted()
+                        value: model.syncSummary.pendingUploadCount.formatted(),
+                        staysOnOneLine: true
                     )
+                    .frame(width: 48, alignment: .leading)
+                    .padding(.leading, 10)
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .healthRelayCard()
+        .healthRelayCard(padding: 16)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens sync details.")
@@ -288,21 +306,25 @@ struct StatusView: View {
 
     private func summaryValue(
         _ label: String,
-        value: String
+        value: String,
+        accessibilityValue: String? = nil,
+        staysOnOneLine: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.caption)
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             Text(value)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
+                .lineLimit(staysOnOneLine ? 1 : nil)
+                .minimumScaleFactor(staysOnOneLine ? 0.82 : 1)
+                .allowsTightening(staysOnOneLine)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityValue(value)
+        .accessibilityValue(accessibilityValue ?? value)
     }
 
     private var isReady: Bool {
@@ -380,6 +402,49 @@ struct StatusView: View {
     private var lastSyncValue: String {
         model.syncSummary.lastSuccessfulSyncAt?
             .formatted(date: .abbreviated, time: .shortened) ?? "Never"
+    }
+
+    private var compactLastSyncValue: String {
+        guard let lastSync = model.syncSummary.lastSuccessfulSyncAt else {
+            return "Never"
+        }
+
+        let calendar = Calendar.current
+        let date: String
+        if calendar.component(.year, from: lastSync)
+            == calendar.component(.year, from: .now)
+        {
+            date = lastSync.formatted(
+                .dateTime.month(.abbreviated).day()
+            )
+        } else {
+            date = lastSync.formatted(
+                .dateTime.month(.abbreviated).day().year()
+            )
+        }
+        let time = lastSync.formatted(date: .omitted, time: .shortened)
+        return "\(date) · \(time)"
+    }
+
+    private var compactLatestDayValue: String {
+        guard let rawValue = model.syncSummary.latestExportedDate else {
+            return "None"
+        }
+        guard let date = BackfillDateCodec.date(from: rawValue) else {
+            return rawValue
+        }
+
+        let calendar = Calendar.current
+        if calendar.component(.year, from: date)
+            == calendar.component(.year, from: .now)
+        {
+            return date.formatted(
+                .dateTime.month(.abbreviated).day()
+            )
+        }
+        return date.formatted(
+            .dateTime.month(.abbreviated).day().year()
+        )
     }
 
     private var healthConnectionDetail: String {
