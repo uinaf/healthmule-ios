@@ -33,18 +33,18 @@ case "${task}" in
     ;;
   test | smoke)
     destination="$(./scripts/simulator-destination.sh)"
-    test_arguments=()
+    set --
     if [[ "${task}" == "smoke" ]]; then
-      test_arguments+=(
-        -only-testing:HealthRelayUITests/HealthRelayUITests/testAppShellUsesFocusedNavigation
-      )
+      set -- \
+        "$@" \
+        "-only-testing:HealthRelayUITests/HealthRelayUITests/testAppShellUsesFocusedNavigation"
     fi
 
     exec ./scripts/xcodebuild.sh test \
       -quiet \
       -project HealthRelay.xcodeproj \
       -scheme HealthRelay \
-      "${test_arguments[@]}" \
+      "$@" \
       -destination "${destination}" \
       -derivedDataPath .artifacts/DerivedData \
       CODE_SIGNING_ALLOWED=YES \
