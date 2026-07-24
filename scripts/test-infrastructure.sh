@@ -102,6 +102,8 @@ for workflow in .github/workflows/verify.yml .github/workflows/full-verify.yml; 
 done
 grep -Fq "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" .github/workflows/verify.yml ||
   fail "Fast CI must pin the Swift build cache action."
+grep -Fq "id: swift-build-cache" .github/workflows/verify.yml ||
+  fail "Fast CI must expose exact cache-hit state."
 grep -Eq '^[[:space:]]+path:[[:space:]]+\.build[[:space:]]*$' .github/workflows/verify.yml ||
   fail "Fast CI must cache only the local Swift build directory."
 grep -Fq "key: verify-swift-build-v1-" .github/workflows/verify.yml ||
@@ -110,6 +112,14 @@ grep -Fq "'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swi
   fail "Fast CI must invalidate its build cache for every SwiftPM input."
 grep -Fq 'HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
   fail "Fast CI must keep Swift module caches inside the cached build directory."
+grep -Fq "if: steps.swift-build-cache.outputs.cache-hit == 'true'" .github/workflows/verify.yml ||
+  fail "Exact cache hits must use the no-rebuild verification path."
+grep -Fq "make test-infra check-app-syntax" .github/workflows/verify.yml ||
+  fail "Exact cache hits must still run infrastructure and app syntax checks."
+grep -Fq "./scripts/swift.sh test --skip-build --parallel --disable-sandbox" .github/workflows/verify.yml ||
+  fail "Exact cache hits must run the complete cached Swift test bundle."
+grep -Fq "if: steps.swift-build-cache.outputs.cache-hit != 'true'" .github/workflows/verify.yml ||
+  fail "Cache misses must use the canonical build-and-test path."
 grep -Eq '^[[:space:]]+runs-on:[[:space:]]+ubuntu-24\.04[[:space:]]*$' .github/workflows/verify.yml ||
   fail "Fast CI must use the Linux runner."
 grep -Eq '^[[:space:]]+timeout-minutes:[[:space:]]+5[[:space:]]*$' .github/workflows/verify.yml ||

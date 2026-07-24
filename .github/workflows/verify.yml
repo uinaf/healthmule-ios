@@ -34,6 +34,7 @@ jobs:
           echo "hash=${version_hash}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore Swift build cache
+        id: swift-build-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build
@@ -41,7 +42,16 @@ jobs:
           restore-keys: |
             verify-swift-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-
 
-      - name: Run fast verification
+      - name: Run cached verification
+        if: steps.swift-build-cache.outputs.cache-hit == 'true'
+        env:
+          HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
+        run: |
+          make test-infra check-app-syntax
+          ./scripts/swift.sh test --skip-build --parallel --disable-sandbox
+
+      - name: Build and run verification
+        if: steps.swift-build-cache.outputs.cache-hit != 'true'
         env:
           HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
         run: make verify
