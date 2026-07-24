@@ -31,7 +31,7 @@ else
   exit 1
 fi
 
-module_cache="${TMPDIR:-/tmp}/health-relay-module-cache"
+module_cache="${HEALTH_RELAY_MODULE_CACHE:-${TMPDIR:-/tmp}/health-relay-module-cache}"
 mkdir -p "${module_cache}/clang" "${module_cache}/swiftpm"
 export CLANG_MODULE_CACHE_PATH="${module_cache}/clang"
 export SWIFTPM_MODULECACHE_OVERRIDE="${module_cache}/swiftpm"

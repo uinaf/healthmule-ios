@@ -21,9 +21,27 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: Fingerprint Swift toolchain
+        id: swift-toolchain
+        run: |
+          swift_version="$(swift --version)"
+          printf '%s\n' "${swift_version}"
+          version_hash="$(printf '%s' "${swift_version}" | sha256sum | cut -d ' ' -f 1)"
+          echo "hash=${version_hash}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore Swift build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: verify-swift-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh') }}
+          restore-keys: |
+            verify-swift-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-
+
       - name: Run fast verification
+        env:
+          HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
         run: make verify

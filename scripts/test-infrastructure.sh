@@ -26,7 +26,7 @@ for script in \
   /bin/bash -n "${script}"
 done
 
-expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'
+expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox --disable-index-store'
 actual_fast_verify="$(make --no-print-directory --dry-run verify)"
 [[ "${actual_fast_verify}" == "${expected_fast_verify}" ]] ||
   fail "make verify must remain the fast infrastructure and core-test gate."
@@ -95,6 +95,21 @@ fi
 if grep -Fq "./scripts/install-xcodegen.sh" .github/workflows/verify.yml; then
   fail "Fast CI must not install Xcode-only tooling."
 fi
+checkout_action="actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+for workflow in .github/workflows/verify.yml .github/workflows/full-verify.yml; do
+  grep -Fq "uses: ${checkout_action}" "${workflow}" ||
+    fail "${workflow} must pin the supported Node 24 checkout action."
+done
+grep -Fq "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" .github/workflows/verify.yml ||
+  fail "Fast CI must pin the Swift build cache action."
+grep -Eq '^[[:space:]]+path:[[:space:]]+\.build[[:space:]]*$' .github/workflows/verify.yml ||
+  fail "Fast CI must cache only the local Swift build directory."
+grep -Fq "key: verify-swift-build-v1-" .github/workflows/verify.yml ||
+  fail "Fast CI must keep a versioned Swift build cache key."
+grep -Fq "'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh'" .github/workflows/verify.yml ||
+  fail "Fast CI must invalidate its build cache for every SwiftPM input."
+grep -Fq 'HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
+  fail "Fast CI must keep Swift module caches inside the cached build directory."
 grep -Eq '^[[:space:]]+runs-on:[[:space:]]+ubuntu-24\.04[[:space:]]*$' .github/workflows/verify.yml ||
   fail "Fast CI must use the Linux runner."
 grep -Eq '^[[:space:]]+timeout-minutes:[[:space:]]+5[[:space:]]*$' .github/workflows/verify.yml ||
