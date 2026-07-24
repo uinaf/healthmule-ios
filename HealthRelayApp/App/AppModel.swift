@@ -234,22 +234,29 @@ final class AppModel {
         let restoredGoogleCredentials =
             await restoreGoogleConnection() != nil
             && googleConnection.isAuthorized
+        var credentialRestoreEpoch: UInt64?
         if googleConnection.isAuthorized {
             let isDriveReady = await refreshDriveFolder()
             if restoredGoogleCredentials, isDriveReady {
-                await resumeAfterCredentialRestore(
-                    expectedEpoch: googleTransitionEpoch
-                )
+                credentialRestoreEpoch = googleTransitionEpoch
             }
         }
-        await refreshHealthStatuses(
-            publishingCheckingState: !operationState.isWorking
-        )
-        registerHealthObservers()
-        await healthKit.updateBackgroundDelivery(for: enabledMetrics)
         if let syncCoordinator {
             syncSummary = (try? await syncCoordinator.summary()) ?? .empty
         }
+        await Self.refreshHealthBeforeCredentialReplay(
+            refreshHealth: { [self] in
+                await refreshHealthConnectionState(
+                    publishingCheckingState: !operationState.isWorking
+                )
+            },
+            resumeDrive: { [self] in
+                guard let credentialRestoreEpoch else { return }
+                await resumeCredentialReplay(
+                    expectedEpoch: credentialRestoreEpoch
+                )
+            }
+        )
 
         await reconcile(trigger: .appLaunch)
         BackgroundRefreshCoordinator.schedule()
@@ -270,6 +277,7 @@ final class AppModel {
         guard wasBootstrapped else { return }
         await recoverSyncCoordinatorIfNeeded()
         var restoredGoogleCredentials = false
+        var credentialRestoreEpoch: UInt64?
         if
             case .temporarilyUnavailable = googleConnection,
             !operationState.isWorking
@@ -293,16 +301,22 @@ final class AppModel {
         {
             let isDriveReady = await refreshDriveFolder()
             if restoredGoogleCredentials, isDriveReady {
-                await resumeAfterCredentialRestore(
-                    expectedEpoch: googleTransitionEpoch
-                )
+                credentialRestoreEpoch = googleTransitionEpoch
             }
         }
-        await refreshHealthStatuses(
-            publishingCheckingState: !operationState.isWorking
+        await Self.refreshHealthBeforeCredentialReplay(
+            refreshHealth: { [self] in
+                await refreshHealthConnectionState(
+                    publishingCheckingState: !operationState.isWorking
+                )
+            },
+            resumeDrive: { [self] in
+                guard let credentialRestoreEpoch else { return }
+                await resumeCredentialReplay(
+                    expectedEpoch: credentialRestoreEpoch
+                )
+            }
         )
-        registerHealthObservers()
-        await healthKit.updateBackgroundDelivery(for: enabledMetrics)
         await reconcile(trigger: .foreground)
         BackgroundRefreshCoordinator.schedule()
     }
@@ -1048,6 +1062,24 @@ final class AppModel {
         metricStatuses = refreshedStatuses
     }
 
+    static func refreshHealthBeforeCredentialReplay(
+        refreshHealth: @MainActor () async -> Void,
+        resumeDrive: @MainActor () async -> Void
+    ) async {
+        await refreshHealth()
+        await resumeDrive()
+    }
+
+    private func refreshHealthConnectionState(
+        publishingCheckingState: Bool
+    ) async {
+        await refreshHealthStatuses(
+            publishingCheckingState: publishingCheckingState
+        )
+        registerHealthObservers()
+        await healthKit.updateBackgroundDelivery(for: enabledMetrics)
+    }
+
     @discardableResult
     private func restoreGoogleConnection() async -> UInt64? {
         _ = beginGoogleTransition()
@@ -1232,6 +1264,38 @@ final class AppModel {
                 fields: ["errorCode": String(describing: type(of: error))]
             )
             return false
+        }
+    }
+
+    private func resumeCredentialReplay(expectedEpoch: UInt64) async {
+        guard
+            isGoogleTransitionCurrent(expectedEpoch),
+            googleConnection.isDriveReady
+        else {
+            return
+        }
+        let progressState: OperationState?
+        let progressEpoch: UInt64?
+        if syncSummary.pendingUploadCount > 0, !operationState.isWorking {
+            let state = OperationState.working(
+                .sync,
+                "Resuming pending uploads"
+            )
+            operationState = state
+            progressState = state
+            progressEpoch = operationEpoch
+        } else {
+            progressState = nil
+            progressEpoch = nil
+        }
+
+        _ = await resumeAfterCredentialRestore(expectedEpoch: expectedEpoch)
+
+        if let progressState, let progressEpoch {
+            settleStaleOperation(
+                ifCurrent: progressState,
+                expectedEpoch: progressEpoch
+            )
         }
     }
 

@@ -257,6 +257,29 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertFalse(neverRequested.canSync)
     }
 
+    @MainActor
+    func testHealthStatusResolvesBeforeCredentialReplayCanSuspend() async {
+        var healthState = HealthAuthorizationState.checking
+        let replayGate = AppModelSuspensionGate()
+
+        let refreshTask = Task { @MainActor in
+            await AppModel.refreshHealthBeforeCredentialReplay(
+                refreshHealth: {
+                    healthState = .requestCompleted
+                },
+                resumeDrive: {
+                    await replayGate.suspend()
+                }
+            )
+        }
+
+        await replayGate.waitUntilSuspended()
+        XCTAssertEqual(healthState, .requestCompleted)
+
+        await replayGate.release()
+        await refreshTask.value
+    }
+
     func testNonSyncFailureDoesNotBecomeSyncFailure() {
         let connectionFailure = OperationState.failed(
             .googleConnection,
@@ -562,5 +585,37 @@ final class AppConfigurationTests: XCTestCase {
             BackfillDateCodec.string(from: date, timeZone: timeZone),
             "2026-07-23"
         )
+    }
+}
+
+private actor AppModelSuspensionGate {
+    private var isSuspended = false
+    private var isReleased = false
+    private var suspensionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func suspend() async {
+        isSuspended = true
+        let waiters = suspensionWaiters
+        suspensionWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        guard !isReleased else { return }
+        await withCheckedContinuation { continuation in
+            releaseWaiters.append(continuation)
+        }
+    }
+
+    func waitUntilSuspended() async {
+        guard !isSuspended else { return }
+        await withCheckedContinuation { continuation in
+            suspensionWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        isReleased = true
+        let waiters = releaseWaiters
+        releaseWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 }

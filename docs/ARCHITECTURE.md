@@ -213,6 +213,11 @@ that anchor is durable; an interrupted anchor write therefore replays the
 deletion with its affected date still available both immediately and after a
 relaunch.
 
+Bootstrap resolves the Apple Health request state before replaying any pending
+uploads unblocked by restored Google credentials. A non-empty restored queue is
+shown as active sync work instead of leaving Health on `Checking` while Drive
+uploads run.
+
 Initial anchored reads are scoped to the selected history start and paged in
 bounded batches. Each metric persists that query boundary with its anchor; an
 expanded history window resets that metric's anchor and safely replays from the
