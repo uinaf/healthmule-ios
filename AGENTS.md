@@ -11,11 +11,14 @@
 ## Validation
 
 - Fast contract tests: `make test-core`
-- Full local gate: `make verify`
+- Fast local and required CI gate: `make verify`
+- Full iOS and Simulator gate: `make verify-full`
 - Runtime smoke test: `make smoke`
 
-`make verify` owns project generation, Swift package tests, an iOS build, and
-the simulator test suite. Keep CI pointed at this command.
+`make verify` checks the infrastructure contract, parses all app and iOS test
+Swift, and runs the deterministic core tests on Linux or macOS. App and UI
+changes also need `make build` or `make smoke`. `make verify-full` owns the
+complete iOS unit and Simulator UI suite.
 
 ## Repo rules
 

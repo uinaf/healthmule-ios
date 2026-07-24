@@ -393,12 +393,16 @@ make test
 make smoke
 make run
 make verify
+make verify-full
 ```
 
-`make verify` checks the serialized Xcode/CI tooling contract, runs the
-Foundation package tests, and runs the iOS app and UI tests on an available
-Simulator. It does not prove HealthKit authorization, observer delivery, Google
-OAuth, Drive uploads, or background relaunch behavior; those belong to the
+`make verify` is the fast cross-platform gate: it checks the serialized tooling
+contract, parses all app and iOS test Swift, and runs the deterministic
+Foundation package tests. Required CI runs that target on Linux.
+`make verify-full` adds the iOS app and UI tests on an available Simulator and
+is available through the manual `Full Verify` workflow.
+Neither command proves HealthKit authorization, observer delivery, Google OAuth,
+Drive uploads, or background relaunch behavior; those belong to the
 [physical-device checklist](DEVICE_TESTING.md).
 
 ## Remaining integration gaps

@@ -129,7 +129,6 @@ schemes:
       config: Debug
     test:
       config: Debug
-      gatherCoverageData: true
       targets:
         - name: HealthRelayTests
         - name: HealthRelayUITests

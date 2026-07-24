@@ -25,7 +25,7 @@ They still require the signed-device scenarios below.
 - A clean local verification run:
 
   ```sh
-  make verify
+  make verify-full
   ```
 
 ## Build and install

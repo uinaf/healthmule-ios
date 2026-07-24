@@ -56,11 +56,18 @@ make test-infra # Static checks for the serialized Xcode and CI tool contracts
 make build      # Unsigned generic iOS Simulator build
 make test       # App unit tests and Simulator UI tests
 make smoke      # Launches only the app-shell UI smoke test
-make verify     # Canonical local and CI gate: test-infra + test-core + test
+make verify      # Fast CI: infrastructure + Swift syntax + core tests
+make verify-full # Complete Xcode app, unit, and Simulator UI gate
 ```
 
 Run `make clean` to remove SwiftPM and Xcode build products managed by these
 commands.
+
+Required CI checks infrastructure, parses all app and iOS test Swift, and runs
+the deterministic core suite on Linux. App and UI changes should also run
+`make build` or `make smoke` locally. The complete Simulator suite remains
+available through `make verify-full` and the manual `Full Verify` GitHub
+workflow, without spending macOS runner time on every push.
 
 HealthKit authorization and background delivery require a signed build on a
 physical iPhone. Google OAuth and real Drive uploads require local client

@@ -16,8 +16,8 @@ concurrency:
 jobs:
   verify:
     name: Verify
-    runs-on: macos-26
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
 
     steps:
       - name: Check out repository
@@ -25,10 +25,5 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install XcodeGen
-        run: |
-          ./scripts/install-xcodegen.sh "${RUNNER_TEMP}/xcodegen"
-          echo "${RUNNER_TEMP}/xcodegen/xcodegen/bin" >> "${GITHUB_PATH}"
-
-      - name: Run verification
+      - name: Run fast verification
         run: make verify

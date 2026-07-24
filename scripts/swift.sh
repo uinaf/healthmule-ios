@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+swift_tool="${HEALTH_RELAY_SWIFT_TOOL:-swift}"
+if [[ "${swift_tool}" != "swift" && "${swift_tool}" != "swiftc" ]]; then
+  echo "error: HEALTH_RELAY_SWIFT_TOOL must be swift or swiftc." >&2
+  exit 1
+fi
+
+swift_command=()
 if command -v xcodebuild >/dev/null 2>&1 && xcodebuild -version >/dev/null 2>&1; then
   developer_dir="$(xcode-select -p)"
 else
@@ -14,14 +21,18 @@ else
   done
 fi
 
-if [[ -z "${developer_dir}" ]]; then
-  echo "error: A full Xcode installation is required." >&2
+if [[ -n "${developer_dir}" ]]; then
+  export DEVELOPER_DIR="${developer_dir}"
+  swift_command=(xcrun "${swift_tool}")
+elif command -v "${swift_tool}" >/dev/null 2>&1; then
+  swift_command=("${swift_tool}")
+else
+  echo "error: A Swift 6 toolchain is required." >&2
   exit 1
 fi
 
-export DEVELOPER_DIR="${developer_dir}"
-module_cache="${TMPDIR:-/private/tmp}/health-relay-module-cache"
+module_cache="${TMPDIR:-/tmp}/health-relay-module-cache"
 mkdir -p "${module_cache}/clang" "${module_cache}/swiftpm"
 export CLANG_MODULE_CACHE_PATH="${module_cache}/clang"
 export SWIFTPM_MODULECACHE_OVERRIDE="${module_cache}/swiftpm"
-exec xcrun swift "$@"
+exec "${swift_command[@]}" "$@"
