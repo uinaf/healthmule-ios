@@ -1,0 +1,13 @@
+{
+  "existing": {
+    "date": "2026-07-23",
+    "timeZone": "Europe/Istanbul",
+    "fileName": "2026-07-23.json"
+  },
+  "currentTimeZone": "America/New_York",
+  "expected": {
+    "date": "2026-07-23",
+    "timeZone": "Europe/Istanbul",
+    "fileName": "2026-07-23.json"
+  }
+}

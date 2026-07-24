@@ -1,0 +1,135 @@
+name: HealthRelay
+
+options:
+  bundleIdPrefix: dev.uinaf
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  HealthRelayCore:
+    path: .
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: 9.1.0
+
+settings:
+  base:
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+    ENABLE_STRICT_OBJC_MSGSEND: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+    SWIFT_VERSION: 6.0
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+
+targets:
+  HealthRelay:
+    type: application
+    platform: iOS
+    sources:
+      - path: HealthRelayApp
+        excludes:
+          - Resources
+      - path: HealthRelayApp/Resources/Assets.xcassets
+        buildPhase: resources
+      - path: HealthRelayApp/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: HealthRelayCore
+        product: HealthRelayCore
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HEALTH_RELAY_BUNDLE_IDENTIFIER)
+        CODE_SIGN_ENTITLEMENTS: HealthRelayApp/Resources/HealthRelay.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        DEVELOPMENT_TEAM: $(HEALTH_RELAY_DEVELOPMENT_TEAM)
+        TARGETED_DEVICE_FAMILY: "1,2"
+    info:
+      path: HealthRelayApp/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Health Relay
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: Google OAuth
+            CFBundleURLSchemes:
+              - $(GOOGLE_REDIRECT_SCHEME)
+        NSHealthShareUsageDescription: Health Relay reads only the fitness metrics you select and exports normalized daily summaries to your Google Drive.
+        UIRequiredDeviceCapabilities:
+          - healthkit
+        GIDClientID: $(GOOGLE_CLIENT_ID)
+        BGTaskSchedulerPermittedIdentifiers:
+          - dev.uinaf.healthrelay.refresh
+        UIBackgroundModes:
+          - fetch
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+  HealthRelayTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HealthRelayTests
+      - path: Tests/Fixtures
+        buildPhase: resources
+    dependencies:
+      - target: HealthRelay
+      - package: HealthRelayCore
+        product: HealthRelayCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.uinaf.healthrelay.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+  HealthRelayUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HealthRelayUITests
+    dependencies:
+      - target: HealthRelay
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.uinaf.healthrelay.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: HealthRelay
+
+schemes:
+  HealthRelay:
+    build:
+      targets:
+        HealthRelay: all
+        HealthRelayTests: [test]
+        HealthRelayUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - name: HealthRelayTests
+        - name: HealthRelayUITests

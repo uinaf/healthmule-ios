@@ -1,0 +1,12 @@
+{
+  "initiallyExportedDate": "2026-07-21",
+  "deltaObservedAt": "2026-07-23T12:00:00+03:00",
+  "changedSample": {
+    "id": "late-workout",
+    "type": "traditionalStrengthTraining",
+    "startedAt": "2026-07-21T07:00:00+03:00",
+    "endedAt": "2026-07-21T08:00:00+03:00",
+    "activeEnergyKcal": 300
+  },
+  "expectedAffectedDates": ["2026-07-21"]
+}

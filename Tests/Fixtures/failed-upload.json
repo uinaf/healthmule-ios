@@ -1,0 +1,15 @@
+{
+  "events": [
+    "stage-daily-revision-1",
+    "remote-create-succeeds",
+    "response-is-lost",
+    "retry-upserts-same-artifact",
+    "mark-daily-uploaded",
+    "upsert-manifest"
+  ],
+  "expected": {
+    "dailyFileCount": 1,
+    "manifestAfterDailySuccess": true,
+    "pendingUploadCount": 0
+  }
+}

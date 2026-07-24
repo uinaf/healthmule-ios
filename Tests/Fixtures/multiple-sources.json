@@ -1,0 +1,13 @@
+{
+  "input": {
+    "healthKitCumulativeStepSum": 10432,
+    "rawSamplesForDiagnosticsOnly": [
+      {"source": "Apple Watch", "value": 9000},
+      {"source": "iPhone", "value": 3200}
+    ]
+  },
+  "expected": {
+    "steps": 10432
+  },
+  "note": "The HealthKit statistics result is authoritative; raw source sums are never added together."
+}

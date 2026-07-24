@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${HEALTH_RELAY_XCODE_LOCKED:-}" != "1" ]]; then
+  echo "error: Run iOS project tasks through scripts/with-xcode-lock.sh." >&2
+  exit 1
+fi
+
+task="${1:-}"
+case "${task}" in
+  project | build | test | smoke | run | clean) ;;
+  *)
+    echo "usage: $0 {project|build|test|smoke|run|clean}" >&2
+    exit 64
+    ;;
+esac
+
+./scripts/generate-project.sh
+
+case "${task}" in
+  project)
+    exit 0
+    ;;
+  build)
+    exec ./scripts/xcodebuild.sh build \
+      -quiet \
+      -project HealthRelay.xcodeproj \
+      -scheme HealthRelay \
+      -sdk iphonesimulator \
+      -destination "generic/platform=iOS Simulator" \
+      -derivedDataPath .artifacts/DerivedData \
+      CODE_SIGNING_ALLOWED=NO
+    ;;
+  test | smoke)
+    destination="$(./scripts/simulator-destination.sh)"
+    test_arguments=()
+    if [[ "${task}" == "smoke" ]]; then
+      test_arguments+=(
+        -only-testing:HealthRelayUITests/HealthRelayUITests/testAppShellUsesFocusedNavigation
+      )
+    fi
+
+    exec ./scripts/xcodebuild.sh test \
+      -quiet \
+      -project HealthRelay.xcodeproj \
+      -scheme HealthRelay \
+      "${test_arguments[@]}" \
+      -destination "${destination}" \
+      -derivedDataPath .artifacts/DerivedData \
+      CODE_SIGNING_ALLOWED=YES \
+      CODE_SIGNING_REQUIRED=NO \
+      CODE_SIGN_IDENTITY=-
+    ;;
+  run)
+    exec ./scripts/run-simulator.sh
+    ;;
+  clean)
+    exec ./scripts/xcodebuild.sh clean \
+      -project HealthRelay.xcodeproj \
+      -scheme HealthRelay \
+      -derivedDataPath .artifacts/DerivedData
+    ;;
+esac

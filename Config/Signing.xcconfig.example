@@ -1,0 +1,4 @@
+// Copy this file to Signing.xcconfig for signed device builds.
+// The bundle identifier must match the native iOS Google OAuth client.
+HEALTH_RELAY_BUNDLE_IDENTIFIER = dev.uinaf.healthrelay
+HEALTH_RELAY_DEVELOPMENT_TEAM = ABCDE12345

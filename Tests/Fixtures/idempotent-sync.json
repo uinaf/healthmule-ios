@@ -1,0 +1,10 @@
+{
+  "syncs": [
+    {"date": "2026-07-23", "semanticRevision": 1, "generatedAt": "2026-07-23T18:10:00+03:00"},
+    {"date": "2026-07-23", "semanticRevision": 1, "generatedAt": "2026-07-23T18:20:00+03:00"}
+  ],
+  "expected": {
+    "dailyFileCount": 1,
+    "dailyUploadCount": 1
+  }
+}
