@@ -190,7 +190,7 @@ public struct ISO8601Timestamp: Codable, Hashable, Comparable, Sendable {
             .month()
             .day()
             .dateSeparator(.dash)
-            .time(includingFractionalSeconds: true)
+            .time(includingFractionalSeconds: value.contains("."))
             .timeSeparator(.colon)
             .timeZone(separator: .colon)
         return try? format.parse(value)

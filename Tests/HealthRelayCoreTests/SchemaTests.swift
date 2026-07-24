@@ -279,6 +279,20 @@ struct SchemaTests {
     }
 
     @Test
+    func parsingAcceptsOptionalFractionalSecondsAcrossFoundationVersions()
+        throws
+    {
+        let whole = try ISO8601Timestamp(
+            rawValue: "2026-07-23T18:10:00+03:00"
+        )
+        let fractional = try ISO8601Timestamp(
+            rawValue: "2026-07-23T18:10:00.125+03:00"
+        )
+
+        #expect(try fractional.date().timeIntervalSince(whole.date()) == 0.125)
+    }
+
+    @Test
     func codecsRejectUnsupportedTimeZoneIdentifiers() throws {
         var record = try sampleRecord(
             generatedAt: "2026-07-23T18:10:00+03:00",
