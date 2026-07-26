@@ -2,6 +2,8 @@
 
 Health Mule separates deterministic export, sync, and companion-message
 contracts from iOS/watchOS platform adapters.
+The `HealthRelay…` labels below are intentionally preserved internal target,
+type, and storage names rather than the user-facing product name.
 
 ```mermaid
 flowchart LR
