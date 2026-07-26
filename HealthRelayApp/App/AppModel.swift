@@ -22,6 +22,7 @@ final class AppModel {
             if case .working = operationState {
                 operationEpoch &+= 1
             }
+            publishCompanionStatus()
         }
     }
     var googleConnection: GoogleConnectionState {
@@ -29,10 +30,15 @@ final class AppModel {
             if oldValue != googleConnection {
                 googleTransitionEpoch &+= 1
             }
+            publishCompanionStatus()
         }
     }
     var metricStatuses: [MetricStatus]
-    var syncSummary: SyncSummary
+    var syncSummary: SyncSummary {
+        didSet {
+            publishCompanionStatus()
+        }
+    }
     var backfillRange: BackfillRange
     var customBackfillStart: Date {
         BackfillDateCodec.date(from: customBackfillStartValue)
@@ -41,7 +47,11 @@ final class AppModel {
     var enabledMetrics: Set<HealthMetric>
     var diagnosticsURL: URL?
     var isHealthKitAvailable: Bool
-    var healthAuthorizationState: HealthAuthorizationState
+    var healthAuthorizationState: HealthAuthorizationState {
+        didSet {
+            publishCompanionStatus()
+        }
+    }
 
     let googleConfiguration: GoogleOAuthConfiguration
 
@@ -67,6 +77,7 @@ final class AppModel {
     private var operationEpoch: UInt64 = 0
     private var selectionReconciliationQueue = SelectionReconciliationQueue()
     private var observerFlushQueue = ObserverFlushQueue()
+    private var watchConnectivity: PhoneWatchConnectivityCoordinator?
     private let isUITesting: Bool
     // The calendar date is authoritative; `Date` is only a live UI projection.
     private var customBackfillStartValue: String
@@ -199,7 +210,7 @@ final class AppModel {
             syncCoordinator = nil
             syncInitializationError = error.localizedDescription
         }
-        return AppModel(
+        let model = AppModel(
             googleConfiguration: configuration,
             googleAuth: googleAuth,
             driveClient: driveClient,
@@ -210,6 +221,32 @@ final class AppModel {
             syncInitializationError: syncInitializationError,
             isUITesting: isUITesting
         )
+        model.activateWatchConnectivity()
+        return model
+    }
+
+    private func activateWatchConnectivity() {
+        guard !isUITesting, watchConnectivity == nil else { return }
+        let coordinator = PhoneWatchConnectivityCoordinator(
+            snapshotProvider: { [weak self] in
+                self.map { model in
+                    CompanionSnapshotFactory.make(
+                        readiness: model.syncReadiness,
+                        operationState: model.operationState,
+                        summary: model.syncSummary
+                    )
+                }
+            },
+            syncRequestHandler: { [weak self] in
+                await self?.reconcile(trigger: .watchCompanion)
+            }
+        )
+        watchConnectivity = coordinator
+        coordinator.activate()
+    }
+
+    private func publishCompanionStatus() {
+        watchConnectivity?.publishCurrentStatus()
     }
 
     func bootstrap() async {
@@ -1320,6 +1357,9 @@ final class AppModel {
     }
 
     private func recoverSyncCoordinatorIfNeeded() async {
+        defer {
+            publishCompanionStatus()
+        }
         let wasUnavailable =
             syncCoordinator == nil || syncInitializationError != nil
         do {

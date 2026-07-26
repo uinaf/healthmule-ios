@@ -4,6 +4,7 @@ options:
   bundleIdPrefix: dev.uinaf
   deploymentTarget:
     iOS: "18.0"
+    watchOS: "11.0"
   createIntermediateGroups: true
   groupSortPosition: top
 
@@ -45,10 +46,13 @@ targets:
     dependencies:
       - package: HealthRelayCore
         product: HealthRelayCore
+      - package: HealthRelayCore
+        product: HealthRelayCompanion
       - package: GoogleSignIn
         product: GoogleSignIn
       - package: GoogleSignIn
         product: GoogleSignInSwift
+      - target: HealthRelayWatch
     configFiles:
       Debug: Config/App.xcconfig
       Release: Config/App.xcconfig
@@ -89,6 +93,33 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
+  HealthRelayWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: HealthRelayWatchApp
+        excludes:
+          - Resources
+      - path: HealthRelayWatchApp/Resources/Assets.xcassets
+        buildPhase: resources
+    dependencies:
+      - package: HealthRelayCore
+        product: HealthRelayCompanion
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HEALTH_RELAY_BUNDLE_IDENTIFIER).watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DEVELOPMENT_TEAM: $(HEALTH_RELAY_DEVELOPMENT_TEAM)
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Health Relay
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: $(HEALTH_RELAY_BUNDLE_IDENTIFIER)
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "4"
+
   HealthRelayTests:
     type: bundle.unit-test
     platform: iOS
@@ -123,6 +154,7 @@ schemes:
     build:
       targets:
         HealthRelay: all
+        HealthRelayWatch: all
         HealthRelayTests: [test]
         HealthRelayUITests: [test]
     run:
@@ -132,3 +164,10 @@ schemes:
       targets:
         - name: HealthRelayTests
         - name: HealthRelayUITests
+
+  HealthRelayWatch:
+    build:
+      targets:
+        HealthRelayWatch: all
+    run:
+      config: Debug

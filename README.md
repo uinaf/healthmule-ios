@@ -1,15 +1,18 @@
 # Health Relay
 
-Health Relay is a private iOS 18 app that turns a small, read-only allowlist of
-Apple Health metrics into stable daily JSON records in a user-controlled Google
-Drive folder.
+Health Relay is a private iOS 18 app with a lightweight watchOS 11 companion.
+It turns a small, read-only allowlist of Apple Health metrics into stable daily
+JSON records in a user-controlled Google Drive folder.
 
 The repository contains the SwiftUI app, deterministic export and aggregation
 core, read-only HealthKit daily provider, protected local staging and retry
 queue, Google OAuth, and an idempotent Drive destination. Foreground sync
 combines anchored changes with a rolling three-day reconciliation and a
 resumable selected-range backfill. Metric switches limit HealthKit queries and
-rebuild existing records to scrub disabled fields.
+rebuild existing records to scrub disabled fields. The Apple Watch companion
+shows sanitized sync status and can request a sync while the iPhone is
+reachable; the iPhone remains the only HealthKit, Google credential, and
+Drive-upload owner.
 
 The full sync path is implemented, but its platform integrations still need
 acceptance proof with a configured Google OAuth client, a real Drive account,
@@ -22,7 +25,8 @@ system relaunch and lets the durable sync queue reconcile the result.
 
 Requirements:
 
-- A full Xcode installation with the iOS 18 SDK
+- A full Xcode installation with the iOS 18 and watchOS 11 SDKs
+- Matching iOS and watchOS Simulator runtimes for app builds and launches
 - Swift 6
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 
@@ -30,7 +34,8 @@ CI downloads the official XcodeGen release pinned in
 `scripts/install-xcodegen.sh` and verifies its published SHA-256 digest before
 use. Local development can use any compatible `xcodegen` on `PATH`.
 
-Generate the project and launch the app in the first available iPhone Simulator:
+Generate the project and launch the phone app in the first available iPhone
+Simulator. Xcode also builds and embeds the Watch companion:
 
 ```sh
 brew install xcodegen
@@ -51,9 +56,9 @@ you are ready to connect a Drive account.
 ## Validation
 
 ```sh
-make test-core  # Foundation-only schema, aggregation, and sync contracts
+make test-core  # Foundation-only export, sync, and companion-message contracts
 make test-infra # Static checks for the serialized Xcode and CI tool contracts
-make build      # Unsigned generic iOS Simulator build
+make build      # Unsigned iOS build including the embedded Watch app
 make test       # App unit tests and Simulator UI tests
 make smoke      # Launches only the app-shell UI smoke test
 make verify      # Fast CI: infrastructure + Swift syntax + core tests
@@ -70,9 +75,10 @@ available through `make verify-full` and the manual `Full Verify` GitHub
 workflow, without spending macOS runner time on every push.
 
 HealthKit authorization and background delivery require a signed build on a
-physical iPhone. Google OAuth and real Drive uploads require local client
-configuration and an integration account. Neither boundary is proved by the
-automated Simulator gate; use the
+physical iPhone. Background Watch Connectivity delivery requires a paired
+physical iPhone and Apple Watch. Google OAuth and real Drive uploads require
+local client configuration and an integration account. Those boundaries are not
+proved by the automated Simulator gate; use the
 [device testing checklist](docs/DEVICE_TESTING.md).
 
 ## Privacy boundary

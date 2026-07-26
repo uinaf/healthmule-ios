@@ -2,7 +2,6 @@ import SwiftUI
 
 struct StatusView: View {
     @Bindable var model: AppModel
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -81,30 +80,13 @@ struct StatusView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(22)
-        .background {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    colorScheme == .dark
-                        ? HealthRelayStyle.canvas
-                        : HealthRelayStyle.surface
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            Color.accentColor.opacity(
-                                colorScheme == .dark ? 0 : 0.10
-                            )
-                        )
-                }
-        }
+        .background(
+            HealthRelayStyle.surface,
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(
-                    colorScheme == .dark
-                        ? Color.primary.opacity(0.12)
-                        : Color.accentColor.opacity(0.16),
-                    lineWidth: 1
-                )
+                .stroke(HealthRelayStyle.hairline, lineWidth: 1)
         }
     }
 
@@ -119,6 +101,7 @@ struct StatusView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(HealthRelayStyle.tint)
             .controlSize(.large)
             .accessibilityIdentifier("open-setup-action")
         case .sync:
@@ -134,6 +117,7 @@ struct StatusView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(HealthRelayStyle.tint)
             .controlSize(.large)
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
@@ -150,6 +134,7 @@ struct StatusView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(HealthRelayStyle.tint)
             .controlSize(.large)
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-retry-action")
@@ -812,7 +797,7 @@ private struct ConnectionCard: View {
         HStack(alignment: .center, spacing: 14) {
             Image(systemName: systemImage)
                 .font(.headline)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.primary)
                 .frame(width: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
@@ -837,7 +822,7 @@ private struct ConnectionCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Image(systemName: systemImage)
                 .font(.headline)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.primary)
                 .accessibilityHidden(true)
             connectionTitle
             StatusBadge(title: badge, tone: tone)

@@ -8,7 +8,8 @@ swift_files=()
 while IFS= read -r -d '' swift_file; do
   swift_files+=("${swift_file}")
 done < <(
-  find HealthRelayApp HealthRelayTests HealthRelayUITests \
+  find HealthRelayApp HealthRelayShared HealthRelayWatchApp \
+    HealthRelayTests HealthRelayUITests \
     -type f \
     -name '*.swift' \
     -print0

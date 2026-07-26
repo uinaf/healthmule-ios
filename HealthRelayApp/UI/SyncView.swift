@@ -100,6 +100,7 @@ struct SyncView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(HealthRelayStyle.tint)
                 .controlSize(.large)
                 .disabled(model.operationState.isWorking)
                 .accessibilityIdentifier("sync-now-action")
@@ -109,6 +110,7 @@ struct SyncView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(HealthRelayStyle.tint)
                 .controlSize(.large)
                 .accessibilityIdentifier("sync-setup-action")
             }
@@ -391,7 +393,7 @@ private struct SyncActionRow: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: systemImage)
                     .font(.headline)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.primary)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)

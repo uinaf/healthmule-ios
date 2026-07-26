@@ -168,6 +168,7 @@ struct SetupView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(HealthRelayStyle.tint)
             .controlSize(.large)
             .disabled(!model.isHealthKitAvailable || model.operationState.isWorking)
             .accessibilityIdentifier("health-authorization-action")
