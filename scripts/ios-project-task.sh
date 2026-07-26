@@ -26,7 +26,6 @@ case "${task}" in
       -quiet \
       -project HealthRelay.xcodeproj \
       -scheme HealthRelay \
-      -sdk iphonesimulator \
       -destination "generic/platform=iOS Simulator" \
       -derivedDataPath .artifacts/DerivedData \
       CODE_SIGNING_ALLOWED=NO

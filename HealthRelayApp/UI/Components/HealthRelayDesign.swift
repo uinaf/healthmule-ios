@@ -13,6 +13,10 @@ enum HealthRelayStyle {
         Color(uiColor: .secondarySystemBackground)
     }
 
+    static var tint: Color {
+        Color("AccentColor")
+    }
+
     static var hairline: Color {
         Color.primary.opacity(0.07)
     }
@@ -29,12 +33,8 @@ enum StatusTone {
         switch self {
         case .neutral:
             .secondary
-        case .accent:
-            .accentColor
-        case .success:
-            .green
-        case .warning:
-            .orange
+        case .accent, .success, .warning:
+            .primary
         case .danger:
             .red
         }
@@ -58,7 +58,7 @@ struct StatusBadge: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(tone.color.opacity(0.11), in: Capsule())
+        .background(Color.primary.opacity(0.08), in: Capsule())
         .accessibilityElement(children: .combine)
     }
 }
@@ -122,10 +122,6 @@ struct OperationBanner: View {
                 Spacer(minLength: 0)
             }
             .healthRelayCard(padding: 14)
-            .background(tone.color.opacity(0.05), in: RoundedRectangle(
-                cornerRadius: HealthRelayStyle.cardRadius,
-                style: .continuous
-            ))
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("operation-status")
         }

@@ -1,6 +1,10 @@
 # Physical-device testing
 
-Use a real iPhone for HealthKit authorization, observer delivery, and background-behavior acceptance. Simulator checks remain useful for the app shell and deterministic core tests, but they do not prove HealthKit delivery.
+Use a real iPhone for HealthKit authorization, observer delivery, and
+background-behavior acceptance. Use a paired real Apple Watch to prove
+background Watch Connectivity delivery. Simulator checks remain useful for both
+app shells and deterministic contracts, but they do not prove those delivery
+boundaries.
 
 ## Current readiness
 
@@ -12,6 +16,7 @@ Use a real iPhone for HealthKit authorization, observer delivery, and background
 | Daily aggregation, initial backfill, and manual sync | Implemented; signed-device and real-Drive proof pending |
 | HealthKit observer changes flowing into staged daily records | Implemented; physical background-delivery proof pending |
 | File-backed background upload and relaunch recovery | Implemented; physical interruption proof pending |
+| Watch status and reachable sync requests | Implemented; paired-device proof pending |
 
 Implemented rows describe live code paths, not completed platform acceptance.
 They still require the signed-device scenarios below.
@@ -19,6 +24,7 @@ They still require the signed-device scenarios below.
 ## Prerequisites
 
 - A physical iPhone running iOS 18 or later.
+- A paired Apple Watch running watchOS 11 or later for companion acceptance.
 - Full Xcode with an Apple Development team capable of signing the app.
 - A native iOS Google OAuth client configured as described in [Google OAuth setup](GOOGLE_OAUTH.md).
 - Health data suitable for the scenario being tested.
@@ -47,6 +53,9 @@ They still require the signed-device scenarios below.
 3. Open `HealthRelay.xcodeproj`.
 4. Confirm the HealthKit and Background Delivery capabilities remain present.
 5. Select the physical iPhone, build, and run.
+
+The embedded companion installs on the paired Apple Watch. Its bundle ID is the
+iPhone bundle ID plus `.watchkitapp`; it has no HealthKit or Google capability.
 
 Do not use a personal production Drive account for destructive or failure-injection scenarios.
 
@@ -90,6 +99,20 @@ configured OAuth client and integration Drive account.
 - [ ] Workouts are deduplicated and totals are deterministic.
 - [ ] Exported data contains no raw routes, heart-rate samples, or other unapproved health fields.
 - [ ] The manifest is updated only after all corresponding daily current files succeed.
+
+## Apple Watch companion acceptance
+
+- [ ] Launch the Watch app and confirm it shows only readiness, sync activity,
+  last-success time, and queue counts. No health values, account details, Drive
+  IDs, or error strings may cross the companion message.
+- [ ] With the iPhone reachable, tap Sync Now and confirm the Watch reports that
+  the request was accepted before the iPhone completes reconciliation.
+- [ ] Disable reachability and confirm Sync Now is unavailable rather than
+  claiming that work was queued or completed.
+- [ ] Restore reachability, request another sync, and confirm the iPhone's
+  existing reconciliation path publishes a fresh status snapshot.
+- [ ] Leave the Watch app, allow background delivery, and confirm the latest
+  application-context snapshot appears after reopening it.
 
 ## Background acceptance
 

@@ -16,6 +16,7 @@ enum SyncTrigger: String, Sendable {
     case historySelection
     case backgroundRefresh
     case healthObserver
+    case watchCompanion
 }
 
 struct SelectionReconciliationQueue: Equatable, Sendable {
@@ -35,7 +36,8 @@ struct SelectionReconciliationQueue: Equatable, Sendable {
             .retry,
             .rebuild,
             .backgroundRefresh,
-            .healthObserver:
+            .healthObserver,
+            .watchCompanion:
             break
         }
     }

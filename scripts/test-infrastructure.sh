@@ -26,6 +26,18 @@ for script in \
   /bin/bash -n "${script}"
 done
 
+grep -Fq "platform: watchOS" project.yml ||
+  fail "The project must keep the watchOS companion target."
+grep -Fq "INFOPLIST_KEY_WKCompanionAppBundleIdentifier" project.yml ||
+  fail "The watchOS target must remain paired to the iPhone app."
+grep -Fq "HealthRelayShared HealthRelayWatchApp" scripts/check-swift-syntax.sh ||
+  fail "The fast syntax gate must include the Watch companion sources."
+if grep -R -E \
+  '^(@preconcurrency )?import (HealthKit|GoogleSignIn)' \
+  HealthRelayShared HealthRelayWatchApp; then
+  fail "The Watch companion must not own HealthKit or Google dependencies."
+fi
+
 expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'
 actual_fast_verify="$(make --no-print-directory --dry-run verify)"
 [[ "${actual_fast_verify}" == "${expected_fast_verify}" ]] ||

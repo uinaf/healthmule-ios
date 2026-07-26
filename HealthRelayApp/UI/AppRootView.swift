@@ -55,7 +55,7 @@ struct AppRootView: View {
             .tag(AppTab.settings)
         }
         .tabViewStyle(.sidebarAdaptable)
-        .tint(.accentColor)
+        .tint(Color.primary)
     }
 }
 

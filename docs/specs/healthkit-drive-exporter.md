@@ -1,9 +1,9 @@
 # Health Relay — Apple Health to Google Drive
 
 Status: implementation-ready v1 specification
-Target: native iPhone app
-Suggested stack: Swift 6, SwiftUI, HealthKit, Google Drive API v3
-Minimum deployment target: iOS 18
+Target: native iPhone app with a lightweight Apple Watch companion
+Suggested stack: Swift 6, SwiftUI, HealthKit, Watch Connectivity, Google Drive API v3
+Minimum deployment targets: iOS 18 and watchOS 11
 
 ## Problem
 
@@ -254,6 +254,21 @@ confirmation.
 - No telemetry leaves the device except the selected normalized records sent to
   the user's Google Drive.
 
+### R11 — Apple Watch Companion
+
+Provide a paired watchOS companion that:
+
+- displays only sanitized readiness, sync activity, last-success time, and
+  pending/failure counts;
+- sends Sync Now when the iPhone is reachable and disables the action
+  otherwise;
+- never stores or receives OAuth tokens, Google account details, Drive IDs,
+  exported records, raw health metadata, or health values.
+
+The iPhone remains the sole HealthKit query, local staging, Google OAuth, and
+Drive upload owner. Watch requests enter the existing idempotent reconciliation
+path and must not create a second sync engine.
+
 ## Architecture
 
 Suggested modules:
@@ -342,6 +357,9 @@ HealthKit instances, but expected output must be exact JSON.
 - AC9: HealthKit authorization, observer delivery, and a real Drive upload pass
   an on-device integration test.
 - AC10: `xcodebuild test` succeeds from a clean checkout with documented setup.
+- AC11: A paired Watch can display sanitized phone status and request a sync
+  while the iPhone is reachable without receiving health or credential
+  payloads.
 
 ## Constraints
 
@@ -367,6 +385,7 @@ HealthKit instances, but expected output must be exact JSON.
 - Android support.
 - A hosted backend, multi-user accounts, or public sharing.
 - Perfectly timed background synchronization.
+- A standalone Watch-to-Drive exporter or Watch-side Google authorization.
 
 ## Implementation Order
 
@@ -377,7 +396,8 @@ HealthKit instances, but expected output must be exact JSON.
 5. Add onboarding, status UI, manual sync, and diagnostics.
 6. Add observer queries, background delivery, app refresh, and background
    uploads.
-7. Run physical-device conformance tests and reconcile code/spec differences.
+7. Add the Watch status and sync-request companion over Watch Connectivity.
+8. Run physical-device conformance tests and reconcile code/spec differences.
 
 ## Upstream References
 
@@ -385,4 +405,5 @@ HealthKit instances, but expected output must be exact JSON.
 - [Authorizing access to health data](https://developer.apple.com/documentation/healthkit/authorizing-access-to-health-data)
 - [Executing observer queries](https://developer.apple.com/documentation/healthkit/executing-observer-queries)
 - [Choosing background strategies](https://developer.apple.com/documentation/backgroundtasks/choosing-background-strategies-for-your-app)
+- [Transferring data with Watch Connectivity](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)
 - [Google Drive uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads)

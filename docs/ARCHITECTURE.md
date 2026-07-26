@@ -1,7 +1,7 @@
 # Architecture
 
-Health Relay separates deterministic export and sync contracts from iOS-only
-HealthKit, Google, background, and SwiftUI adapters.
+Health Relay separates deterministic export, sync, and companion-message
+contracts from iOS/watchOS platform adapters.
 
 ```mermaid
 flowchart LR
@@ -19,6 +19,7 @@ flowchart LR
         Model --> Drive["DriveAPIClient"]
         Drive --> Metadata["DriveMetadataStore"]
         Model --> Diagnostics["DiagnosticsRecorder"]
+        PhoneBridge["Phone WatchConnectivity"] --> Model
     end
 
     subgraph Core["HealthRelayCore (Foundation only)"]
@@ -27,6 +28,13 @@ flowchart LR
         Engine --> Destination["ExportArtifactDestination"]
     end
 
+    subgraph Companion["HealthRelay watchOS companion"]
+        WatchUI["SwiftUI status + Sync Now"] --> WatchBridge["WatchConnectivity"]
+    end
+
+    Contract["HealthRelayCompanion versioned messages"]
+    WatchBridge <--> Contract
+    Contract <--> PhoneBridge
     Provider --> Aggregate
     Coordinator --> Outbox
     Coordinator --> Engine
@@ -49,6 +57,7 @@ Solid arrows are implemented runtime paths.
 | Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
 | HealthKit | A dedicated `HealthKitClient` actor keeps queries, sample transformation, aggregation, and anchor/day-boundary persistence off the UI actor. The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
 | Google | GoogleSignIn restores and refreshes credentials, distinguishing a revoked grant, an account change, and a temporary network failure. OAuth authorization and verified Drive readiness are separate states. Every token refresh and Drive request is bound to its expected stable account ID. `DriveArtifactDestination` maps core artifacts and retry classifications onto account-scoped folder discovery and stable-ID multipart upserts. |
+| Watch companion | A watchOS 11 SwiftUI app receives a sanitized versioned status snapshot and sends an idempotent sync request through reachable Watch Connectivity messaging. The action is disabled while the iPhone is unavailable. The iPhone owns the sync state machine and publishes the latest status through application context. |
 | Background refresh | The app registers a SwiftUI `BGAppRefreshTask` handler, bootstraps the same services if launched cold, and submits a best-effort request with a one-hour earliest start. |
 | Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, and redacted sync counts. |
 | Diagnostics | A bounded in-memory recorder emits redacted lifecycle metadata through `OSLog` and a shareable JSON file. |
@@ -59,6 +68,14 @@ Solid arrows are implemented runtime paths.
 app-refresh triggers feed that same state machine. The UI distinguishes staged,
 uploaded, pending, and failed work; a successful manifest upload advances the
 last-successful timestamp.
+
+`PhoneWatchConnectivityCoordinator` activates with the iPhone app model. It
+maps app state into `CompanionSyncSnapshot`, which contains only readiness,
+sync activity, timestamps, and queue counts. It never includes health values,
+record bodies, Google account details, Drive IDs, tokens, or diagnostic error
+strings. Watch requests feed the existing reconciliation path with the
+`watchCompanion` trigger; repeated delivery remains safe because reconciliation
+and Drive upserts are idempotent.
 
 `DriveAPIClient` uses an in-process session for metadata operations and a
 dedicated background `URLSession` for multipart uploads. Upload bodies are
@@ -351,6 +368,10 @@ declaration for `UserDefaults` remains in place.
 Background work is eventual and system-controlled:
 
 - HealthKit observers are the primary change signal.
+- A reachable Watch request is acknowledged promptly, then the iPhone performs
+  reconciliation and republishes status.
+- The Watch action is disabled while the iPhone is unreachable; background
+  status delivery remains eventual through application context.
 - `BGAppRefreshTask` is a fallback reconciliation opportunity.
 - A cold background launch first restores services and credentials through the
   same bootstrap gate used by the foreground app.
