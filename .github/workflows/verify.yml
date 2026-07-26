@@ -38,9 +38,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build
-          key: verify-swift-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh') }}
+          key: verify-swift-build-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh') }}
           restore-keys: |
-            verify-swift-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-
+            verify-swift-build-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift-toolchain.outputs.hash }}-
 
       - name: Run cached verification
         if: steps.swift-build-cache.outputs.cache-hit == 'true'

@@ -15,7 +15,7 @@ struct SetupView: View {
                     Text("Three small steps")
                         .font(.title2.weight(.semibold))
                     Text(
-                        "Health Relay reads a narrow fitness allowlist and writes normalized daily records directly to your Drive."
+                        "Health Mule reads a narrow fitness allowlist and writes normalized daily records directly to your Drive."
                     )
                     .foregroundStyle(.secondary)
                 }
@@ -149,7 +149,7 @@ struct SetupView: View {
             .accessibilityIdentifier("health-authorization-action")
 
             Text(
-                "Request complete. To change access, use Settings → Privacy & Security → Health → Health Relay. Visible samples are the only read signal Apple provides."
+                "Request complete. To change access, use Settings → Privacy & Security → Health → Health Mule. Visible samples are the only read signal Apple provides."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -256,7 +256,7 @@ struct SetupView: View {
             )
 
             Text(
-                "Health Relay can access only the Drive files it creates or that you explicitly open with it."
+                "Health Mule can access only the Drive files it creates or that you explicitly open with it."
             )
             .font(.subheadline)
             .foregroundStyle(.secondary)
@@ -289,7 +289,7 @@ struct SetupView: View {
             .accessibilityLabel("Connect Google Drive")
         case .temporarilyUnavailable:
             Text(
-                "Google sign-in is temporarily unavailable. Health Relay will try again when the app becomes active."
+                "Google sign-in is temporarily unavailable. Health Mule will try again when the app becomes active."
             )
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -361,7 +361,7 @@ struct SetupView: View {
             }
 
             Text(
-                "You may move this folder anywhere in My Drive. Health Relay keeps using its immutable folder ID."
+                "You may move this folder anywhere in My Drive. Health Mule keeps using its immutable folder ID."
             )
             .font(.caption)
             .foregroundStyle(.secondary)

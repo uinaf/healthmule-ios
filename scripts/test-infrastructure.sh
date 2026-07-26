@@ -124,6 +124,8 @@ grep -Eq '^[[:space:]]+path:[[:space:]]+\.build[[:space:]]*$' .github/workflows/
   fail "Fast CI must cache only the local Swift build directory."
 grep -Fq "key: verify-swift-build-v1-" .github/workflows/verify.yml ||
   fail "Fast CI must keep a versioned Swift build cache key."
+grep -Fq '${{ github.event.repository.name }}' .github/workflows/verify.yml ||
+  fail "Fast CI must scope path-bound Swift build caches to the repository name."
 grep -Fq "'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh'" .github/workflows/verify.yml ||
   fail "Fast CI must invalidate its build cache for every SwiftPM input."
 grep -Fq 'HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
