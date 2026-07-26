@@ -36,6 +36,10 @@ if grep -R -E \
   '^(@preconcurrency )?import (HealthKit|GoogleSignIn)' \
   HealthRelayShared HealthRelayWatchApp; then
   fail "The Watch companion must not own HealthKit or Google dependencies."
+else
+  forbidden_import_status=$?
+  [[ "${forbidden_import_status}" -eq 1 ]] ||
+    fail "The Watch companion dependency scan failed."
 fi
 
 expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'

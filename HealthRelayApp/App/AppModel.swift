@@ -1357,6 +1357,9 @@ final class AppModel {
     }
 
     private func recoverSyncCoordinatorIfNeeded() async {
+        defer {
+            publishCompanionStatus()
+        }
         let wasUnavailable =
             syncCoordinator == nil || syncInitializationError != nil
         do {

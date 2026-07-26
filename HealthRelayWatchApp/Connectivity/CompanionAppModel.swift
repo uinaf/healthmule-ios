@@ -19,6 +19,7 @@ final class CompanionAppModel: NSObject {
 
     private let session: WCSession?
     private var outstandingRequestID: UUID?
+    private var acceptedRequestID: UUID?
     private var requestBaselineSnapshot: CompanionSyncSnapshot?
     private var receivedPostRequestSnapshot = false
     private var isActivated = false
@@ -64,6 +65,7 @@ final class CompanionAppModel: NSObject {
         }
 
         outstandingRequestID = request.id
+        acceptedRequestID = nil
         requestBaselineSnapshot = snapshot
         receivedPostRequestSnapshot = false
         deliveryState = .sending
@@ -83,10 +85,15 @@ final class CompanionAppModel: NSObject {
                         deliveryState = receivedPostRequestSnapshot
                             ? .idle
                             : .accepted
+                        if deliveryState == .accepted {
+                            acceptedRequestID = request.id
+                            resetAcceptedStateIfNeeded(for: request.id)
+                        }
                     } else {
                         deliveryState = .failed
                     }
                     if deliveryState != .accepted {
+                        acceptedRequestID = nil
                         requestBaselineSnapshot = nil
                         receivedPostRequestSnapshot = false
                     }
@@ -101,12 +108,31 @@ final class CompanionAppModel: NSObject {
                         return
                     }
                     outstandingRequestID = nil
+                    acceptedRequestID = nil
                     deliveryState = .failed
                     requestBaselineSnapshot = nil
                     receivedPostRequestSnapshot = false
                 }
             }
         )
+    }
+
+    private func resetAcceptedStateIfNeeded(for requestID: UUID) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard
+                !Task.isCancelled,
+                let self,
+                acceptedRequestID == requestID,
+                deliveryState == .accepted
+            else {
+                return
+            }
+            acceptedRequestID = nil
+            deliveryState = .idle
+            requestBaselineSnapshot = nil
+            receivedPostRequestSnapshot = false
+        }
     }
 
     private func receiveSnapshot(from message: [String: Any]) {
@@ -128,6 +154,7 @@ final class CompanionAppModel: NSObject {
         {
             receivedPostRequestSnapshot = true
             if deliveryState == .accepted {
+                acceptedRequestID = nil
                 deliveryState = .idle
                 requestBaselineSnapshot = nil
                 receivedPostRequestSnapshot = false

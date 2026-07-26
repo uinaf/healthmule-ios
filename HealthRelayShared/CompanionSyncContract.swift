@@ -70,7 +70,7 @@ public struct CompanionSyncRequest: Codable, Equatable, Sendable {
     }
 }
 
-enum CompanionPayloadError: Error, Equatable {
+public enum CompanionPayloadError: Error, Equatable, Sendable {
     case missingPayload
     case unsupportedSchema
     case invalidCounts
