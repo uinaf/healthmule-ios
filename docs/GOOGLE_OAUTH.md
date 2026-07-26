@@ -1,6 +1,6 @@
 # Google OAuth and Drive setup
 
-Health Relay uses GoogleSignIn 9.x for native iOS OAuth and calls Google Drive
+Health Mule uses GoogleSignIn 9.x for native iOS OAuth and calls Google Drive
 API v3 directly. It requests only:
 
 ```text
@@ -27,7 +27,7 @@ scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-au
    can override it in the ignored `Config/Signing.xcconfig`.
 7. Record the iOS client ID and its reversed-client-ID URL scheme.
 
-A backend client ID is unnecessary because Health Relay has no backend. A native
+A backend client ID is unnecessary because Health Mule has no backend. A native
 iOS app cannot keep a client secret confidential, so do not add a web client
 secret to the project. Google’s [iOS integration
 guide](https://developers.google.com/identity/sign-in/ios/start-integrating)
@@ -252,7 +252,7 @@ by cached folder ID, and Reset Local Sync State intentionally preserves the
 managed folder and file IDs so a moved export tree is not duplicated.
 
 If the managed root or `daily` folder was deleted, trashed, or replaced, use Try
-Drive Again. Health Relay verifies the new coherent tree, clears stale file-ID
+Drive Again. Health Mule verifies the new coherent tree, clears stale file-ID
 cache entries, and republishes all locally staged days plus a fresh manifest.
 
 Reset clears the local staged manifest and records, then rebuilds the currently

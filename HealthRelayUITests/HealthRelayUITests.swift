@@ -5,7 +5,7 @@ final class HealthRelayUITests: XCTestCase {
     func testAppShellUsesFocusedNavigation() throws {
         let app = launch()
 
-        XCTAssertTrue(app.navigationBars["Health Relay"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["Health Mule"].waitForExistence(timeout: 10))
         XCTAssertTrue(element("home-screen", in: app).exists)
         XCTAssertTrue(app.tabBars.buttons["Home"].exists)
         XCTAssertTrue(app.tabBars.buttons["Settings"].exists)

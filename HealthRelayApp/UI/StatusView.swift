@@ -51,7 +51,7 @@ struct StatusView: View {
             .frame(maxWidth: .infinity)
         }
         .background(HealthRelayStyle.canvas)
-        .navigationTitle("Health Relay")
+        .navigationTitle("Health Mule")
         .navigationBarTitleDisplayMode(
             dynamicTypeSize.isAccessibilitySize ? .inline : .large
         )
@@ -564,7 +564,7 @@ struct StatusView: View {
                 badge: "Storage error",
                 tone: .danger,
                 title: "Local sync storage is unavailable",
-                message: "Health Relay could not prepare its protected staging area, so syncing is paused.",
+                message: "Health Mule could not prepare its protected staging area, so syncing is paused.",
                 action: .none
             )
         case .checkingConnections:
@@ -572,7 +572,7 @@ struct StatusView: View {
                 badge: "Checking",
                 tone: .accent,
                 title: "Checking your connections",
-                message: "Health Relay is restoring local authorization state.",
+                message: "Health Mule is restoring local authorization state.",
                 action: .none
             )
         case .healthUnavailable:
@@ -580,7 +580,7 @@ struct StatusView: View {
                 badge: "Unavailable",
                 tone: .danger,
                 title: "Apple Health is unavailable",
-                message: "Health Relay needs a supported iPhone to read Apple Health data.",
+                message: "Health Mule needs a supported iPhone to read Apple Health data.",
                 action: .none
             )
         case .healthStatusUnavailable(let canSync):
@@ -589,7 +589,7 @@ struct StatusView: View {
                     badge: "Check failed",
                     tone: .warning,
                     title: "Apple Health status is unavailable",
-                    message: "Health Relay could not check the request status yet. Try again from Setup.",
+                    message: "Health Mule could not check the request status yet. Try again from Setup.",
                     action: .setup("Check Health Again")
                 )
             }
@@ -599,7 +599,7 @@ struct StatusView: View {
                 badge: "Setup needed",
                 tone: .warning,
                 title: "Request Apple Health access",
-                message: "Choose the read-only fitness types you want Health Relay to query.",
+                message: "Choose the read-only fitness types you want Health Mule to query.",
                 action: .setup("Request Health Access")
             )
         case .healthReviewRecommended:
@@ -649,7 +649,7 @@ struct StatusView: View {
                 badge: "Drive unavailable",
                 tone: .warning,
                 title: "Drive folder setup needs a retry",
-                message: "Your local records are safe while Health Relay verifies its managed folder.",
+                message: "Your local records are safe while Health Mule verifies its managed folder.",
                 action: .setup("Retry Drive Setup")
             )
         case .ready:
@@ -715,7 +715,7 @@ struct StatusView: View {
                 badge: "Ready",
                 tone: .accent,
                 title: "Ready for the first sync",
-                message: "Health Relay will build the selected history and publish it to your Drive.",
+                message: "Health Mule will build the selected history and publish it to your Drive.",
                 action: .sync
             )
         }

@@ -1,6 +1,6 @@
 # Architecture
 
-Health Relay separates deterministic export, sync, and companion-message
+Health Mule separates deterministic export, sync, and companion-message
 contracts from iOS/watchOS platform adapters.
 
 ```mermaid
