@@ -2,7 +2,14 @@
 import Foundation
 import HealthRelayCore
 
-actor HealthKitDailyRecordProvider: DailyRecordProvider {
+protocol ConfigurableDailyRecordProvider: DailyRecordProvider, Actor {
+    func configure(
+        earliestVO2Date: Date,
+        enabledMetrics: Set<HealthMetric>
+    )
+}
+
+actor HealthKitDailyRecordProvider: ConfigurableDailyRecordProvider {
     private struct Configuration: Sendable {
         let earliestVO2Date: Date
         let enabledMetrics: Set<HealthMetric>

@@ -7,6 +7,11 @@ struct LiveSyncOutcome: Sendable {
 }
 
 actor LiveSyncCoordinator {
+    private struct OperationWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, any Error>
+    }
+
     private static let stagedMetricsKey = "sync.lastStagedMetrics"
     private static let stagedBackfillStartKey = "sync.lastStagedBackfillStart"
     private static let stagedExportContractRevisionKey =
@@ -21,44 +26,63 @@ actor LiveSyncCoordinator {
     }
 
     private let rootDirectory: URL
-    private let healthKit: HealthKitClient
-    private let recordProvider: HealthKitDailyRecordProvider
-    private let destination: DriveArtifactDestination
+    private let healthKit: any HealthChangeTracking
+    private let recordProvider: any ConfigurableDailyRecordProvider
+    private let destination: any ExportArtifactDestination
     private let diagnostics: DiagnosticsRecorder
+    private let defaults: UserDefaults
+    private let calendar: @Sendable () -> Calendar
+    private let now: @Sendable () -> Date
+    private let operationQueued: (@Sendable (Int) -> Void)?
+    private let recordStaged: (@Sendable (LocalDate) async -> Void)?
     private var runtime: Runtime
     private var lastSuccessfulSyncAt: Date?
     private var lastStagedMetrics: Set<HealthMetric>?
     private var lastStagedBackfillStart: LocalDate?
     private var lastStagedExportContractRevision: Int?
     private var destinationNamespace: String?
-    private var operationInProgress = false
-    private var operationWaiters: [CheckedContinuation<Void, Never>] = []
+    private var activeOperationID: UUID?
+    private var operationWaiters: [OperationWaiter] = []
 
     init(
         rootDirectory: URL,
-        healthKit: HealthKitClient,
-        recordProvider: HealthKitDailyRecordProvider,
-        destination: DriveArtifactDestination,
-        diagnostics: DiagnosticsRecorder
+        healthKit: any HealthChangeTracking,
+        recordProvider: any ConfigurableDailyRecordProvider,
+        destination: any ExportArtifactDestination,
+        diagnostics: DiagnosticsRecorder,
+        defaultsSuiteName: String? = nil,
+        calendar: @escaping @Sendable () -> Calendar = {
+            LocalDayCalendar.current
+        },
+        now: @escaping @Sendable () -> Date = { .now },
+        operationQueued: (@Sendable (Int) -> Void)? = nil,
+        recordStaged: (@Sendable (LocalDate) async -> Void)? = nil
     ) throws {
+        let defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:))
+            ?? .standard
         self.rootDirectory = rootDirectory
         self.healthKit = healthKit
         self.recordProvider = recordProvider
         self.destination = destination
         self.diagnostics = diagnostics
-        lastSuccessfulSyncAt = UserDefaults.standard.object(
+        self.defaults = defaults
+        self.calendar = calendar
+        self.now = now
+        self.operationQueued = operationQueued
+        self.recordStaged = recordStaged
+        lastSuccessfulSyncAt = defaults.object(
             forKey: "sync.lastSuccessful"
         ) as? Date
-        lastStagedMetrics = UserDefaults.standard.stringArray(
+        lastStagedMetrics = defaults.stringArray(
             forKey: Self.stagedMetricsKey
         ).map { Set($0.compactMap(HealthMetric.init(rawValue:))) }
-        lastStagedBackfillStart = UserDefaults.standard.string(
+        lastStagedBackfillStart = defaults.string(
             forKey: Self.stagedBackfillStartKey
         ).flatMap { try? LocalDate(rawValue: $0) }
-        lastStagedExportContractRevision = UserDefaults.standard.object(
+        lastStagedExportContractRevision = defaults.object(
             forKey: Self.stagedExportContractRevisionKey
         ) as? Int
-        destinationNamespace = UserDefaults.standard.string(
+        destinationNamespace = defaults.string(
             forKey: Self.destinationNamespaceKey
         )
         runtime = try Self.makeRuntime(
@@ -77,14 +101,16 @@ actor LiveSyncCoordinator {
         enabledMetrics: Set<HealthMetric>,
         backfillStart: LocalDate
     ) async throws -> LiveSyncOutcome {
-        await acquireOperation()
-        defer { releaseOperation() }
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
 
-        let calendar = LocalDayCalendar.current
+        let syncCalendar = calendar()
+        let currentDate = now()
         let backfillStartDate = backfillStart
         let missingDates = try await missingBackfillDates(
             from: backfillStartDate,
-            calendar: calendar
+            through: currentDate,
+            calendar: syncCalendar
         )
         let exportContractChanged =
             lastStagedExportContractRevision != Self.exportContractRevision
@@ -103,12 +129,12 @@ actor LiveSyncCoordinator {
             for: backfillStartDate
         )
         var dates = try BackfillDatePlanner.recentDates(
-            through: .now,
+            through: currentDate,
             count: 3,
             notBefore: backfillStartDate,
-            calendar: calendar
+            calendar: syncCalendar
         )
-        var batches: [HealthKitClient.AnchoredChangeBatch] = []
+        var batches: [HealthAnchoredChangeBatch] = []
         let existingRecords = try await runtime.store.allDailyRecords()
         let existingDates = Set(existingRecords.map(\.date))
         let historyStart = Self.effectiveHistoryStart(
@@ -130,7 +156,7 @@ actor LiveSyncCoordinator {
             for metric in HealthMetric.allCases where enabledMetrics.contains(metric) {
                 let batch = try await healthKit.changedDates(
                     for: metric,
-                    calendar: calendar,
+                    calendar: syncCalendar,
                     notBefore: backfillStartInstant
                 )
                 batches.append(batch)
@@ -175,11 +201,12 @@ actor LiveSyncCoordinator {
         enabledMetrics: Set<HealthMetric>,
         backfillStart: LocalDate
     ) async throws {
-        await acquireOperation()
-        defer { releaseOperation() }
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
 
         guard enabledMetrics.contains(metric) else { return }
-        let calendar = LocalDayCalendar.current
+        let syncCalendar = calendar()
+        let currentDate = now()
         let selectionChanged = lastStagedMetrics != enabledMetrics
         let backfillStartDate = backfillStart
         let backfillStartInstant = try await healthKit.startDate(
@@ -191,14 +218,14 @@ actor LiveSyncCoordinator {
             lastStagedExportContractRevision != Self.exportContractRevision
         let batch = try await healthKit.changedDates(
             for: metric,
-            calendar: calendar,
+            calendar: syncCalendar,
             notBefore: backfillStartInstant
         )
         var dates = try BackfillDatePlanner.recentDates(
-            through: .now,
+            through: currentDate,
             count: 3,
             notBefore: backfillStartDate,
-            calendar: calendar
+            calendar: syncCalendar
         )
         let existingRecords = try await runtime.store.allDailyRecords()
         let existingDates = Set(existingRecords.map(\.date))
@@ -222,7 +249,8 @@ actor LiveSyncCoordinator {
         dates.formUnion(
             try await missingBackfillDates(
                 from: backfillStartDate,
-                calendar: calendar
+                through: currentDate,
+                calendar: syncCalendar
             )
         )
         if metric == .vo2Max, !batch.affectedDates.isEmpty {
@@ -244,38 +272,44 @@ actor LiveSyncCoordinator {
     }
 
     func flushPendingUploads() async throws -> LiveSyncOutcome {
-        await acquireOperation()
-        defer { releaseOperation() }
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
 
         let report = try await runtime.engine.retryPendingUploads()
         return try await outcome(report: report)
     }
 
     func resumeAfterReauthorization() async throws -> LiveSyncOutcome {
-        await acquireOperation()
-        defer { releaseOperation() }
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
 
         let report = try await runtime.engine.resumeAfterReauthorization()
         return try await outcome(report: report)
     }
 
     func waitUntilIdle() async {
-        await acquireOperation()
-        releaseOperation()
+        do {
+            let operationID = try await acquireOperation()
+            releaseOperation(id: operationID)
+        } catch is CancellationError {
+            return
+        } catch {
+            assertionFailure("Unexpected operation acquisition error: \(error)")
+        }
     }
 
     func prepareDestination(
         destinationNamespace newDestinationNamespace: String
     ) async throws -> SyncSummary {
-        await acquireOperation()
-        defer { releaseOperation() }
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
 
         if destinationNamespace != newDestinationNamespace {
             try await runtime.store.resetRemoteUploadState()
             lastSuccessfulSyncAt = nil
-            UserDefaults.standard.removeObject(forKey: "sync.lastSuccessful")
+            defaults.removeObject(forKey: "sync.lastSuccessful")
             destinationNamespace = newDestinationNamespace
-            UserDefaults.standard.set(
+            defaults.set(
                 newDestinationNamespace,
                 forKey: Self.destinationNamespaceKey
             )
@@ -300,8 +334,8 @@ actor LiveSyncCoordinator {
     }
 
     func reset() async throws {
-        await acquireOperation()
-        defer { releaseOperation() }
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
 
         try await healthKit.resetAnchors()
         let fileManager = FileManager.default
@@ -317,7 +351,7 @@ actor LiveSyncCoordinator {
         lastStagedMetrics = nil
         lastStagedBackfillStart = nil
         lastStagedExportContractRevision = nil
-        Self.clearPersistedResetMetadata()
+        Self.clearPersistedResetMetadata(defaults: defaults)
     }
 
     static func clearPersistedResetMetadata(
@@ -344,6 +378,7 @@ actor LiveSyncCoordinator {
             case .unchanged:
                 report.unchangedDailyCount += 1
             }
+            await recordStaged?(date)
         }
         report.pendingUploadCount = try await runtime.store.pendingUploadCount()
         return report
@@ -351,8 +386,8 @@ actor LiveSyncCoordinator {
 
     private func outcome(report: SyncReport) async throws -> LiveSyncOutcome {
         if report.manifestUploaded {
-            lastSuccessfulSyncAt = .now
-            UserDefaults.standard.set(
+            lastSuccessfulSyncAt = now()
+            defaults.set(
                 lastSuccessfulSyncAt,
                 forKey: "sync.lastSuccessful"
             )
@@ -378,6 +413,7 @@ actor LiveSyncCoordinator {
 
     private func missingBackfillDates(
         from startDate: LocalDate,
+        through endDate: Date,
         calendar: Calendar
     ) async throws -> Set<LocalDate> {
         let existingDates = Set(
@@ -385,7 +421,7 @@ actor LiveSyncCoordinator {
         )
         return try BackfillDatePlanner.missingDates(
             from: startDate,
-            through: .now,
+            through: endDate,
             excluding: existingDates,
             calendar: calendar
         )
@@ -416,7 +452,7 @@ actor LiveSyncCoordinator {
 
     private func persistStagedMetrics(_ metrics: Set<HealthMetric>) {
         lastStagedMetrics = metrics
-        UserDefaults.standard.set(
+        defaults.set(
             metrics.map(\.rawValue).sorted(),
             forKey: Self.stagedMetricsKey
         )
@@ -424,7 +460,7 @@ actor LiveSyncCoordinator {
 
     private func persistStagedBackfillStart(_ date: LocalDate) {
         lastStagedBackfillStart = date
-        UserDefaults.standard.set(
+        defaults.set(
             date.rawValue,
             forKey: Self.stagedBackfillStartKey
         )
@@ -432,34 +468,78 @@ actor LiveSyncCoordinator {
 
     private func persistStagedExportContractRevision() {
         lastStagedExportContractRevision = Self.exportContractRevision
-        UserDefaults.standard.set(
+        defaults.set(
             Self.exportContractRevision,
             forKey: Self.stagedExportContractRevisionKey
         )
     }
 
-    private func acquireOperation() async {
-        if !operationInProgress {
-            operationInProgress = true
-            return
+    private func acquireOperation() async throws -> UUID {
+        try Task.checkCancellation()
+        let waiterID = UUID()
+        if activeOperationID == nil {
+            activeOperationID = waiterID
+            return waiterID
         }
-        await withCheckedContinuation { continuation in
-            operationWaiters.append(continuation)
+
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, any Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                operationWaiters.append(
+                    OperationWaiter(
+                        id: waiterID,
+                        continuation: continuation
+                    )
+                )
+                operationQueued?(operationWaiters.count)
+            }
+        } onCancel: {
+            Task {
+                await self.cancelOperationWaiter(id: waiterID)
+            }
         }
+
+        do {
+            try Task.checkCancellation()
+        } catch {
+            releaseOperation(id: waiterID)
+            throw error
+        }
+        return waiterID
     }
 
-    private func releaseOperation() {
-        guard !operationWaiters.isEmpty else {
-            operationInProgress = false
+    private func cancelOperationWaiter(id: UUID) {
+        guard let index = operationWaiters.firstIndex(
+            where: { $0.id == id }
+        ) else {
             return
         }
-        operationWaiters.removeFirst().resume()
+        let waiter = operationWaiters.remove(at: index)
+        waiter.continuation.resume(throwing: CancellationError())
+    }
+
+    private func releaseOperation(id: UUID) {
+        precondition(
+            activeOperationID == id,
+            "Only the active operation can release the coordinator."
+        )
+        guard !operationWaiters.isEmpty else {
+            activeOperationID = nil
+            return
+        }
+        let next = operationWaiters.removeFirst()
+        activeOperationID = next.id
+        next.continuation.resume()
     }
 
     private static func makeRuntime(
         rootDirectory: URL,
-        recordProvider: HealthKitDailyRecordProvider,
-        destination: DriveArtifactDestination
+        recordProvider: any ConfigurableDailyRecordProvider,
+        destination: any ExportArtifactDestination
     ) throws -> Runtime {
         let store = try FileSyncStore(rootDirectory: rootDirectory)
         let engine = SyncEngine(
