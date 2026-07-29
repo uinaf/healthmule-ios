@@ -80,12 +80,46 @@ public actor SyncEngine {
 
     public func retryPendingUploads(force: Bool = false) async throws -> SyncReport {
         try await store.recover()
-        var report = try await uploadPending(includeDeferred: force)
+        var report = try await uploadPending(
+            includeDeferred: force,
+            kind: .daily
+        )
 
-        if
-            try await store.allDailyUploadsAreCurrent(),
-            try await store.manifestRequiresRefresh(),
-            report.failures.isEmpty
+        guard
+            report.failures.isEmpty,
+            try await store.allDailyUploadsAreCurrent()
+        else {
+            report.pendingUploadCount = try await store.pendingUploadCount()
+            return report
+        }
+
+        let manifestCheckTime = await clock.now()
+        let dueManifest = try await store.dueArtifacts(
+            at: manifestCheckTime,
+            includeDeferred: force,
+            kind: .manifest
+        ).first
+        try Task.checkCancellation()
+
+        if dueManifest != nil {
+            guard let manifest = try await renderManifest() else {
+                report.pendingUploadCount =
+                    try await store.pendingUploadCount()
+                return report
+            }
+            try Task.checkCancellation()
+            _ = try await store.refreshPendingManifest(manifest)
+            try Task.checkCancellation()
+            let manifestResult = try await uploadPending(
+                includeDeferred: force,
+                kind: .manifest
+            )
+            report.manifestUploaded =
+                report.manifestUploaded || manifestResult.manifestUploaded
+            report.failures.append(contentsOf: manifestResult.failures)
+        } else if
+            !(try await store.hasPendingManifestUpload()),
+            try await store.manifestRequiresRefresh()
         {
             let manifestResult = try await stageAndUploadManifest()
             report.manifestUploaded = report.manifestUploaded || manifestResult.manifestUploaded
@@ -105,12 +139,23 @@ public actor SyncEngine {
     }
 
     private func stageAndUploadManifest() async throws -> SyncReport {
+        guard let manifest = try await renderManifest() else {
+            return SyncReport()
+        }
+        _ = try await store.stageManifest(manifest)
+        return try await uploadPending(
+            includeDeferred: false,
+            kind: .manifest
+        )
+    }
+
+    private func renderManifest() async throws -> ExportManifest? {
         let records = try await store.allDailyRecords()
         guard
             let earliest = records.map(\.date).min(),
             let latest = records.map(\.date).max()
         else {
-            return SyncReport()
+            return nil
         }
         guard let timeZone = TimeZone(identifier: configuration.manifestTimeZoneIdentifier) else {
             throw SchemaValidationError.invalidTimeZone(
@@ -119,7 +164,7 @@ public actor SyncEngine {
         }
 
         let now = await clock.now()
-        let manifest = ExportManifest(
+        return ExportManifest(
             exporterVersion: configuration.exporterVersion,
             timeZone: configuration.manifestTimeZoneIdentifier,
             lastSuccessfulSyncAt: try ISO8601Timestamp(
@@ -130,16 +175,18 @@ public actor SyncEngine {
             latestDate: latest,
             recordCount: records.count
         )
-        _ = try await store.stageManifest(manifest)
-        return try await uploadPending(includeDeferred: false)
     }
 
-    private func uploadPending(includeDeferred: Bool) async throws -> SyncReport {
+    private func uploadPending(
+        includeDeferred: Bool,
+        kind: ExportArtifactID.Kind? = nil
+    ) async throws -> SyncReport {
         var report = SyncReport()
         let now = await clock.now()
         let artifacts = try await store.dueArtifacts(
             at: now,
-            includeDeferred: includeDeferred
+            includeDeferred: includeDeferred,
+            kind: kind
         )
         try Task.checkCancellation()
 

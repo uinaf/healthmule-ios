@@ -771,6 +771,149 @@ struct FileSyncStoreTests {
             ).isEmpty
         )
     }
+
+    @Test
+    func pendingManifestRefreshPreservesRetryStateAndUnknownFields() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try FileSyncStore(rootDirectory: directory)
+        let record = try makeRecord()
+        _ = try await store.stageDaily(record)
+        let daily = try #require(
+            try await store.dueArtifacts(
+                at: Date(),
+                includeDeferred: true,
+                kind: .daily
+            ).first
+        )
+        try await store.markUploaded(daily)
+
+        var original = try makeTestManifest(for: record)
+        original.additionalFields = [
+            "future": .object(["value": .integer(1)])
+        ]
+        _ = try await store.stageManifest(original)
+        let manifest = try #require(
+            try await store.dueArtifacts(
+                at: Date(),
+                includeDeferred: true,
+                kind: .manifest
+            ).first
+        )
+        let failureTime = Date(timeIntervalSince1970: 1_000)
+        try await store.markFailed(
+            manifest,
+            error: .transient(code: "timedOut"),
+            now: failureTime,
+            randomUnit: 0.5,
+            retryPolicy: RetryPolicy(
+                initialDelay: 100,
+                maximumDelay: 100,
+                jitterRatio: 0
+            )
+        )
+        let retryBefore = try #require(
+            try await store.retryItems().first {
+                $0.artifactID == .manifest
+            }
+        )
+
+        var refreshed = try makeTestManifest(for: record)
+        refreshed.lastSuccessfulSyncAt = try ISO8601Timestamp(
+            rawValue: "2026-07-23T18:20:00+03:00"
+        )
+        let refreshedArtifact = try await store.refreshPendingManifest(
+            refreshed
+        )
+        let retryAfter = try #require(
+            try await store.retryItems().first {
+                $0.artifactID == .manifest
+            }
+        )
+        let decoded = try ExportManifestCodec.decode(
+            refreshedArtifact.contents
+        )
+
+        #expect(retryAfter == retryBefore)
+        #expect(refreshedArtifact.revision == manifest.revision)
+        #expect(decoded.lastSuccessfulSyncAt == refreshed.lastSuccessfulSyncAt)
+        #expect(
+            decoded.additionalFields["future"]
+                == .object(["value": .integer(1)])
+        )
+        #expect(
+            try await store.dueArtifacts(
+                at: failureTime.addingTimeInterval(50),
+                kind: .manifest
+            ).isEmpty
+        )
+    }
+
+    @Test
+    func interruptedPendingManifestRefreshPreservesRetryState() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try FileSyncStore(rootDirectory: directory)
+        let record = try makeRecord()
+        _ = try await store.stageDaily(record)
+        let daily = try #require(
+            try await store.dueArtifacts(
+                at: Date(),
+                includeDeferred: true,
+                kind: .daily
+            ).first
+        )
+        try await store.markUploaded(daily)
+        let original = try makeTestManifest(for: record)
+        _ = try await store.stageManifest(original)
+        let manifest = try #require(
+            try await store.dueArtifacts(
+                at: Date(),
+                includeDeferred: true,
+                kind: .manifest
+            ).first
+        )
+        try await store.markFailed(
+            manifest,
+            error: .transient(code: "timedOut"),
+            now: Date(timeIntervalSince1970: 1_000),
+            randomUnit: 0.5,
+            retryPolicy: RetryPolicy()
+        )
+        let retryBefore = try #require(
+            try await store.retryItems().first {
+                $0.artifactID == .manifest
+            }
+        )
+        var refreshed = original
+        refreshed.lastSuccessfulSyncAt = try ISO8601Timestamp(
+            rawValue: "2026-07-23T18:20:00+03:00"
+        )
+        let refreshedContents = try ExportManifestCodec.encode(refreshed)
+        try refreshedContents.write(
+            to: directory.appendingPathComponent("manifest.json"),
+            options: [.atomic]
+        )
+
+        let reopened = try FileSyncStore(rootDirectory: directory)
+        try await reopened.recover()
+        let retryAfter = try #require(
+            try await reopened.retryItems().first {
+                $0.artifactID == .manifest
+            }
+        )
+        let recovered = try #require(
+            try await reopened.dueArtifacts(
+                at: Date(),
+                includeDeferred: true,
+                kind: .manifest
+            ).first
+        )
+
+        #expect(retryAfter == retryBefore)
+        #expect(recovered.revision == manifest.revision)
+        #expect(recovered.contents == refreshedContents)
+    }
 }
 
 private func makeTestManifest(
