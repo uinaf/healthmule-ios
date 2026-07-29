@@ -5,6 +5,111 @@ import XCTest
 @testable import HealthRelay
 
 final class AppConfigurationTests: XCTestCase {
+    func testBackgroundDeliveryCallbackMapping() {
+        XCTAssertEqual(
+            HealthKitClient.backgroundDeliveryOutcome(
+                success: true,
+                error: nil
+            ),
+            .succeeded
+        )
+        XCTAssertEqual(
+            HealthKitClient.backgroundDeliveryOutcome(
+                success: false,
+                error: nil
+            ),
+            .failed(.unsuccessful)
+        )
+
+        struct RegistrationError: Error {}
+        XCTAssertEqual(
+            HealthKitClient.backgroundDeliveryOutcome(
+                success: true,
+                error: RegistrationError()
+            ),
+            .failed(
+                .errorType(
+                    String(reflecting: RegistrationError.self)
+                )
+            )
+        )
+        XCTAssertEqual(
+            HealthKitClient.backgroundDeliveryOutcome(
+                success: false,
+                error: NSError(domain: HKErrorDomain, code: 7)
+            ),
+            .failed(.healthKit(7))
+        )
+    }
+
+    func testBackgroundDeliverySummaryWarnsOnlyForEnableFailures() {
+        let summary = BackgroundDeliveryRegistrationSummary(
+            results: [
+                BackgroundDeliveryRegistrationResult(
+                    metric: .stepCount,
+                    operation: .enable,
+                    outcome: .failed(.unsuccessful)
+                ),
+                BackgroundDeliveryRegistrationResult(
+                    metric: .sleep,
+                    operation: .disable,
+                    outcome: .failed(.healthKit(1))
+                ),
+            ]
+        )
+
+        XCTAssertEqual(summary.failedEnabledMetrics, [.stepCount])
+    }
+
+    func testBackgroundDeliveryAdvisoryListsMetricsAndManualFallback() throws {
+        let advisory = try XCTUnwrap(
+            BackgroundDeliveryAdvisory(
+                failedMetrics: [.sleep, .stepCount]
+            )
+        )
+
+        XCTAssertEqual(advisory.metrics, [.stepCount, .sleep])
+        XCTAssertTrue(advisory.message.contains("Steps and Sleep"))
+        XCTAssertTrue(advisory.message.contains("Opening the app"))
+        XCTAssertTrue(advisory.message.contains("syncing manually"))
+        XCTAssertTrue(advisory.accessibilityLabel.contains(advisory.message))
+        XCTAssertNil(BackgroundDeliveryAdvisory(failedMetrics: []))
+    }
+
+    func testLatestBackgroundDeliveryResultReplacesAndClearsAdvisoryState() {
+        var state = BackgroundDeliveryRegistrationState()
+        let healthAuthorizationState = HealthAuthorizationState.requestCompleted
+
+        state.apply(
+            BackgroundDeliveryRegistrationSummary(
+                results: [
+                    BackgroundDeliveryRegistrationResult(
+                        metric: .stepCount,
+                        operation: .enable,
+                        outcome: .failed(.unsuccessful)
+                    )
+                ]
+            )
+        )
+        XCTAssertEqual(state.failedEnabledMetrics, [.stepCount])
+
+        state.apply(
+            BackgroundDeliveryRegistrationSummary(
+                results: [
+                    BackgroundDeliveryRegistrationResult(
+                        metric: .stepCount,
+                        operation: .enable,
+                        outcome: .succeeded
+                    )
+                ]
+            )
+        )
+
+        XCTAssertTrue(state.failedEnabledMetrics.isEmpty)
+        XCTAssertEqual(healthAuthorizationState, .requestCompleted)
+        XCTAssertTrue(healthAuthorizationState.allowsQueries)
+    }
+
     func testHealthReadTypesFollowEnabledMetricSelection() throws {
         let selected: Set<HealthMetric> = [.stepCount, .sleep]
         let readTypes = HealthMetric.readTypes(for: selected)

@@ -34,6 +34,8 @@ final class AppModel {
         }
     }
     var metricStatuses: [MetricStatus]
+    private var backgroundDeliveryRegistrationState =
+        BackgroundDeliveryRegistrationState()
     var syncSummary: SyncSummary {
         didSet {
             publishCompanionStatus()
@@ -61,6 +63,13 @@ final class AppModel {
             google: googleConnection,
             localStorageAvailable:
                 syncCoordinator != nil && syncInitializationError == nil
+        )
+    }
+
+    var backgroundDeliveryAdvisory: BackgroundDeliveryAdvisory? {
+        BackgroundDeliveryAdvisory(
+            failedMetrics:
+                backgroundDeliveryRegistrationState.failedEnabledMetrics
         )
     }
 
@@ -374,10 +383,13 @@ final class AppModel {
         )
         let expectedOperationEpoch = operationEpoch
         do {
-            try await healthKit.requestAuthorization(for: enabledMetrics)
+            let registrationSummary = try await healthKit.requestAuthorization(
+                for: enabledMetrics
+            )
             guard operationEpoch == expectedOperationEpoch else {
                 return
             }
+            applyBackgroundDeliverySummary(registrationSummary)
             await refreshHealthStatuses()
             guard operationEpoch == expectedOperationEpoch else {
                 return
@@ -417,13 +429,16 @@ final class AppModel {
         let expectedOperationEpoch = operationEpoch
         await refreshHealthStatuses()
         await registerHealthObservers()
-        await healthKit.updateBackgroundDelivery(for: enabledMetrics)
+        let registrationSummary = await healthKit.updateBackgroundDelivery(
+            for: enabledMetrics
+        )
         guard
             operationEpoch == expectedOperationEpoch,
             operationState == checkingState
         else {
             return
         }
+        applyBackgroundDeliverySummary(registrationSummary)
         if case .statusUnavailable = healthAuthorizationState {
             operationState = .failed(
                 .healthAuthorization,
@@ -1119,7 +1134,10 @@ final class AppModel {
             publishingCheckingState: publishingCheckingState
         )
         await registerHealthObservers()
-        await healthKit.updateBackgroundDelivery(for: enabledMetrics)
+        let registrationSummary = await healthKit.updateBackgroundDelivery(
+            for: enabledMetrics
+        )
+        applyBackgroundDeliverySummary(registrationSummary)
     }
 
     @discardableResult
@@ -1233,15 +1251,22 @@ final class AppModel {
         await registerHealthObservers()
         var appliedMetrics = enabledMetrics
         while true {
-            await healthKit.updateBackgroundDelivery(
+            let registrationSummary = await healthKit.updateBackgroundDelivery(
                 for: appliedMetrics
             )
             guard appliedMetrics != enabledMetrics else {
+                applyBackgroundDeliverySummary(registrationSummary)
                 break
             }
             appliedMetrics = enabledMetrics
         }
         await reconcile(trigger: .metricSelection)
+    }
+
+    private func applyBackgroundDeliverySummary(
+        _ summary: BackgroundDeliveryRegistrationSummary
+    ) {
+        backgroundDeliveryRegistrationState.apply(summary)
     }
 
     private func queueHistorySelectionReconciliation() {

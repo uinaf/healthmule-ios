@@ -237,6 +237,41 @@ struct MetricStatus: Identifiable, Equatable, Sendable {
     var id: HealthMetric { metric }
 }
 
+struct BackgroundDeliveryAdvisory: Equatable, Sendable {
+    let metrics: [HealthMetric]
+
+    init?(failedMetrics: Set<HealthMetric>) {
+        let metrics = HealthMetric.allCases.filter(failedMetrics.contains)
+        guard !metrics.isEmpty else {
+            return nil
+        }
+        self.metrics = metrics
+    }
+
+    var title: String {
+        "Background updates need another try"
+    }
+
+    var message: String {
+        let names = metrics.map(\.title).formatted()
+        return "Background updates could not be enabled for \(names). Opening the app or syncing manually still works."
+    }
+
+    var accessibilityLabel: String {
+        "\(title). \(message)"
+    }
+}
+
+struct BackgroundDeliveryRegistrationState: Equatable, Sendable {
+    private(set) var failedEnabledMetrics: Set<HealthMetric> = []
+
+    mutating func apply(
+        _ summary: BackgroundDeliveryRegistrationSummary
+    ) {
+        failedEnabledMetrics = summary.failedEnabledMetrics
+    }
+}
+
 extension Collection where Element == MetricStatus {
     var includedMetricCount: Int {
         reduce(into: 0) { count, status in

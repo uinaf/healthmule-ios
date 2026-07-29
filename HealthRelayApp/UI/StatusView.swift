@@ -9,6 +9,7 @@ struct StatusView: View {
             VStack(spacing: 28) {
                 hero
                 OperationBanner(state: model.operationState)
+                backgroundDeliveryAdvisory
 
                 if shouldShowSummary {
                     VStack(spacing: 12) {
@@ -58,6 +59,36 @@ struct StatusView: View {
         .accessibilityIdentifier("home-screen")
         .refreshable {
             await model.applicationDidBecomeActive()
+        }
+    }
+
+    @ViewBuilder
+    private var backgroundDeliveryAdvisory: some View {
+        if let advisory = model.backgroundDeliveryAdvisory {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(
+                    advisory.title,
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(StatusTone.warning.color)
+
+                Text(advisory.message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(advisory.accessibilityLabel)
+
+                Button("Check Again") {
+                    Task {
+                        await model.retryHealthStatus()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.operationState.isWorking)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .healthRelayCard(padding: 14)
+            .accessibilityIdentifier("background-delivery-advisory")
         }
     }
 
