@@ -27,7 +27,7 @@ final class FixtureContractTests: XCTestCase {
             TimeZone(identifier: "America/New_York")
         )
 
-        let affectedDates = store.dateKeys(
+        let affectedDates = try store.dateKeys(
             overlappingStart: fixture.changedSample.startedAt,
             end: fixture.changedSample.endedAt,
             fallbackCalendar: fallbackCalendar

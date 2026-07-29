@@ -125,6 +125,10 @@ actor LiveSyncCoordinator {
             return try await outcome(report: report)
         }
 
+        let existingRecords = try await runtime.store.allDailyRecords()
+        _ = try await healthKit.recoverAuxiliaryState(
+            from: existingRecords
+        )
         let backfillStartInstant = try await healthKit.startDate(
             for: backfillStartDate
         )
@@ -135,7 +139,6 @@ actor LiveSyncCoordinator {
             calendar: syncCalendar
         )
         var batches: [HealthAnchoredChangeBatch] = []
-        let existingRecords = try await runtime.store.allDailyRecords()
         let existingDates = Set(existingRecords.map(\.date))
         let historyStart = Self.effectiveHistoryStart(
             requestedStart: backfillStartInstant,
@@ -209,6 +212,10 @@ actor LiveSyncCoordinator {
         let currentDate = now()
         let selectionChanged = lastStagedMetrics != enabledMetrics
         let backfillStartDate = backfillStart
+        let existingRecords = try await runtime.store.allDailyRecords()
+        _ = try await healthKit.recoverAuxiliaryState(
+            from: existingRecords
+        )
         let backfillStartInstant = try await healthKit.startDate(
             for: backfillStartDate
         )
@@ -227,7 +234,6 @@ actor LiveSyncCoordinator {
             notBefore: backfillStartDate,
             calendar: syncCalendar
         )
-        let existingRecords = try await runtime.store.allDailyRecords()
         let existingDates = Set(existingRecords.map(\.date))
         let historyStart = Self.effectiveHistoryStart(
             requestedStart: backfillStartInstant,

@@ -1,6 +1,11 @@
 @preconcurrency import HealthKit
 import Foundation
 
+enum HealthAnchorStoreError: Error, Equatable {
+    case unreadableSampleIndex
+    case invalidSampleIndex
+}
+
 final class HealthAnchorStore {
     private struct SampleIndex: Codable {
         var datesByUUID: [String: [String]] = [:]
@@ -35,8 +40,37 @@ final class HealthAnchorStore {
         return try? JSONDecoder().decode(Date.self, from: data)
     }
 
-    func dates(forDeletedUUID uuid: UUID) -> Set<String> {
-        Set(loadIndex().datesByUUID[uuid.uuidString] ?? [])
+    func dates(forDeletedUUID uuid: UUID) throws -> Set<String> {
+        Set(try loadIndex().datesByUUID[uuid.uuidString] ?? [])
+    }
+
+    @discardableResult
+    func inspectSampleIndex() throws -> Bool {
+        let indexURL = directory.appendingPathComponent(
+            "sample-index.json"
+        )
+        guard FileManager.default.fileExists(atPath: indexURL.path) else {
+            index = SampleIndex()
+            return false
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: indexURL)
+        } catch {
+            index = nil
+            throw HealthAnchorStoreError.unreadableSampleIndex
+        }
+        do {
+            let decoded = try JSONDecoder().decode(
+                SampleIndex.self,
+                from: data
+            )
+            index = decoded
+            return true
+        } catch {
+            index = nil
+            throw HealthAnchorStoreError.invalidSampleIndex
+        }
     }
 
     func commit(
@@ -46,7 +80,7 @@ final class HealthAnchorStore {
         sampleDates: [UUID: Set<String>],
         deletedUUIDs: Set<UUID>
     ) throws {
-        var nextIndex = loadIndex()
+        var nextIndex = try loadIndex()
         for (uuid, dates) in sampleDates {
             nextIndex.datesByUUID[uuid.uuidString] = dates.sorted()
         }
@@ -133,21 +167,12 @@ final class HealthAnchorStore {
         )
     }
 
-    private func loadIndex() -> SampleIndex {
+    private func loadIndex() throws -> SampleIndex {
         if let index {
             return index
         }
-        let indexURL = directory.appendingPathComponent("sample-index.json")
-        let loaded: SampleIndex
-        if let data = try? Data(contentsOf: indexURL),
-           let decoded = try? JSONDecoder().decode(SampleIndex.self, from: data)
-        {
-            loaded = decoded
-        } else {
-            loaded = SampleIndex()
-        }
-        index = loaded
-        return loaded
+        _ = try inspectSampleIndex()
+        return index ?? SampleIndex()
     }
 
     private func prepareDirectory() throws {
