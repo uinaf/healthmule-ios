@@ -1,6 +1,12 @@
 import Foundation
 import HealthRelayCore
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 private enum BenchmarkError: Error {
     case invalidSyntheticDate
     case missingStateSize
@@ -18,11 +24,23 @@ private struct SyncStoreBenchmark {
     private static let repetitions = 3
     private static let stateFileName = "sync-state.json"
 
-    static func main() async throws {
+    static func main() async {
+        do {
+            let rows = try await benchmarkRows()
+            print(rows.joined(separator: "\n"))
+        } catch {
+            FileHandle.standardError.write(
+                Data("error: sync store benchmark failed.\n".utf8)
+            )
+            exit(EXIT_FAILURE)
+        }
+    }
+
+    private static func benchmarkRows() async throws -> [String] {
         let records = try syntheticRecords(count: dayCounts.max() ?? 0)
-        print(
+        var rows = [
             "days,median_elapsed_ms,final_state_bytes,cumulative_state_bytes"
-        )
+        ]
 
         for dayCount in dayCounts {
             var trials: [TrialResult] = []
@@ -35,12 +53,17 @@ private struct SyncStoreBenchmark {
             let elapsed = median(trials.map(\.elapsedMilliseconds))
             let finalBytes = median(trials.map(\.finalStateBytes))
             let cumulativeBytes = median(trials.map(\.cumulativeStateBytes))
-            print(
+            rows.append(
                 "\(dayCount),"
-                    + String(format: "%.3f", elapsed)
+                    + String(
+                        format: "%.3f",
+                        locale: Locale(identifier: "en_US_POSIX"),
+                        elapsed
+                    )
                     + ",\(finalBytes),\(cumulativeBytes)"
             )
         }
+        return rows
     }
 
     private static func runTrial(
