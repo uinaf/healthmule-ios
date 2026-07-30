@@ -207,7 +207,10 @@ final class HealthAnchorStore {
         } catch {
             let fileError = error as NSError
             if fileError.domain == NSCocoaErrorDomain,
-               fileError.code == NSFileNoSuchFileError
+               [
+                   NSFileNoSuchFileError,
+                   NSFileReadNoSuchFileError
+               ].contains(fileError.code)
             {
                 return false
             }
