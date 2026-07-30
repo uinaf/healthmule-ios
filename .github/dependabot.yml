@@ -7,6 +7,8 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
+  # This covers the root SwiftPM package only. dependency-watch.yml owns
+  # GoogleSignIn alerts for the XcodeGen app declaration and workspace lock.
   - package-ecosystem: swift
     directory: /
     schedule:

@@ -406,8 +406,24 @@ transfers](https://developer.apple.com/documentation/foundation/downloading-file
 `project.yml` is the XcodeGen source of truth for the generated
 `HealthRelay.xcodeproj`. GoogleSignIn is pinned exactly in `project.yml`; the
 shared workspace `Package.resolved` is explicitly retained by `.gitignore` so
-the resolved transitive graph can be committed with the project. The canonical
-commands are:
+the resolved transitive graph can be committed with the project.
+`scripts/check-app-dependencies.sh` verifies those versions match without
+network access, while the weekly Dependency Watch workflow compares the pin to
+Google's latest official release and opens one advisory issue per target
+version.
+
+To update GoogleSignIn, edit its `exactVersion` in `project.yml`, regenerate the
+project, resolve the package graph, run the offline dependency check, then run
+the full gate. Do not hand-edit generated project structure or lock entries:
+
+```sh
+make project
+./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthRelay.xcodeproj -scheme HealthRelay
+./scripts/check-app-dependencies.sh
+make verify-full
+```
+
+The canonical development commands are:
 
 ```sh
 make project

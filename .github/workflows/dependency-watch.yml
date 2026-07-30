@@ -1,0 +1,93 @@
+name: Dependency Watch
+
+on:
+  schedule:
+    - cron: "23 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-watch-google-signin
+  cancel-in-progress: false
+
+jobs:
+  google-signin:
+    name: Check GoogleSignIn-iOS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify declaration and lock
+        run: ./scripts/check-app-dependencies.sh
+
+      - name: Compare official release and open advisory issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          declared="$(
+            APP_DEPENDENCY_PRINT_VERSION=1 \
+              ./scripts/check-app-dependencies.sh
+          )"
+          latest="$(
+            gh api repos/google/GoogleSignIn-iOS/releases/latest \
+              --jq .tag_name
+          )"
+          latest="${latest#v}"
+
+          if [[ "${latest}" == "${declared}" ]]; then
+            echo "GoogleSignIn-iOS ${declared} is current."
+            exit 0
+          fi
+
+          title="chore(deps): update GoogleSignIn-iOS to ${latest}"
+          existing="$(
+            gh issue list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --state open \
+              --search "\"${title}\" in:title" \
+              --limit 100 \
+              --json title \
+              --jq '.[].title' |
+              while IFS= read -r candidate; do
+                if [[ "${candidate}" == "${title}" ]]; then
+                  printf 'found\n'
+                  break
+                fi
+              done
+          )"
+          if [[ "${existing}" == "found" ]]; then
+            echo "An open GoogleSignIn-iOS ${latest} issue already exists."
+            exit 0
+          fi
+
+          # Markdown backticks are intentionally literal in these strings.
+          # shellcheck disable=SC2016
+          body="$(
+            printf '%s\n' \
+              'The Xcode app dependency is behind the latest official release.' \
+              '' \
+              "- Current: \`${declared}\`" \
+              "- Latest: \`${latest}\`" \
+              '' \
+              'Update `GoogleSignIn.exactVersion` in `project.yml`, then run:' \
+              '' \
+              '```sh' \
+              'make project' \
+              './scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthRelay.xcodeproj -scheme HealthRelay' \
+              './scripts/check-app-dependencies.sh' \
+              'make verify-full' \
+              '```'
+          )"
+          gh issue create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${title}" \
+            --body "${body}"

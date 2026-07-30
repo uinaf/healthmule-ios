@@ -17,7 +17,7 @@ packages:
     path: .
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
-    exactVersion: 9.1.0
+    exactVersion: 9.2.0
 
 settings:
   base:
