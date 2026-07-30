@@ -6,7 +6,7 @@
 
 - Date: 2026-07-30
 - Production baseline: `925cb27`
-- Benchmark implementation: `af54e46`
+- Benchmark implementation: `af54e46`, output hardening: `83c7f56`
 
 The current schema remains the production format. This decision requires a
 separate reviewed migration plan; it does not authorize a schema change.
@@ -22,6 +22,9 @@ row is the median of three isolated trials. Every trial used a unique temporary
 directory, deterministic empty synthetic records, and the public
 `FileSyncStore.stageDaily` API. The benchmark read only the byte size of
 `sync-state.json` after each stage and removed its temporary directory.
+After review hardening, a third run under a comma-decimal locale preserved the
+same four-field CSV shape and byte results; it is verification rather than an
+input to the decision tables.
 
 Sanitized environment:
 
