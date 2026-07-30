@@ -5,6 +5,28 @@ import Testing
 @Suite("Durable file sync store")
 struct FileSyncStoreTests {
     @Test
+    func dueArtifactCheckDoesNotReadArtifactContents() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try FileSyncStore(rootDirectory: directory)
+        let record = try makeRecord()
+
+        _ = try await store.stageDaily(record)
+        try FileManager.default.removeItem(
+            at: directory.appendingPathComponent(
+                "daily/\(record.date.rawValue).json"
+            )
+        )
+
+        #expect(
+            try await store.hasDueArtifact(
+                kind: .daily,
+                at: .distantFuture
+            )
+        )
+    }
+
+    @Test
     func unchangedSemanticRecordKeepsOriginalGeneratedAtAndRevision() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

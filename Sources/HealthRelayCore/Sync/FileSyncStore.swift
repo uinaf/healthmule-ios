@@ -287,6 +287,25 @@ public actor FileSyncStore {
         }
     }
 
+    func hasDueArtifact(
+        kind: ExportArtifactID.Kind,
+        at date: Date,
+        includeDeferred: Bool = false
+    ) throws -> Bool {
+        try ensureRecovered()
+        return state.retryQueue.contains { item in
+            guard
+                item.artifactID.kind == kind,
+                item.blockReason == nil,
+                includeDeferred || item.notBefore <= date,
+                let artifactState = state.artifacts[item.artifactID.key]
+            else {
+                return false
+            }
+            return artifactState.localRevision == item.revision
+        }
+    }
+
     public func markUploaded(_ artifact: ExportArtifact) throws {
         try ensureRecovered()
         guard

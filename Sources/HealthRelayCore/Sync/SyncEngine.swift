@@ -94,14 +94,14 @@ public actor SyncEngine {
         }
 
         let manifestCheckTime = await clock.now()
-        let dueManifest = try await store.dueArtifacts(
+        let dueManifest = try await store.hasDueArtifact(
+            kind: .manifest,
             at: manifestCheckTime,
-            includeDeferred: force,
-            kind: .manifest
-        ).first
+            includeDeferred: force
+        )
         try Task.checkCancellation()
 
-        if dueManifest != nil {
+        if dueManifest {
             guard let manifest = try await renderManifest() else {
                 report.pendingUploadCount =
                     try await store.pendingUploadCount()
