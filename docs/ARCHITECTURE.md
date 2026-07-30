@@ -353,7 +353,7 @@ not deleted and may no longer appear in the new manifest.
 | HealthKit anchors and UUID/date index | Application Support under `HealthRelay/Anchors` | Uses complete-until-first-authentication file protection and is excluded from backups. |
 | Saved local-day boundaries | Application Support under `HealthRelay/day-boundaries.json` | Uses complete-until-first-authentication file protection and is excluded from backups. |
 | Daily records, manifest, and retry state | Application Support under `HealthRelay/Staging` through `FileSyncStore` | The staging root uses complete-until-first-authentication protection and is excluded from backups before records are written. |
-| Diagnostics | Bounded memory plus an explicit temporary share file | Field names associated with tokens, bodies, records, OAuth, or health values are filtered; callers must never pass sensitive values under alternate names. |
+| Diagnostics | Bounded memory plus an explicit temporary share file | A closed typed event enum is the export allowlist. Callers cannot supply arbitrary categories, event names, field keys, raw errors, identifiers, metadata, or health values. |
 
 The no-backup rule is part of the product boundary: Apple’s [App Review
 Guidelines](https://developer.apple.com/app-store/review/guidelines/) prohibit

@@ -276,7 +276,7 @@ final class AppModel {
         bootstrapInProgress = true
         await registerHealthObservers()
 
-        await diagnostics.record(category: "lifecycle", event: "bootstrap-started")
+        await diagnostics.record(.bootstrapStarted)
         await recoverSyncCoordinatorIfNeeded()
         let restoredGoogleCredentials =
             await restoreGoogleConnection() != nil
@@ -307,7 +307,7 @@ final class AppModel {
 
         await reconcile(trigger: .appLaunch)
         BackgroundRefreshCoordinator.schedule()
-        await diagnostics.record(category: "lifecycle", event: "bootstrap-finished")
+        await diagnostics.record(.bootstrapFinished)
         isBootstrapped = true
         bootstrapInProgress = false
         let waiters = bootstrapWaiters
@@ -399,10 +399,7 @@ final class AppModel {
                 .healthAuthorization,
                 "Apple Health request complete. Apple does not report which read permissions were approved."
             )
-            await diagnostics.record(
-                category: "authorization",
-                event: "health-request-completed"
-            )
+            await diagnostics.record(.healthRequestCompleted)
             await reconcileAfterSetupIfReady()
         } catch {
             guard operationEpoch == expectedOperationEpoch else {
@@ -413,9 +410,7 @@ final class AppModel {
                 error.localizedDescription
             )
             await diagnostics.record(
-                category: "authorization",
-                event: "health-request-failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .healthRequestFailed(DiagnosticErrorCode(capturing: error))
             )
         }
     }
@@ -546,10 +541,7 @@ final class AppModel {
                 .googleConnection,
                 "Google Drive is connected."
             )
-            await diagnostics.record(
-                category: "authorization",
-                event: "google-connected"
-            )
+            await diagnostics.record(.googleConnected)
             await reconcileAfterSetupIfReady()
         } catch {
             guard
@@ -589,9 +581,7 @@ final class AppModel {
                 )
             }
             await diagnostics.record(
-                category: "authorization",
-                event: "google-connect-failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .googleConnectFailed(DiagnosticErrorCode(capturing: error))
             )
         }
     }
@@ -645,10 +635,7 @@ final class AppModel {
                 .googleConnection,
                 "Google was disconnected. Drive files were kept."
             )
-            await diagnostics.record(
-                category: "authorization",
-                event: "google-disconnected"
-            )
+            await diagnostics.record(.googleDisconnected)
         } catch {
             guard
                 isGoogleTransitionCurrent(expectedEpoch),
@@ -723,11 +710,7 @@ final class AppModel {
         let expectedGoogleEpoch = googleTransitionEpoch
         let clock = ContinuousClock()
         let startedAt = clock.now
-        await diagnostics.record(
-            category: "sync",
-            event: "started",
-            fields: ["trigger": trigger.rawValue]
-        )
+        await diagnostics.record(.syncStarted(trigger))
 
         do {
             let backfillStart = try resolvedBackfillStart()
@@ -811,17 +794,15 @@ final class AppModel {
                 )
             }
             await diagnostics.record(
-                category: "sync",
-                event: "finished",
-                fields: [
-                    "durationMilliseconds": String(
+                .syncFinished(
+                    durationMilliseconds: Int(
                         duration.components.seconds * 1_000
                     ),
-                    "failureCount": String(outcome.report.failures.count),
-                    "pendingCount": String(syncSummary.pendingUploadCount),
-                    "stagedCount": String(outcome.report.stagedDailyCount),
-                    "uploadedCount": String(outcome.report.uploadedDailyCount),
-                ]
+                    failureCount: outcome.report.failures.count,
+                    pendingCount: syncSummary.pendingUploadCount,
+                    stagedCount: outcome.report.stagedDailyCount,
+                    uploadedCount: outcome.report.uploadedDailyCount
+                )
             )
         } catch {
             guard
@@ -852,9 +833,7 @@ final class AppModel {
                 error.localizedDescription
             )
             await diagnostics.record(
-                category: "sync",
-                event: "failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .syncFailed(DiagnosticErrorCode(capturing: error))
             )
         }
     }
@@ -1058,7 +1037,7 @@ final class AppModel {
                 .localReset,
                 "Local sync history was reset. Drive files and their stable IDs were kept."
             )
-            await diagnostics.record(category: "state", event: "local-reset")
+            await diagnostics.record(.localReset)
         } catch {
             syncCoordinator = nil
             syncInitializationError = error.localizedDescription
@@ -1208,9 +1187,7 @@ final class AppModel {
                 terminalEpoch = googleTransitionEpoch
             }
             await diagnostics.record(
-                category: "authorization",
-                event: "google-restore-failed",
-                fields: ["errorCode": String(describing: error)]
+                .googleRestoreFailed(DiagnosticErrorCode(capturing: error))
             )
             guard
                 let terminalEpoch,
@@ -1226,9 +1203,7 @@ final class AppModel {
             googleConnection = .temporarilyUnavailable
             let terminalEpoch = googleTransitionEpoch
             await diagnostics.record(
-                category: "authorization",
-                event: "google-restore-failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .googleRestoreFailed(DiagnosticErrorCode(capturing: error))
             )
             return isGoogleTransitionCurrent(terminalEpoch)
                 ? terminalEpoch
@@ -1326,9 +1301,9 @@ final class AppModel {
                 expectedEpoch: expectedEpoch
             )
             await diagnostics.record(
-                category: "sync",
-                event: "credential-restore-resume-failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .credentialRestoreResumeFailed(
+                    DiagnosticErrorCode(capturing: error)
+                )
             )
             return false
         }
@@ -1397,18 +1372,15 @@ final class AppModel {
             syncCoordinator = candidate
             syncInitializationError = nil
             if wasUnavailable {
-                await diagnostics.record(
-                    category: "state",
-                    event: "local-storage-restored"
-                )
+                await diagnostics.record(.localStorageRestored)
             }
         } catch {
             syncInitializationError = error.localizedDescription
             syncCoordinator = nil
             await diagnostics.record(
-                category: "state",
-                event: "local-storage-restore-failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .localStorageRestoreFailed(
+                    DiagnosticErrorCode(capturing: error)
+                )
             )
         }
     }
@@ -1572,9 +1544,9 @@ final class AppModel {
             requestObserverFlush()
         } catch {
             await diagnostics.record(
-                category: "sync",
-                event: "observer-staging-failed",
-                fields: ["errorCode": String(describing: type(of: error))]
+                .observerStagingFailed(
+                    DiagnosticErrorCode(capturing: error)
+                )
             )
         }
     }
@@ -1640,11 +1612,9 @@ final class AppModel {
                 expectedEpoch: expectedGoogleEpoch
             )
             await diagnostics.record(
-                category: "sync",
-                event: "observer-upload-failed",
-                fields: [
-                    "errorCode": String(describing: type(of: error))
-                ]
+                .observerUploadFailed(
+                    DiagnosticErrorCode(capturing: error)
+                )
             )
         }
     }
