@@ -114,6 +114,43 @@ final class HealthAnchorStoreTests: XCTestCase {
         )
     }
 
+    func testMissingSampleIndexWithAnchorDomainIsCorrupt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "health-relay-partial-index-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try Data().write(
+            to: directory.appendingPathComponent("stepCount.anchor")
+        )
+        try JSONEncoder().encode(Date(timeIntervalSince1970: 1_000)).write(
+            to: directory.appendingPathComponent(
+                "stepCount.query-start"
+            )
+        )
+        let store = HealthAnchorStore(directoryURL: directory)
+
+        XCTAssertThrowsError(try store.inspectSampleIndex()) { error in
+            XCTAssertEqual(
+                error as? HealthAnchorStoreError,
+                .invalidSampleIndex
+            )
+        }
+        XCTAssertThrowsError(
+            try store.dates(forDeletedUUID: UUID())
+        ) { error in
+            XCTAssertEqual(
+                error as? HealthAnchorStoreError,
+                .invalidSampleIndex
+            )
+        }
+    }
+
     func testInvalidSampleIndexIsSurfacedWithoutCachingEmptyState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(

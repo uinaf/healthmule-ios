@@ -50,6 +50,10 @@ final class HealthAnchorStore {
             "sample-index.json"
         )
         guard FileManager.default.fileExists(atPath: indexURL.path) else {
+            guard try !hasPersistedAnchorDomain() else {
+                index = nil
+                throw HealthAnchorStoreError.invalidSampleIndex
+            }
             index = SampleIndex()
             return false
         }
@@ -188,5 +192,24 @@ final class HealthAnchorStore {
         resourceValues.isExcludedFromBackup = true
         var mutableDirectory = directory
         try mutableDirectory.setResourceValues(resourceValues)
+    }
+
+    private func hasPersistedAnchorDomain() throws -> Bool {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: directory.path) else {
+            return false
+        }
+        do {
+            return try fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ).contains { url in
+                url.pathExtension == "anchor"
+                    || url.lastPathComponent.hasSuffix(".query-start")
+            }
+        } catch {
+            throw HealthAnchorStoreError.unreadableSampleIndex
+        }
     }
 }
