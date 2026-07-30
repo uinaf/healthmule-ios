@@ -66,7 +66,6 @@ struct SetupView: View {
                 Text(advisory.message)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel(advisory.accessibilityLabel)
 
                 Button("Check Again") {
                     Task {

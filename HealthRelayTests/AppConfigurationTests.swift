@@ -72,7 +72,17 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertTrue(advisory.message.contains("Steps and Sleep"))
         XCTAssertTrue(advisory.message.contains("Opening the app"))
         XCTAssertTrue(advisory.message.contains("syncing manually"))
-        XCTAssertTrue(advisory.accessibilityLabel.contains(advisory.message))
+        XCTAssertTrue(advisory.message.hasPrefix("Background updates"))
+        let threeMetricAdvisory = try XCTUnwrap(
+            BackgroundDeliveryAdvisory(
+                failedMetrics: [.bodyMass, .stepCount, .sleep]
+            )
+        )
+        XCTAssertTrue(
+            threeMetricAdvisory.message.contains(
+                "Body mass, Steps, and Sleep"
+            )
+        )
         XCTAssertNil(BackgroundDeliveryAdvisory(failedMetrics: []))
     }
 

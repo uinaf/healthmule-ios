@@ -253,12 +253,18 @@ struct BackgroundDeliveryAdvisory: Equatable, Sendable {
     }
 
     var message: String {
-        let names = metrics.map(\.title).formatted()
+        let titles = metrics.map(\.title)
+        let names: String
+        switch titles.count {
+        case 1:
+            names = titles[0]
+        case 2:
+            names = titles.joined(separator: " and ")
+        default:
+            names = titles.dropLast().joined(separator: ", ")
+                + ", and \(titles[titles.count - 1])"
+        }
         return "Background updates could not be enabled for \(names). Opening the app or syncing manually still works."
-    }
-
-    var accessibilityLabel: String {
-        "\(title). \(message)"
     }
 }
 
