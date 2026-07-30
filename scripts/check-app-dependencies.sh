@@ -16,7 +16,14 @@ fail() {
 
 declared_version="$(
   /usr/bin/ruby -ryaml -e '
-    document = YAML.load_file(ARGV.fetch(0))
+    path = ARGV.fetch(0)
+    document = YAML.safe_load(
+      File.read(path),
+      permitted_classes: [],
+      permitted_symbols: [],
+      aliases: false,
+      filename: path
+    )
     package = document.fetch("packages", {}).fetch("GoogleSignIn", nil)
     version = package.is_a?(Hash) ? package["exactVersion"] : nil
     abort "missing" unless version.is_a?(String) && !version.empty?

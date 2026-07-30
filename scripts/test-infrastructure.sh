@@ -107,6 +107,28 @@ if ./scripts/check-app-dependencies.sh \
   fail "The app dependency check must reject duplicate pins."
 fi
 
+cat >"${declared_fixture}" <<'EOF'
+--- !ruby/object:Object {}
+EOF
+write_lock_fixture "9.2.0"
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject tagged YAML objects."
+fi
+
+cat >"${declared_fixture}" <<'EOF'
+dependency: &google_sign_in
+  exactVersion: 9.2.0
+packages:
+  GoogleSignIn: *google_sign_in
+EOF
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject YAML aliases."
+fi
+
 grep -Fq "platform: watchOS" project.yml ||
   fail "The project must keep the watchOS companion target."
 grep -Fq "INFOPLIST_KEY_WKCompanionAppBundleIdentifier" project.yml ||
