@@ -204,10 +204,13 @@ final class HealthAnchorStore {
                 url.pathExtension == "anchor"
                     || url.lastPathComponent.hasSuffix(".query-start")
             }
-        } catch let error as CocoaError
-        where error.code == .fileNoSuchFile {
-            return false
         } catch {
+            let fileError = error as NSError
+            if fileError.domain == NSCocoaErrorDomain,
+               fileError.code == NSFileNoSuchFileError
+            {
+                return false
+            }
             throw HealthAnchorStoreError.unreadableSampleIndex
         }
     }
