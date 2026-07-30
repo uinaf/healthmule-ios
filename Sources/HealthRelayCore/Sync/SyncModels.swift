@@ -188,7 +188,7 @@ public struct SystemManifestTimeZoneProvider: ManifestTimeZoneProvider {
     public init() {}
 
     public func currentIdentifier() async -> String {
-        TimeZone.current.identifier
+        TimeZone.autoupdatingCurrent.identifier
     }
 }
 
