@@ -17,13 +17,22 @@ fail() {
 declared_version="$(
   /usr/bin/ruby -ryaml -e '
     path = ARGV.fetch(0)
-    document = YAML.safe_load(
-      File.read(path),
-      [],
-      [],
-      false,
-      path
-    )
+    yaml = File.read(path)
+    supports_keywords = YAML.method(:safe_load).parameters.any? do |kind, _|
+      kind == :key
+    end
+    document =
+      if supports_keywords
+        YAML.safe_load(
+          yaml,
+          permitted_classes: [],
+          permitted_symbols: [],
+          aliases: false,
+          filename: path
+        )
+      else
+        YAML.safe_load(yaml, [], [], false, path)
+      end
     package = document.fetch("packages", {}).fetch("GoogleSignIn", nil)
     version = package.is_a?(Hash) ? package["exactVersion"] : nil
     abort "missing" unless version.is_a?(String) && !version.empty?
