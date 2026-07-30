@@ -54,13 +54,123 @@ final class HealthKitDailyRecordProviderTests: XCTestCase {
                 from: Set(HealthMetric.allCases)
             ),
             Set([
-                .bodyMass,
                 .stepCount,
                 .activeEnergy,
                 .restingEnergy,
-                .restingHeartRate,
-                .hrvSDNN,
             ])
+        )
+    }
+
+    func testReusedQuantitySamplesPreserveProvenanceWithoutDuplicates() throws {
+        let phone = HKDevice(
+            name: "Phone",
+            manufacturer: nil,
+            model: nil,
+            hardwareVersion: nil,
+            firmwareVersion: nil,
+            softwareVersion: nil,
+            localIdentifier: nil,
+            udiDeviceIdentifier: nil
+        )
+        let watch = HKDevice(
+            name: "Watch",
+            manufacturer: nil,
+            model: nil,
+            hardwareVersion: nil,
+            firmwareVersion: nil,
+            softwareVersion: nil,
+            localIdentifier: nil,
+            udiDeviceIdentifier: nil
+        )
+        let weight = try quantitySample(
+            identifier: .bodyMass,
+            value: 70,
+            unit: .gramUnit(with: .kilo),
+            device: phone
+        )
+        let steps = try quantitySample(
+            identifier: .stepCount,
+            value: 1_000,
+            unit: .count(),
+            device: watch
+        )
+        let restingHeartRate = try quantitySample(
+            identifier: .restingHeartRate,
+            value: 60,
+            unit: .count().unitDivided(by: .minute()),
+            device: watch
+        )
+        let hrv = try quantitySample(
+            identifier: .heartRateVariabilitySDNN,
+            value: 40,
+            unit: .secondUnit(with: .milli),
+            device: watch
+        )
+        let oldSamples = HealthSourceProvenance.uniqueSamples(
+            directSamples: [weight, steps, restingHeartRate, hrv],
+            reusedQuantitySamples: [],
+            selectedSamples: []
+        )
+        let newSamples = HealthSourceProvenance.uniqueSamples(
+            directSamples: [steps],
+            reusedQuantitySamples: HealthSourceProvenance.reusedQuantitySamples(
+                enabledMetrics: [.bodyMass, .restingHeartRate, .hrvSDNN],
+                bodyMass: [weight, weight],
+                restingHeartRate: [restingHeartRate],
+                hrv: [hrv]
+            ),
+            selectedSamples: []
+        )
+
+        XCTAssertEqual(Set(newSamples.keys), Set(oldSamples.keys))
+        XCTAssertEqual(newSamples.count, oldSamples.count)
+        XCTAssertEqual(
+            Set(newSamples.values.compactMap(\.device?.name)),
+            Set(["Phone", "Watch"])
+        )
+    }
+
+    func testReusedQuantitySamplesOmitDisabledMetrics() throws {
+        let weight = try quantitySample(
+            identifier: .bodyMass,
+            value: 70,
+            unit: .gramUnit(with: .kilo),
+            device: HKDevice.local()
+        )
+        let restingHeartRate = try quantitySample(
+            identifier: .restingHeartRate,
+            value: 60,
+            unit: .count().unitDivided(by: .minute()),
+            device: HKDevice.local()
+        )
+
+        let samples = HealthSourceProvenance.reusedQuantitySamples(
+            enabledMetrics: [.restingHeartRate],
+            bodyMass: [weight],
+            restingHeartRate: [restingHeartRate],
+            hrv: []
+        )
+
+        XCTAssertEqual(samples.map(\.uuid), [restingHeartRate.uuid])
+        XCTAssertFalse(samples.contains { $0.uuid == weight.uuid })
+    }
+
+    private func quantitySample(
+        identifier: HKQuantityTypeIdentifier,
+        value: Double,
+        unit: HKUnit,
+        device: HKDevice
+    ) throws -> HKQuantitySample {
+        let type = try XCTUnwrap(
+            HKObjectType.quantityType(forIdentifier: identifier)
+        )
+        return HKQuantitySample(
+            type: type,
+            quantity: HKQuantity(unit: unit, doubleValue: value),
+            start: Date(timeIntervalSince1970: 1_000),
+            end: Date(timeIntervalSince1970: 1_001),
+            device: device,
+            metadata: nil
         )
     }
 }
