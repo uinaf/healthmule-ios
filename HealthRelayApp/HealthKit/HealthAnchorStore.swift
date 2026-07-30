@@ -195,19 +195,18 @@ final class HealthAnchorStore {
     }
 
     private func hasPersistedAnchorDomain() throws -> Bool {
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: directory.path) else {
-            return false
-        }
         do {
-            return try fileManager.contentsOfDirectory(
+            return try FileManager.default.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
+                options: []
             ).contains { url in
                 url.pathExtension == "anchor"
                     || url.lastPathComponent.hasSuffix(".query-start")
             }
+        } catch let error as CocoaError
+        where error.code == .fileNoSuchFile {
+            return false
         } catch {
             throw HealthAnchorStoreError.unreadableSampleIndex
         }

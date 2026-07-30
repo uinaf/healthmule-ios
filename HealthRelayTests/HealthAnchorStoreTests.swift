@@ -151,6 +151,30 @@ final class HealthAnchorStoreTests: XCTestCase {
         }
     }
 
+    func testMissingSampleIndexWithHiddenAnchorDomainIsCorrupt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "health-relay-hidden-partial-index-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try Data().write(
+            to: directory.appendingPathComponent(".stepCount.anchor")
+        )
+        let store = HealthAnchorStore(directoryURL: directory)
+
+        XCTAssertThrowsError(try store.inspectSampleIndex()) { error in
+            XCTAssertEqual(
+                error as? HealthAnchorStoreError,
+                .invalidSampleIndex
+            )
+        }
+    }
+
     func testInvalidSampleIndexIsSurfacedWithoutCachingEmptyState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
