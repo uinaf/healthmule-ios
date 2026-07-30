@@ -19,10 +19,10 @@ declared_version="$(
     path = ARGV.fetch(0)
     document = YAML.safe_load(
       File.read(path),
-      permitted_classes: [],
-      permitted_symbols: [],
-      aliases: false,
-      filename: path
+      [],
+      [],
+      false,
+      path
     )
     package = document.fetch("packages", {}).fetch("GoogleSignIn", nil)
     version = package.is_a?(Hash) ? package["exactVersion"] : nil
