@@ -19,6 +19,42 @@ enum SyncTrigger: String, Sendable {
     case watchCompanion
 }
 
+struct SyncProgress: Equatable, Sendable {
+    let completedDays: Int
+    let totalDays: Int
+    let currentDate: LocalDate?
+
+    var presentationText: String {
+        "Processing \(completedDays.formatted()) of \(totalDays.formatted()) days"
+    }
+
+    var accessibilityValue: String {
+        "\(completedDays.formatted()) of \(totalDays.formatted()) days"
+    }
+}
+
+struct SyncProgressState: Equatable, Sendable {
+    private(set) var progress: SyncProgress?
+    private var activeEpoch: UInt64?
+
+    mutating func begin(epoch: UInt64) {
+        activeEpoch = epoch
+        progress = nil
+    }
+
+    mutating func publish(_ progress: SyncProgress, epoch: UInt64) {
+        guard activeEpoch == epoch else {
+            return
+        }
+        self.progress = progress
+    }
+
+    mutating func clear() {
+        activeEpoch = nil
+        progress = nil
+    }
+}
+
 struct SelectionReconciliationQueue: Equatable, Sendable {
     private var hasMetricSelection = false
     private var hasHistorySelection = false

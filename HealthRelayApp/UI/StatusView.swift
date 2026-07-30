@@ -106,6 +106,13 @@ struct StatusView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if
+                let progress = model.syncProgress,
+                progress.totalDays > 0
+            {
+                SyncDayProgressView(progress: progress)
+            }
+
             heroAction
         }
         .frame(maxWidth: .infinity, alignment: .leading)

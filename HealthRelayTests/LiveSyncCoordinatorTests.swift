@@ -286,6 +286,260 @@ final class LiveSyncCoordinatorTests: XCTestCase {
             }
         )
     }
+
+    func testProgressCoversEmptyOneAndMultipleDayPasses() async throws {
+        let emptyFixture = try CoordinatorFixture(dayCount: 1)
+        defer { emptyFixture.cleanUp() }
+        let emptyLog = SyncProgressLog()
+        let emptyCoordinator = try emptyFixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: emptyFixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(
+                records: emptyFixture.records
+            )
+        )
+        _ = try await emptyCoordinator.reconcile(
+            trigger: .manual,
+            enabledMetrics: [],
+            backfillStart: try LocalDate(rawValue: "2026-07-30"),
+            progress: { progress in
+                await emptyLog.append(progress)
+            }
+        )
+        let emptyProgress = await emptyLog.snapshot()
+        XCTAssertEqual(
+            emptyProgress,
+            [
+                SyncProgress(
+                    completedDays: 0,
+                    totalDays: 0,
+                    currentDate: nil
+                )
+            ]
+        )
+
+        let oneFixture = try CoordinatorFixture(dayCount: 1)
+        defer { oneFixture.cleanUp() }
+        let oneLog = SyncProgressLog()
+        let oneCoordinator = try oneFixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: oneFixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(records: oneFixture.records)
+        )
+        _ = try await oneCoordinator.reconcile(
+            trigger: .manual,
+            enabledMetrics: [],
+            backfillStart: oneFixture.dates[0],
+            progress: { progress in
+                await oneLog.append(progress)
+            }
+        )
+        let oneProgress = await oneLog.snapshot()
+        XCTAssertEqual(
+            oneProgress,
+            [
+                SyncProgress(
+                    completedDays: 0,
+                    totalDays: 1,
+                    currentDate: nil
+                ),
+                SyncProgress(
+                    completedDays: 1,
+                    totalDays: 1,
+                    currentDate: oneFixture.dates[0]
+                ),
+            ]
+        )
+
+        let multipleFixture = try CoordinatorFixture(dayCount: 3)
+        defer { multipleFixture.cleanUp() }
+        let multipleLog = SyncProgressLog()
+        let multipleCoordinator = try multipleFixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: multipleFixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(
+                records: multipleFixture.records
+            )
+        )
+        _ = try await multipleCoordinator.reconcile(
+            trigger: .manual,
+            enabledMetrics: [],
+            backfillStart: multipleFixture.dates[0],
+            progress: { progress in
+                await multipleLog.append(progress)
+            }
+        )
+        let multipleProgress = await multipleLog.snapshot()
+        XCTAssertEqual(
+            multipleProgress,
+            [
+                SyncProgress(
+                    completedDays: 0,
+                    totalDays: 3,
+                    currentDate: nil
+                ),
+                SyncProgress(
+                    completedDays: 1,
+                    totalDays: 3,
+                    currentDate: multipleFixture.dates[0]
+                ),
+                SyncProgress(
+                    completedDays: 2,
+                    totalDays: 3,
+                    currentDate: multipleFixture.dates[1]
+                ),
+                SyncProgress(
+                    completedDays: 3,
+                    totalDays: 3,
+                    currentDate: multipleFixture.dates[2]
+                ),
+            ]
+        )
+    }
+
+    func testProgressStopsBeforeFailedDay() async throws {
+        let fixture = try CoordinatorFixture(dayCount: 3)
+        defer { fixture.cleanUp() }
+        let progressLog = SyncProgressLog()
+        let coordinator = try fixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: fixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(
+                records: fixture.records,
+                failureDate: fixture.dates[1]
+            )
+        )
+
+        do {
+            _ = try await coordinator.reconcile(
+                trigger: .manual,
+                enabledMetrics: [],
+                backfillStart: fixture.dates[0],
+                progress: { progress in
+                    await progressLog.append(progress)
+                }
+            )
+            XCTFail("Expected the second day to fail.")
+        } catch CoordinatorTestError.recordFailure {
+            // Expected.
+        }
+
+        let progress = await progressLog.snapshot()
+        XCTAssertEqual(
+            progress,
+            [
+                SyncProgress(
+                    completedDays: 0,
+                    totalDays: 3,
+                    currentDate: nil
+                ),
+                SyncProgress(
+                    completedDays: 1,
+                    totalDays: 3,
+                    currentDate: fixture.dates[0]
+                ),
+            ]
+        )
+    }
+
+    func testCancellationDoesNotCompleteBlockedDay() async throws {
+        let fixture = try CoordinatorFixture(dayCount: 3)
+        defer { fixture.cleanUp() }
+        let provider = CoordinatorRecordProvider(
+            records: fixture.records,
+            blockingDate: fixture.dates[1]
+        )
+        let progressLog = SyncProgressLog()
+        let coordinator = try fixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: fixture.startInstant
+            ),
+            provider: provider
+        )
+        let backfillStart = fixture.dates[0]
+        let task = Task {
+            try await coordinator.reconcile(
+                trigger: .manual,
+                enabledMetrics: [],
+                backfillStart: backfillStart,
+                progress: { progress in
+                    await progressLog.append(progress)
+                }
+            )
+        }
+
+        await provider.waitUntilBlocked()
+        task.cancel()
+        await provider.releaseBlockedRecord()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation.")
+        } catch is CancellationError {
+            // Expected.
+        }
+        let completedDays = await progressLog.snapshot()
+            .map(\.completedDays)
+        XCTAssertEqual(completedDays, [0, 1])
+    }
+
+    func testResumedProgressUsesRemainingDateSet() async throws {
+        let fixture = try CoordinatorFixture(dayCount: 5)
+        defer { fixture.cleanUp() }
+        let failingCoordinator = try fixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: fixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(
+                records: fixture.records,
+                failureDate: fixture.dates[1]
+            )
+        )
+        do {
+            _ = try await failingCoordinator.reconcile(
+                trigger: .manual,
+                enabledMetrics: [],
+                backfillStart: fixture.dates[0]
+            )
+            XCTFail("Expected the initial pass to fail.")
+        } catch CoordinatorTestError.recordFailure {
+            // Expected.
+        }
+        fixture.defaults.set([], forKey: "sync.lastStagedMetrics")
+        fixture.defaults.set(
+            fixture.dates[0].rawValue,
+            forKey: "sync.lastStagedBackfillStart"
+        )
+        fixture.defaults.set(
+            2,
+            forKey: "sync.lastStagedExportContractRevision"
+        )
+
+        let resumedLog = SyncProgressLog()
+        let resumedCoordinator = try fixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: fixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(records: fixture.records)
+        )
+        _ = try await resumedCoordinator.reconcile(
+            trigger: .manual,
+            enabledMetrics: [],
+            backfillStart: fixture.dates[0],
+            progress: { progress in
+                await resumedLog.append(progress)
+            }
+        )
+
+        let resumedProgress = await resumedLog.snapshot()
+        XCTAssertEqual(resumedProgress.first?.totalDays, 4)
+        XCTAssertEqual(resumedProgress.last?.completedDays, 4)
+        XCTAssertEqual(resumedProgress.last?.currentDate, fixture.dates[4])
+    }
 }
 
 private struct CoordinatorFixture {
@@ -460,13 +714,19 @@ private final class CoordinatorQueueProbe: @unchecked Sendable {
 private actor CoordinatorRecordProvider: ConfigurableDailyRecordProvider {
     private let records: [LocalDate: DailyHealthRecord]
     private let failureDate: LocalDate?
+    private let blockingDate: LocalDate?
+    private var didBlock = false
+    private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var blockedContinuation: CheckedContinuation<Void, Never>?
 
     init(
         records: [LocalDate: DailyHealthRecord],
-        failureDate: LocalDate? = nil
+        failureDate: LocalDate? = nil,
+        blockingDate: LocalDate? = nil
     ) {
         self.records = records
         self.failureDate = failureDate
+        self.blockingDate = blockingDate
     }
 
     func configure(
@@ -478,10 +738,35 @@ private actor CoordinatorRecordProvider: ConfigurableDailyRecordProvider {
         if date == failureDate {
             throw CoordinatorTestError.recordFailure
         }
+        if date == blockingDate {
+            didBlock = true
+            let waiters = blockedWaiters
+            blockedWaiters.removeAll()
+            for waiter in waiters {
+                waiter.resume()
+            }
+            await withCheckedContinuation { continuation in
+                blockedContinuation = continuation
+            }
+        }
         guard let record = records[date] else {
             throw CoordinatorTestError.missingRecord(date.rawValue)
         }
         return record
+    }
+
+    func waitUntilBlocked() async {
+        guard !didBlock else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            blockedWaiters.append(continuation)
+        }
+    }
+
+    func releaseBlockedRecord() {
+        blockedContinuation?.resume()
+        blockedContinuation = nil
     }
 }
 
@@ -641,6 +926,18 @@ private actor CoordinatorEventLog {
 
     func snapshot() -> [Event] {
         events
+    }
+}
+
+private actor SyncProgressLog {
+    private var values: [SyncProgress] = []
+
+    func append(_ progress: SyncProgress) {
+        values.append(progress)
+    }
+
+    func snapshot() -> [SyncProgress] {
+        values
     }
 }
 

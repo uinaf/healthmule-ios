@@ -67,6 +67,35 @@ final class HealthRelayUITests: XCTestCase {
     }
 
     @MainActor
+    func testDeterminateSyncProgressIsAccessibleOnBothSurfaces() throws {
+        let arguments = [
+            "--ui-ready",
+            "--ui-operation-working",
+            "--ui-sync-progress",
+        ]
+        let homeApp = launch(additionalArguments: arguments)
+        let homeProgress = element("sync-day-progress", in: homeApp)
+
+        XCTAssertTrue(homeProgress.waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            homeProgress.value as? String,
+            "12 of 30 days"
+        )
+        homeApp.terminate()
+
+        let syncApp = launch(
+            additionalArguments: arguments + ["--ui-show-sync"]
+        )
+        let syncProgress = element("sync-day-progress", in: syncApp)
+
+        XCTAssertTrue(syncProgress.waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            syncProgress.value as? String,
+            "12 of 30 days"
+        )
+    }
+
+    @MainActor
     func testConnectionCardsDistinguishRequestAuthAndDriveReadiness() throws {
         let app = launch(
             additionalArguments: [

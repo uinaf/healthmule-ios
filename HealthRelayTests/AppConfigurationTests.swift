@@ -5,6 +5,50 @@ import XCTest
 @testable import HealthRelay
 
 final class AppConfigurationTests: XCTestCase {
+    func testSyncProgressStateRejectsStaleAndFinishedCallbacks() throws {
+        var state = SyncProgressState()
+        let firstProgress = SyncProgress(
+            completedDays: 1,
+            totalDays: 3,
+            currentDate: try LocalDate(rawValue: "2026-07-27")
+        )
+        let staleProgress = SyncProgress(
+            completedDays: 2,
+            totalDays: 3,
+            currentDate: try LocalDate(rawValue: "2026-07-28")
+        )
+
+        state.begin(epoch: 10)
+        state.publish(firstProgress, epoch: 10)
+        XCTAssertEqual(state.progress, firstProgress)
+
+        state.begin(epoch: 11)
+        XCTAssertNil(state.progress)
+        state.publish(staleProgress, epoch: 10)
+        XCTAssertNil(state.progress)
+
+        state.publish(staleProgress, epoch: 11)
+        XCTAssertEqual(state.progress, staleProgress)
+        state.clear()
+        XCTAssertNil(state.progress)
+        state.publish(staleProgress, epoch: 11)
+        XCTAssertNil(state.progress)
+    }
+
+    func testSyncProgressPresentationContainsNoHealthMetadata() throws {
+        let progress = SyncProgress(
+            completedDays: 12,
+            totalDays: 30,
+            currentDate: try LocalDate(rawValue: "2026-07-12")
+        )
+
+        XCTAssertEqual(
+            progress.presentationText,
+            "Processing 12 of 30 days"
+        )
+        XCTAssertEqual(progress.accessibilityValue, "12 of 30 days")
+    }
+
     func testBackgroundDeliveryCallbackMapping() {
         XCTAssertEqual(
             HealthKitClient.backgroundDeliveryOutcome(
