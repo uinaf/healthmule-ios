@@ -156,8 +156,7 @@ extension HealthKitClient {
             sourceSamples
         )
 
-        var sourceObjects: [HKSample] = allSourceSamples
-            + sleepResult.rawSamples
+        var selectedSourceSamples: [HKSample] = sleepResult.rawSamples
             + workoutResult.rawSamples
         if let selectedVO2Sample = vo2Samples.rawSamples.max(by: {
             if $0.endDate != $1.endDate {
@@ -165,12 +164,18 @@ extension HealthKitClient {
             }
             return $0.uuid.uuidString < $1.uuid.uuidString
         }) {
-            sourceObjects.append(selectedVO2Sample)
+            selectedSourceSamples.append(selectedVO2Sample)
         }
-        var sourceObjectsByID: [UUID: HKSample] = [:]
-        for sample in sourceObjects {
-            sourceObjectsByID[sample.uuid] = sample
-        }
+        let sourceObjectsByID = HealthSourceProvenance.uniqueSamples(
+            directSamples: allSourceSamples,
+            reusedQuantitySamples: HealthSourceProvenance.reusedQuantitySamples(
+                enabledMetrics: enabledMetrics,
+                bodyMass: weightSamples.rawSamples,
+                restingHeartRate: restingHeartRateSamples.rawSamples,
+                hrv: hrvSamples.rawSamples
+            ),
+            selectedSamples: selectedSourceSamples
+        )
         let sourceNames = sourceObjectsByID.values.compactMap(\.device?.name)
 
         let input = DailyAggregationInput(
@@ -519,7 +524,43 @@ enum HealthSourceSamplePlanner {
     static func directMetrics(
         from enabledMetrics: Set<HealthMetric>
     ) -> Set<HealthMetric> {
-        enabledMetrics.subtracting([.sleep, .workouts, .vo2Max])
+        enabledMetrics.intersection([
+            .stepCount,
+            .activeEnergy,
+            .restingEnergy,
+        ])
+    }
+}
+
+enum HealthSourceProvenance {
+    static func reusedQuantitySamples(
+        enabledMetrics: Set<HealthMetric>,
+        bodyMass: [HKQuantitySample],
+        restingHeartRate: [HKQuantitySample],
+        hrv: [HKQuantitySample]
+    ) -> [HKQuantitySample] {
+        var samples: [HKQuantitySample] = []
+        if enabledMetrics.contains(.bodyMass) {
+            samples.append(contentsOf: bodyMass)
+        }
+        if enabledMetrics.contains(.restingHeartRate) {
+            samples.append(contentsOf: restingHeartRate)
+        }
+        if enabledMetrics.contains(.hrvSDNN) {
+            samples.append(contentsOf: hrv)
+        }
+        return samples
+    }
+
+    static func uniqueSamples(
+        directSamples: [HKSample],
+        reusedQuantitySamples: [HKQuantitySample],
+        selectedSamples: [HKSample]
+    ) -> [UUID: HKSample] {
+        (directSamples + reusedQuantitySamples + selectedSamples)
+            .reduce(into: [:]) { samplesByID, sample in
+                samplesByID[sample.uuid] = sample
+            }
     }
 }
 
