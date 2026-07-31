@@ -9,6 +9,10 @@ fail() {
 [[ "${CI:-}" == "true" && "${GITHUB_ACTIONS:-}" == "true" ]] ||
   fail "TestFlight uploads may only run in GitHub Actions."
 
+if [[ "${HEALTH_MULE_XCODE_LOCKED:-}" != "1" ]]; then
+  exec ./scripts/with-xcode-lock.sh "$0"
+fi
+
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 : "${GITHUB_RUN_NUMBER:?GITHUB_RUN_NUMBER is required}"
 : "${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}"
@@ -28,7 +32,7 @@ build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
 
 ./scripts/generate-project.sh
 
-./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh archive \
+./scripts/xcodebuild.sh archive \
   -hideShellScriptEnvironment \
   -project HealthMule.xcodeproj \
   -scheme HealthMule \
@@ -57,7 +61,7 @@ plutil -insert signingStyle -string automatic "${export_options_path}"
 plutil -insert teamID -string "${APPLE_TEAM_ID}" "${export_options_path}"
 plutil -insert uploadSymbols -bool true "${export_options_path}"
 
-./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -exportArchive \
+./scripts/xcodebuild.sh -exportArchive \
   -hideShellScriptEnvironment \
   -archivePath "${archive_path}" \
   -exportPath "${export_path}" \

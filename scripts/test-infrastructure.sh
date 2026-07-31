@@ -315,6 +315,8 @@ grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
   fail "TestFlight signing must authenticate with the App Store Connect API key."
+grep -Fq 'exec ./scripts/with-xcode-lock.sh "$0"' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight must serialize project generation, archive, and export behind one Xcode lock."
 
 valid_testflight_environment=(
   env
