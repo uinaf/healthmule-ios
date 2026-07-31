@@ -19,6 +19,7 @@ for script in \
   scripts/ci/cleanup-testflight.sh \
   scripts/ci/configure-testflight.sh \
   scripts/ci/upload-testflight.sh \
+  scripts/ci/validate-testflight-configuration.sh \
   scripts/install-xcodegen.sh \
   scripts/ios-project-task.sh \
   scripts/parse-booted-iphone-ids.sh \
@@ -275,7 +276,12 @@ grep -Fq 'refs/heads/main' "${testflight_workflow}" ||
   fail "TestFlight uploads must be restricted to main."
 grep -Fq 'cancel-in-progress: false' "${testflight_workflow}" ||
   fail "An in-progress TestFlight upload must never be cancelled by another dispatch."
-grep -Fq 'name: testflight' "${testflight_workflow}" ||
+awk '
+  $0 == "    environment:" { in_environment = 1; next }
+  in_environment && $0 == "      name: testflight" { found = 1; next }
+  in_environment && $0 !~ /^      / { in_environment = 0 }
+  END { exit(found ? 0 : 1) }
+' "${testflight_workflow}" ||
   fail "TestFlight credentials must come from the dedicated GitHub Environment."
 grep -Eq '^[[:space:]]+run:[[:space:]]+make verify-full[[:space:]]*$' "${testflight_workflow}" ||
   fail "TestFlight must run the complete verification gate before credentials are configured."
@@ -283,10 +289,20 @@ grep -Fq 'run: ./scripts/ci/configure-testflight.sh' "${testflight_workflow}" ||
   fail "TestFlight must use the repository-owned credential setup script."
 grep -Fq 'run: ./scripts/ci/upload-testflight.sh' "${testflight_workflow}" ||
   fail "TestFlight must use the repository-owned archive and upload script."
-grep -Fq 'if: always()' "${testflight_workflow}" ||
-  fail "TestFlight must clean up credentials even after a failed upload."
-grep -Fq 'run: ./scripts/ci/cleanup-testflight.sh' "${testflight_workflow}" ||
-  fail "TestFlight must use the repository-owned cleanup script."
+awk '
+  $0 == "      - name: Remove release credentials" { in_cleanup = 1; next }
+  in_cleanup && $0 == "        if: always()" { found_always = 1; next }
+  in_cleanup && $0 == "        run: ./scripts/ci/cleanup-testflight.sh" && found_always {
+    found_cleanup = 1
+  }
+  in_cleanup && $0 ~ /^      - name:/ { in_cleanup = 0; found_always = 0 }
+  END { exit(found_cleanup ? 0 : 1) }
+' "${testflight_workflow}" ||
+  fail "TestFlight cleanup must use the repository script with always() on the same step."
+upload_step_line="$(grep -nF -- '- name: Archive and upload to App Store Connect' "${testflight_workflow}" | cut -d: -f1)"
+cleanup_step_line="$(grep -nF -- '- name: Remove release credentials' "${testflight_workflow}" | cut -d: -f1)"
+[[ -n "${upload_step_line}" && -n "${cleanup_step_line}" && "${cleanup_step_line}" -gt "${upload_step_line}" ]] ||
+  fail "TestFlight cleanup must run after the archive and upload step."
 grep -Fq 'APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}' "${testflight_workflow}" ||
   fail "The App Store Connect private key must be sourced from an Environment secret."
 grep -Fq 'method -string app-store-connect' scripts/ci/upload-testflight.sh ||
@@ -299,5 +315,31 @@ grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
   fail "TestFlight signing must authenticate with the App Store Connect API key."
+
+valid_testflight_environment=(
+  env
+  APPLE_TEAM_ID=54QY62678F
+  APP_STORE_CONNECT_API_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'
+  APP_STORE_CONNECT_ISSUER_ID=12345678-1234-1234-1234-123456789abc
+  APP_STORE_CONNECT_KEY_ID=ABC123DEFG
+  GOOGLE_CLIENT_ID=123-valid.apps.googleusercontent.com
+  GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.123-valid
+)
+"${valid_testflight_environment[@]}" ./scripts/ci/validate-testflight-configuration.sh
+if "${valid_testflight_environment[@]}" \
+  APP_STORE_CONNECT_ISSUER_ID=12345678-12341234-1234-123456789abc \
+  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
+  fail "TestFlight validation must reject a non-canonical issuer UUID."
+fi
+if "${valid_testflight_environment[@]}" \
+  GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.wrong \
+  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
+  fail "TestFlight validation must reject an OAuth redirect scheme from another client."
+fi
+if "${valid_testflight_environment[@]}" \
+  GOOGLE_CLIENT_ID=123-valid.googleusercontent.com \
+  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
+  fail "TestFlight validation must reject a non-iOS Google OAuth client ID."
+fi
 grep -Eq 'xcodegen_sha256="[0-9a-f]{64}"' scripts/install-xcodegen.sh ||
   fail "The XcodeGen installer must pin a SHA-256 digest."
