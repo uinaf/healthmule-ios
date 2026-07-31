@@ -205,14 +205,61 @@ public actor FileSyncStore {
         return .staged(id, revision: nextRevision)
     }
 
+    public func refreshPendingManifest(
+        _ candidate: ExportManifest
+    ) throws -> ExportArtifact {
+        try ensureRecovered()
+        let id = ExportArtifactID.manifest
+        let url = artifactURL(for: id)
+        guard
+            let existing = state.artifacts[id.key],
+            existing.localRevision > existing.uploadedRevision,
+            state.retryQueue.contains(where: {
+                $0.artifactID == id
+                    && $0.revision == existing.localRevision
+            }),
+            FileManager.default.fileExists(atPath: url.path)
+        else {
+            throw FileSyncStoreError.invalidArtifact(
+                "A pending manifest revision is required for refresh."
+            )
+        }
+
+        let prior = try ExportManifestCodec.decode(Data(contentsOf: url))
+        let manifest = candidate.preservingUnknownFields(from: prior)
+        let contents = try ExportManifestCodec.encode(manifest)
+        try Task.checkCancellation()
+        try writeArtifactFirst(contents, to: url)
+
+        var nextState = state
+        nextState.artifacts[id.key] = ArtifactState(
+            id: id,
+            localRevision: existing.localRevision,
+            uploadedRevision: existing.uploadedRevision,
+            semanticData: contents,
+            contentData: contents
+        )
+        try commitStagedArtifactState(nextState)
+        return ExportArtifact(
+            id: id,
+            revision: existing.localRevision,
+            contents: contents
+        )
+    }
+
     public func dueArtifacts(
         at date: Date,
-        includeDeferred: Bool = false
+        includeDeferred: Bool = false,
+        kind: ExportArtifactID.Kind? = nil
     ) throws -> [ExportArtifact] {
         try ensureRecovered()
         let dueItems = state.retryQueue
             .filter { item in
-                item.blockReason == nil && (includeDeferred || item.notBefore <= date)
+                if let kind, item.artifactID.kind != kind {
+                    return false
+                }
+                return item.blockReason == nil
+                    && (includeDeferred || item.notBefore <= date)
             }
             .sorted {
                 if $0.artifactID != $1.artifactID {
@@ -237,6 +284,25 @@ public actor FileSyncStore {
                 revision: item.revision,
                 contents: try Data(contentsOf: url)
             )
+        }
+    }
+
+    func hasDueArtifact(
+        kind: ExportArtifactID.Kind,
+        at date: Date,
+        includeDeferred: Bool = false
+    ) throws -> Bool {
+        try ensureRecovered()
+        return state.retryQueue.contains { item in
+            guard
+                item.artifactID.kind == kind,
+                item.blockReason == nil,
+                includeDeferred || item.notBefore <= date,
+                let artifactState = state.artifacts[item.artifactID.key]
+            else {
+                return false
+            }
+            return artifactState.localRevision == item.revision
         }
     }
 
@@ -544,18 +610,34 @@ public actor FileSyncStore {
                 existing.semanticData != contents
                     || existing.contentData != contents
             {
-                let revision = existing.localRevision + 1
-                nextState.artifacts[id.key] = ArtifactState(
-                    id: id,
-                    localRevision: revision,
-                    uploadedRevision: existing.uploadedRevision,
-                    semanticData: contents,
-                    contentData: contents
-                )
-                replaceRetryItem(
-                    RetryQueueItem(artifactID: id, revision: revision),
-                    in: &nextState
-                )
+                let pendingRefresh = existing.localRevision
+                    > existing.uploadedRevision
+                    && nextState.retryQueue.contains {
+                        $0.artifactID == id
+                            && $0.revision == existing.localRevision
+                    }
+                if pendingRefresh {
+                    nextState.artifacts[id.key] = ArtifactState(
+                        id: id,
+                        localRevision: existing.localRevision,
+                        uploadedRevision: existing.uploadedRevision,
+                        semanticData: contents,
+                        contentData: contents
+                    )
+                } else {
+                    let revision = existing.localRevision + 1
+                    nextState.artifacts[id.key] = ArtifactState(
+                        id: id,
+                        localRevision: revision,
+                        uploadedRevision: existing.uploadedRevision,
+                        semanticData: contents,
+                        contentData: contents
+                    )
+                    replaceRetryItem(
+                        RetryQueueItem(artifactID: id, revision: revision),
+                        in: &nextState
+                    )
+                }
             } else if existing.localRevision > existing.uploadedRevision {
                 ensureRetryItem(
                     RetryQueueItem(artifactID: id, revision: existing.localRevision),

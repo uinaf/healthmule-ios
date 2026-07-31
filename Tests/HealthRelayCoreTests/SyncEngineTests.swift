@@ -73,6 +73,164 @@ struct SyncEngineTests {
     }
 
     @Test
+    func manifestRetryPublishesTheActualRetryTime() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let initialTime = Date(timeIntervalSince1970: 1_000)
+        let clock = TestClock(initialTime)
+        let destination = TestDestination()
+        await destination.setFailureMode(
+            .transientAfterWriteOnce,
+            for: .manifest
+        )
+        let harness = try makeManifestRetryHarness(
+            directory: directory,
+            clock: clock,
+            destination: destination
+        )
+
+        let first = try await harness.engine.reconcile(
+            dates: [harness.record.date]
+        )
+        #expect(first.failures.count == 1)
+        await clock.advance(by: 10)
+        let retryTime = initialTime.addingTimeInterval(10)
+
+        let retry = try await harness.engine.retryPendingUploads()
+        let uploadedData = try #require(
+            await destination.contents(for: .manifest)
+        )
+        let manifest = try ExportManifestCodec.decode(uploadedData)
+
+        #expect(retry.manifestUploaded)
+        #expect(retry.failures.isEmpty)
+        #expect(
+            manifest.lastSuccessfulSyncAt
+                == (try manifestTimestamp(at: retryTime))
+        )
+    }
+
+    @Test
+    func deferredManifestRetryDoesNotRewriteOrUpload() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let initialTime = Date(timeIntervalSince1970: 1_000)
+        let clock = TestClock(initialTime)
+        let destination = TestDestination()
+        await destination.setFailureMode(
+            .transientAfterWriteOnce,
+            for: .manifest
+        )
+        let harness = try makeManifestRetryHarness(
+            directory: directory,
+            clock: clock,
+            destination: destination
+        )
+        _ = try await harness.engine.reconcile(
+            dates: [harness.record.date]
+        )
+        let manifestURL = directory.appendingPathComponent("manifest.json")
+        let contentsBefore = try Data(contentsOf: manifestURL)
+        let retryBefore = try await harness.store.retryItems()
+        await clock.advance(by: 9)
+
+        let retry = try await harness.engine.retryPendingUploads()
+
+        #expect(!retry.manifestUploaded)
+        #expect(retry.failures.isEmpty)
+        #expect(await destination.callCount(for: .manifest) == 1)
+        #expect(try Data(contentsOf: manifestURL) == contentsBefore)
+        #expect(try await harness.store.retryItems() == retryBefore)
+    }
+
+    @Test
+    func forcedManifestRetryPublishesFreshMetadataImmediately() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let initialTime = Date(timeIntervalSince1970: 1_000)
+        let clock = TestClock(initialTime)
+        let destination = TestDestination()
+        await destination.setFailureMode(
+            .transientAfterWriteOnce,
+            for: .manifest
+        )
+        let harness = try makeManifestRetryHarness(
+            directory: directory,
+            clock: clock,
+            destination: destination
+        )
+        _ = try await harness.engine.reconcile(
+            dates: [harness.record.date]
+        )
+        await clock.advance(by: 1)
+        let retryTime = initialTime.addingTimeInterval(1)
+
+        let retry = try await harness.engine.retryPendingUploads(force: true)
+        let uploadedData = try #require(
+            await destination.contents(for: .manifest)
+        )
+        let manifest = try ExportManifestCodec.decode(uploadedData)
+
+        #expect(retry.manifestUploaded)
+        #expect(await destination.callCount(for: .manifest) == 2)
+        #expect(
+            manifest.lastSuccessfulSyncAt
+                == (try manifestTimestamp(at: retryTime))
+        )
+    }
+
+    @Test
+    func failedManifestRefreshContinuesRetryBackoff() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let initialTime = Date(timeIntervalSince1970: 1_000)
+        let clock = TestClock(initialTime)
+        let destination = RepeatedManifestFailureDestination(
+            failureCount: 2
+        )
+        let harness = try makeManifestRetryHarness(
+            directory: directory,
+            clock: clock,
+            destination: destination
+        )
+
+        _ = try await harness.engine.reconcile(
+            dates: [harness.record.date]
+        )
+        let firstRetry = try #require(
+            try await harness.store.retryItems().first {
+                $0.artifactID == .manifest
+            }
+        )
+        await clock.advance(by: 10)
+        let retryTime = initialTime.addingTimeInterval(10)
+
+        let second = try await harness.engine.retryPendingUploads()
+        let secondRetry = try #require(
+            try await harness.store.retryItems().first {
+                $0.artifactID == .manifest
+            }
+        )
+        let attempts = await destination.manifestAttempts()
+        let refreshedManifest = try ExportManifestCodec.decode(
+            try #require(attempts.last)
+        )
+
+        #expect(second.failures.count == 1)
+        #expect(firstRetry.attemptCount == 1)
+        #expect(secondRetry.revision == firstRetry.revision)
+        #expect(secondRetry.attemptCount == 2)
+        #expect(
+            secondRetry.notBefore
+                == retryTime.addingTimeInterval(20)
+        )
+        #expect(
+            refreshedManifest.lastSuccessfulSyncAt
+                == (try manifestTimestamp(at: retryTime))
+        )
+    }
+
+    @Test
     func unchangedReconcileDoesNotUploadDailyFileAgain() async throws {
         let fixture = try fixture(
             IdempotentSyncFixture.self,
@@ -689,6 +847,70 @@ struct SyncEngineTests {
         for record in records {
             #expect(await destination.contains(.daily(record.date)))
         }
+    }
+}
+
+private struct ManifestRetryHarness {
+    let record: DailyHealthRecord
+    let store: FileSyncStore
+    let engine: SyncEngine
+}
+
+private func makeManifestRetryHarness(
+    directory: URL,
+    clock: TestClock,
+    destination: any ExportArtifactDestination
+) throws -> ManifestRetryHarness {
+    let record = try makeRecord()
+    let store = try FileSyncStore(rootDirectory: directory)
+    let engine = SyncEngine(
+        configuration: .init(
+            exporterVersion: "1.0.0",
+            manifestTimeZoneIdentifier: "Europe/Istanbul",
+            retryPolicy: RetryPolicy(
+                initialDelay: 10,
+                maximumDelay: 100,
+                jitterRatio: 0
+            )
+        ),
+        recordProvider: TestRecordProvider(records: [record]),
+        destination: destination,
+        store: store,
+        clock: clock,
+        jitterSource: FixedJitterSource(value: 0.5)
+    )
+    return ManifestRetryHarness(
+        record: record,
+        store: store,
+        engine: engine
+    )
+}
+
+private func manifestTimestamp(at date: Date) throws -> ISO8601Timestamp {
+    let timeZone = try #require(TimeZone(identifier: "Europe/Istanbul"))
+    return try ISO8601Timestamp(date: date, timeZone: timeZone)
+}
+
+private actor RepeatedManifestFailureDestination:
+    ExportArtifactDestination
+{
+    private var failuresRemaining: Int
+    private var attempts: [Data] = []
+
+    init(failureCount: Int) {
+        failuresRemaining = failureCount
+    }
+
+    func upsert(_ artifact: ExportArtifact) async throws {
+        guard artifact.id == .manifest else { return }
+        attempts.append(artifact.contents)
+        guard failuresRemaining > 0 else { return }
+        failuresRemaining -= 1
+        throw ExportDestinationError.transient(code: "timedOut")
+    }
+
+    func manifestAttempts() -> [Data] {
+        attempts
     }
 }
 
