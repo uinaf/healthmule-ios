@@ -364,6 +364,8 @@ grep -Fq 'destination -string upload' scripts/ci/upload-testflight.sh ||
   fail "TestFlight export must upload directly instead of leaving a local IPA."
 grep -Fq 'signingStyle -string automatic' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must use Xcode-managed automatic signing."
+grep -Fq 'CODE_SIGN_IDENTITY="Apple Distribution"' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight archives must request distribution signing on device-less CI."
 grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
