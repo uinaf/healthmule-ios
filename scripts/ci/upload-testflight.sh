@@ -44,7 +44,6 @@ build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
   -authenticationKeyID "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}" \
   -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}" \
   -showBuildTimingSummary \
-  CODE_SIGN_IDENTITY="Apple Distribution" \
   CODE_SIGN_STYLE=Automatic \
   DEVELOPMENT_TEAM="${HEALTHMULE_APPLE_TEAM_ID}" \
   CURRENT_PROJECT_VERSION="${build_number}"
