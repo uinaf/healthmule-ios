@@ -180,6 +180,18 @@ public struct SystemSyncClock: SyncClock {
     }
 }
 
+public protocol ManifestTimeZoneProvider: Sendable {
+    func currentIdentifier() async -> String
+}
+
+public struct SystemManifestTimeZoneProvider: ManifestTimeZoneProvider {
+    public init() {}
+
+    public func currentIdentifier() async -> String {
+        TimeZone.autoupdatingCurrent.identifier
+    }
+}
+
 public protocol RetryJitterSource: Sendable {
     func nextUnitIntervalValue() async -> Double
 }

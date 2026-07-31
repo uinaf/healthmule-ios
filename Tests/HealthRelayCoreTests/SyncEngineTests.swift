@@ -26,7 +26,6 @@ struct SyncEngineTests {
         let engine = SyncEngine(
             configuration: .init(
                 exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul",
                 retryPolicy: RetryPolicy(
                     initialDelay: 10,
                     maximumDelay: 100,
@@ -231,6 +230,80 @@ struct SyncEngineTests {
     }
 
     @Test
+    func manifestUsesCurrentTimeZoneWithoutRecreatingEngine() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let record = try makeRecord()
+        let destination = TestDestination()
+        let clock = TestClock(
+            try ISO8601Timestamp(
+                rawValue: "2026-07-23T15:10:00+00:00"
+            ).date()
+        )
+        let timeZoneProvider = MutableManifestTimeZoneProvider(
+            identifier: "Europe/Istanbul"
+        )
+        let engine = SyncEngine(
+            configuration: .init(exporterVersion: "1.0.0"),
+            recordProvider: TestRecordProvider(records: [record]),
+            destination: destination,
+            store: try FileSyncStore(rootDirectory: directory),
+            clock: clock,
+            timeZoneProvider: timeZoneProvider,
+            jitterSource: FixedJitterSource(value: 0.5)
+        )
+
+        let first = try await engine.reconcile(dates: [record.date])
+        let firstManifest = try ExportManifestCodec.decode(
+            try #require(await destination.contents(for: .manifest))
+        )
+        #expect(first.manifestUploaded)
+        #expect(firstManifest.timeZone == "Europe/Istanbul")
+        #expect(firstManifest.lastSuccessfulSyncAt.rawValue.hasSuffix("+03:00"))
+
+        await timeZoneProvider.setIdentifier("America/Los_Angeles")
+        await clock.advance(by: 86_400)
+        let second = try await engine.reconcile(dates: [record.date])
+        let secondManifest = try ExportManifestCodec.decode(
+            try #require(await destination.contents(for: .manifest))
+        )
+
+        #expect(second.manifestUploaded)
+        #expect(secondManifest.timeZone == "America/Los_Angeles")
+        #expect(
+            secondManifest.lastSuccessfulSyncAt.rawValue.hasSuffix("-07:00")
+        )
+        #expect(await timeZoneProvider.requestCount() == 2)
+    }
+
+    @Test
+    func invalidManifestTimeZoneFailsBeforeManifestUpload() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let record = try makeRecord()
+        let destination = TestDestination()
+        let invalidIdentifier = "not-a-time-zone"
+        let engine = SyncEngine(
+            configuration: .init(exporterVersion: "1.0.0"),
+            recordProvider: TestRecordProvider(records: [record]),
+            destination: destination,
+            store: try FileSyncStore(rootDirectory: directory),
+            clock: TestClock(Date(timeIntervalSince1970: 1_000)),
+            timeZoneProvider: FixedManifestTimeZoneProvider(
+                identifier: invalidIdentifier
+            ),
+            jitterSource: FixedJitterSource(value: 0.5)
+        )
+
+        await #expect(
+            throws: SchemaValidationError.invalidTimeZone(invalidIdentifier)
+        ) {
+            _ = try await engine.reconcile(dates: [record.date])
+        }
+        #expect(!(await destination.contains(.manifest)))
+    }
+
+    @Test
     func unchangedReconcileDoesNotUploadDailyFileAgain() async throws {
         let fixture = try fixture(
             IdempotentSyncFixture.self,
@@ -251,8 +324,7 @@ struct SyncEngineTests {
         let store = try FileSyncStore(rootDirectory: directory)
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: provider,
             destination: destination,
@@ -297,8 +369,7 @@ struct SyncEngineTests {
         let firstDestination = TestDestination()
         let store = try FileSyncStore(rootDirectory: directory)
         let configuration = SyncEngine.Configuration(
-            exporterVersion: "1.0.0",
-            manifestTimeZoneIdentifier: "Europe/Istanbul"
+            exporterVersion: "1.0.0"
         )
         let clock = TestClock(Date(timeIntervalSince1970: 1_000))
         let firstEngine = SyncEngine(
@@ -354,8 +425,7 @@ struct SyncEngineTests {
         let store = try FileSyncStore(rootDirectory: directory)
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: provider,
             destination: destination,
@@ -390,8 +460,7 @@ struct SyncEngineTests {
         let store = try FileSyncStore(rootDirectory: directory)
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: destination,
@@ -410,8 +479,7 @@ struct SyncEngineTests {
         let reopenedStore = try FileSyncStore(rootDirectory: directory)
         let restoredEngine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: destination,
@@ -476,7 +544,6 @@ struct SyncEngineTests {
         let engine = SyncEngine(
             configuration: .init(
                 exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul",
                 retryPolicy: retryPolicy
             ),
             recordProvider: TestRecordProvider(
@@ -531,8 +598,7 @@ struct SyncEngineTests {
         let destination = TestDestination()
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: destination,
@@ -570,7 +636,6 @@ struct SyncEngineTests {
         let engine = SyncEngine(
             configuration: .init(
                 exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul",
                 retryPolicy: RetryPolicy(
                     initialDelay: 10,
                     maximumDelay: 10,
@@ -609,8 +674,7 @@ struct SyncEngineTests {
         let store = try FileSyncStore(rootDirectory: directory)
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: CancellationDestination(),
@@ -641,8 +705,7 @@ struct SyncEngineTests {
         let store = try FileSyncStore(rootDirectory: directory)
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: provider,
             destination: destination,
@@ -678,8 +741,7 @@ struct SyncEngineTests {
         let destination = PausingSuccessfulDestination()
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: destination,
@@ -720,8 +782,7 @@ struct SyncEngineTests {
         let jitterSource = PausingJitterSource()
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: TransientFailureDestination(),
@@ -761,8 +822,7 @@ struct SyncEngineTests {
         )
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: TestRecordProvider(records: [record]),
             destination: TransientFailureDestination(),
@@ -819,8 +879,7 @@ struct SyncEngineTests {
         let store = try FileSyncStore(rootDirectory: directory)
         let engine = SyncEngine(
             configuration: .init(
-                exporterVersion: "1.0.0",
-                manifestTimeZoneIdentifier: "Europe/Istanbul"
+                exporterVersion: "1.0.0"
             ),
             recordProvider: provider,
             destination: destination,
@@ -866,7 +925,6 @@ private func makeManifestRetryHarness(
     let engine = SyncEngine(
         configuration: .init(
             exporterVersion: "1.0.0",
-            manifestTimeZoneIdentifier: "Europe/Istanbul",
             retryPolicy: RetryPolicy(
                 initialDelay: 10,
                 maximumDelay: 100,
@@ -877,6 +935,9 @@ private func makeManifestRetryHarness(
         destination: destination,
         store: store,
         clock: clock,
+        timeZoneProvider: FixedManifestTimeZoneProvider(
+            identifier: "Europe/Istanbul"
+        ),
         jitterSource: FixedJitterSource(value: 0.5)
     )
     return ManifestRetryHarness(
@@ -889,6 +950,36 @@ private func makeManifestRetryHarness(
 private func manifestTimestamp(at date: Date) throws -> ISO8601Timestamp {
     let timeZone = try #require(TimeZone(identifier: "Europe/Istanbul"))
     return try ISO8601Timestamp(date: date, timeZone: timeZone)
+}
+
+private struct FixedManifestTimeZoneProvider: ManifestTimeZoneProvider {
+    let identifier: String
+
+    func currentIdentifier() async -> String {
+        identifier
+    }
+}
+
+private actor MutableManifestTimeZoneProvider: ManifestTimeZoneProvider {
+    private var identifier: String
+    private var requests = 0
+
+    init(identifier: String) {
+        self.identifier = identifier
+    }
+
+    func currentIdentifier() async -> String {
+        requests += 1
+        return identifier
+    }
+
+    func setIdentifier(_ identifier: String) {
+        self.identifier = identifier
+    }
+
+    func requestCount() -> Int {
+        requests
+    }
 }
 
 private actor RepeatedManifestFailureDestination:

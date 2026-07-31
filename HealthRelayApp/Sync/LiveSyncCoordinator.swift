@@ -552,8 +552,7 @@ actor LiveSyncCoordinator {
             configuration: SyncEngine.Configuration(
                 exporterVersion: Bundle.main.infoDictionary?[
                     "CFBundleShortVersionString"
-                ] as? String ?? "1.0.0",
-                manifestTimeZoneIdentifier: TimeZone.current.identifier
+                ] as? String ?? "1.0.0"
             ),
             recordProvider: recordProvider,
             destination: destination,

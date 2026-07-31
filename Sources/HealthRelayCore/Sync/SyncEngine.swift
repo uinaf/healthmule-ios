@@ -3,16 +3,13 @@ import Foundation
 public actor SyncEngine {
     public struct Configuration: Equatable, Sendable {
         public var exporterVersion: String
-        public var manifestTimeZoneIdentifier: String
         public var retryPolicy: RetryPolicy
 
         public init(
             exporterVersion: String,
-            manifestTimeZoneIdentifier: String,
             retryPolicy: RetryPolicy = RetryPolicy()
         ) {
             self.exporterVersion = exporterVersion
-            self.manifestTimeZoneIdentifier = manifestTimeZoneIdentifier
             self.retryPolicy = retryPolicy
         }
     }
@@ -22,6 +19,7 @@ public actor SyncEngine {
     private let destination: any ExportArtifactDestination
     private let store: FileSyncStore
     private let clock: any SyncClock
+    private let timeZoneProvider: any ManifestTimeZoneProvider
     private let jitterSource: any RetryJitterSource
 
     public init(
@@ -30,6 +28,8 @@ public actor SyncEngine {
         destination: any ExportArtifactDestination,
         store: FileSyncStore,
         clock: any SyncClock = SystemSyncClock(),
+        timeZoneProvider: any ManifestTimeZoneProvider =
+            SystemManifestTimeZoneProvider(),
         jitterSource: any RetryJitterSource = SystemRetryJitterSource()
     ) {
         self.configuration = configuration
@@ -37,6 +37,7 @@ public actor SyncEngine {
         self.destination = destination
         self.store = store
         self.clock = clock
+        self.timeZoneProvider = timeZoneProvider
         self.jitterSource = jitterSource
     }
 
@@ -157,16 +158,17 @@ public actor SyncEngine {
         else {
             return nil
         }
-        guard let timeZone = TimeZone(identifier: configuration.manifestTimeZoneIdentifier) else {
+        let timeZoneIdentifier = await timeZoneProvider.currentIdentifier()
+        guard let timeZone = TimeZone(identifier: timeZoneIdentifier) else {
             throw SchemaValidationError.invalidTimeZone(
-                configuration.manifestTimeZoneIdentifier
+                timeZoneIdentifier
             )
         }
 
         let now = await clock.now()
         return ExportManifest(
             exporterVersion: configuration.exporterVersion,
-            timeZone: configuration.manifestTimeZoneIdentifier,
+            timeZone: timeZoneIdentifier,
             lastSuccessfulSyncAt: try ISO8601Timestamp(
                 date: now,
                 timeZone: timeZone
