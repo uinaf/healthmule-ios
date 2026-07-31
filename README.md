@@ -1,6 +1,6 @@
 # Health Mule
 
-Health Mule is a private iOS 18 app with a lightweight watchOS 11 companion.
+Health Mule is a private iOS 18 app paired with a lightweight watchOS 11 companion.
 It turns a small, read-only allowlist of Apple Health metrics into stable daily
 JSON records in a user-controlled Google Drive folder.
 
