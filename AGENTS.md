@@ -1,4 +1,4 @@
-# Health Mule agent guide
+# HealthMule agent guide
 
 ## Start here
 

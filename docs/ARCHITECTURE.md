@@ -1,6 +1,6 @@
 # Architecture
 
-Health Mule separates deterministic export, sync, and companion-message
+HealthMule separates deterministic export, sync, and companion-message
 contracts from iOS/watchOS platform adapters.
 
 ```mermaid

@@ -1,6 +1,6 @@
 # TestFlight distribution
 
-Health Mule is archived, signed, and uploaded only by the manual `Upload TestFlight`
+HealthMule is archived, signed, and uploaded only by the manual `Upload TestFlight`
 GitHub Actions workflow. A developer Mac is not part of the release path.
 
 The workflow accepts dispatches from `main` only, runs the complete iOS and
@@ -26,7 +26,7 @@ Configure these environment variables:
 - `APPLE_TEAM_ID`: `54QY62678F`
 - `APP_STORE_CONNECT_KEY_ID`: the API key's 10-character key ID
 - `APP_STORE_CONNECT_ISSUER_ID`: the issuer UUID shown by App Store Connect
-- `GOOGLE_CLIENT_ID`: the iOS OAuth client ID used by Health Mule
+- `GOOGLE_CLIENT_ID`: the iOS OAuth client ID used by HealthMule
 - `GOOGLE_REDIRECT_SCHEME`: the reversed-client-ID URL scheme
 
 The Google values are embedded in the signed app and are identifiers, not

@@ -196,13 +196,13 @@ struct SyncView: View {
                 badge: "Storage error",
                 tone: .danger,
                 title: "Local sync storage is unavailable",
-                message: "Health Mule could not prepare its protected staging area. No records can be staged or uploaded."
+                message: "HealthMule could not prepare its protected staging area. No records can be staged or uploaded."
             )
         case .checkingConnections:
             return .connection(
                 badge: "Checking",
                 title: "Checking your connections",
-                message: "Health Mule is restoring authorization state."
+                message: "HealthMule is restoring authorization state."
             )
         case .healthUnavailable:
             return .connection(
@@ -333,7 +333,7 @@ struct SyncView: View {
     }
 
     private static let defaultSyncMessage =
-        "Health Mule reconciles changed days, the latest three-day window, and any missing backfill records."
+        "HealthMule reconciles changed days, the latest three-day window, and any missing backfill records."
 
     private var setupActionLabel: String? {
         switch model.syncReadiness {

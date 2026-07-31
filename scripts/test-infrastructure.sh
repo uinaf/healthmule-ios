@@ -137,6 +137,12 @@ grep -Fq "platform: watchOS" project.yml ||
   fail "The project must keep the watchOS companion target."
 grep -Fq "INFOPLIST_KEY_WKCompanionAppBundleIdentifier" project.yml ||
   fail "The watchOS target must remain paired to the iPhone app."
+spaced_brand="Health"' '"Mule"
+misspelled_brand="Healt"' '"Mule"
+if rg -n "${spaced_brand}|${misspelled_brand}" \
+  AGENTS.md README.md project.yml docs HealthMuleApp HealthMuleWatchApp HealthMuleUITests; then
+  fail "User-facing branding must use the canonical one-word HealthMule spelling."
+fi
 grep -Fq "HealthMuleShared HealthMuleWatchApp" scripts/check-swift-syntax.sh ||
   fail "The fast syntax gate must include the Watch companion sources."
 if grep -R -E \
