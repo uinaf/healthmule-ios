@@ -1,6 +1,6 @@
 # HealthMule
 
-HealthMule is a private iOS 18 app paired with a lightweight watchOS 11 companion.
+HealthMule is an open-source iOS 18 app paired with a lightweight watchOS 11 companion.
 It turns a small, read-only allowlist of Apple Health metrics into stable daily
 JSON records in a user-controlled Google Drive folder.
 
@@ -104,3 +104,12 @@ proved by the automated Simulator gate; use the
 - [TestFlight distribution](docs/DISTRIBUTION.md)
 - [Physical-device acceptance testing](docs/DEVICE_TESTING.md)
 - [Security reporting](SECURITY.md)
+
+## Contributing
+
+Issues and pull requests are welcome. See [Contributing](CONTRIBUTING.md) for
+the development setup, validation commands, and privacy requirements.
+
+## License
+
+HealthMule is available under the [MIT License](LICENSE).
