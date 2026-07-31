@@ -1,0 +1,71 @@
+name: Upload TestFlight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release ref
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+
+    steps:
+      - name: Require main
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          if [[ "${RELEASE_REF}" != "refs/heads/main" ]]; then
+            echo "error: TestFlight uploads must be dispatched from main." >&2
+            exit 1
+          fi
+
+  upload:
+    name: Verify and upload
+    needs: validate
+    runs-on: macos-26
+    timeout-minutes: 45
+    environment:
+      name: testflight
+      url: https://appstoreconnect.apple.com/apps
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install XcodeGen
+        run: |
+          ./scripts/install-xcodegen.sh "${RUNNER_TEMP}/xcodegen"
+          echo "${RUNNER_TEMP}/xcodegen/xcodegen/bin" >> "${GITHUB_PATH}"
+
+      - name: Run full verification
+        run: make verify-full
+
+      - name: Configure release credentials
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_REDIRECT_SCHEME: ${{ vars.GOOGLE_REDIRECT_SCHEME }}
+        run: ./scripts/ci/configure-testflight.sh
+
+      - name: Archive and upload to App Store Connect
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+        run: ./scripts/ci/upload-testflight.sh
+
+      - name: Remove release credentials
+        if: always()
+        run: ./scripts/ci/cleanup-testflight.sh

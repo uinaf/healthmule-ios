@@ -2,7 +2,7 @@
 set -euo pipefail
 
 declared_file="${1:-project.yml}"
-lock_file="${2:-HealthRelay.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved}"
+lock_file="${2:-HealthMule.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved}"
 
 fail() {
   echo "error: $*" >&2

@@ -1,4 +1,4 @@
-# Health Relay agent guide
+# Health Mule agent guide
 
 ## Start here
 
@@ -22,7 +22,7 @@ complete iOS unit and Simulator UI suite.
 
 ## Repo rules
 
-- Keep `HealthRelayCore` Foundation-only and deterministic.
+- Keep `HealthMuleCore` Foundation-only and deterministic.
 - HealthKit is read-only. Never add HealthKit write types or entitlements.
 - Never log health values, OAuth tokens, record bodies, or raw metadata.
 - Preserve explicit JSON `null` values and unknown fields in exported records.

@@ -3,8 +3,8 @@ set -euo pipefail
 
 available_simulator_ids="$(
   ./scripts/xcodebuild.sh \
-    -project HealthRelay.xcodeproj \
-    -scheme HealthRelay \
+    -project HealthMule.xcodeproj \
+    -scheme HealthMule \
     -showdestinations |
     sed -nE '/platform:iOS Simulator.*name:iPhone/ s/.*id:([^,}]+).*/\1/p' |
     sed -E 's/^[[:space:]]+|[[:space:]]+$//g'

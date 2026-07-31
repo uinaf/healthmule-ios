@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-swift_tool="${HEALTH_RELAY_SWIFT_TOOL:-swift}"
+swift_tool="${HEALTH_MULE_SWIFT_TOOL:-swift}"
 if [[ "${swift_tool}" != "swift" && "${swift_tool}" != "swiftc" ]]; then
-  echo "error: HEALTH_RELAY_SWIFT_TOOL must be swift or swiftc." >&2
+  echo "error: HEALTH_MULE_SWIFT_TOOL must be swift or swiftc." >&2
   exit 1
 fi
 
@@ -31,7 +31,7 @@ else
   exit 1
 fi
 
-module_cache="${HEALTH_RELAY_MODULE_CACHE:-${TMPDIR:-/tmp}/health-relay-module-cache}"
+module_cache="${HEALTH_MULE_MODULE_CACHE:-${TMPDIR:-/tmp}/health-mule-module-cache}"
 mkdir -p "${module_cache}/clang" "${module_cache}/swiftpm"
 export CLANG_MODULE_CACHE_PATH="${module_cache}/clang"
 export SWIFTPM_MODULECACHE_OVERRIDE="${module_cache}/swiftpm"

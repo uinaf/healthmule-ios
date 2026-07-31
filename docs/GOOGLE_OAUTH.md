@@ -22,8 +22,8 @@ scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-au
 4. If the app is External and still in Testing, add the Google account that will
    run the app as a test user.
 5. Create an OAuth client with application type **iOS**.
-6. Set its bundle ID to the app’s current `HEALTH_RELAY_BUNDLE_IDENTIFIER`.
-   The clean-checkout default is `dev.uinaf.healthrelay`; signed local builds
+6. Set its bundle ID to the app’s current `HEALTH_MULE_BUNDLE_IDENTIFIER`.
+   The clean-checkout default is `dev.uinaf.healthmule`; signed local builds
    can override it in the ignored `Config/Signing.xcconfig`.
 7. Record the iOS client ID and its reversed-client-ID URL scheme.
 
@@ -216,7 +216,7 @@ then run `make project` and rebuild.
 Confirm all three values describe the same iOS client:
 
 - Google Cloud client bundle ID: the resolved
-  `HEALTH_RELAY_BUNDLE_IDENTIFIER`
+  `HEALTH_MULE_BUNDLE_IDENTIFIER`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_REDIRECT_SCHEME`
 

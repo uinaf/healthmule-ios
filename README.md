@@ -74,6 +74,11 @@ the deterministic core suite on Linux. App and UI changes should also run
 available through `make verify-full` and the manual `Full Verify` GitHub
 workflow, without spending macOS runner time on every push.
 
+Production archives are built and uploaded from the manual, main-only
+`Upload TestFlight` GitHub workflow. A developer Mac is not part of the release
+path. See [TestFlight distribution](docs/DISTRIBUTION.md) for its one-time
+credential setup and delivery boundary.
+
 HealthKit authorization and background delivery require a signed build on a
 physical iPhone. Background Watch Connectivity delivery requires a paired
 physical iPhone and Apple Watch. Google OAuth and real Drive uploads require
@@ -96,5 +101,6 @@ proved by the automated Simulator gate; use the
 - [Product specification](docs/specs/healthkit-drive-exporter.md)
 - [Architecture and current implementation](docs/ARCHITECTURE.md)
 - [Google OAuth setup](docs/GOOGLE_OAUTH.md)
+- [TestFlight distribution](docs/DISTRIBUTION.md)
 - [Physical-device acceptance testing](docs/DEVICE_TESTING.md)
 - [Security reporting](SECURITY.md)

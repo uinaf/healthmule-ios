@@ -3,11 +3,11 @@ IPHONEOS_DEPLOYMENT_TARGET = 18.0
 MARKETING_VERSION = 1.0.0
 CURRENT_PROJECT_VERSION = 1
 
-HEALTH_RELAY_BUNDLE_IDENTIFIER = dev.uinaf.healthrelay
-HEALTH_RELAY_DEVELOPMENT_TEAM =
+HEALTH_MULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule
+HEALTH_MULE_DEVELOPMENT_TEAM =
 
 GOOGLE_CLIENT_ID =
-GOOGLE_REDIRECT_SCHEME = dev.uinaf.healthrelay.oauth.unconfigured
+GOOGLE_REDIRECT_SCHEME = dev.uinaf.healthmule.oauth.unconfigured
 
 #include? "Signing.xcconfig"
 #include? "Secrets.xcconfig"

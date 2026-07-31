@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${HEALTH_RELAY_XCODE_LOCKED:-}" != "1" ]]; then
+if [[ "${HEALTH_MULE_XCODE_LOCKED:-}" != "1" ]]; then
   echo "error: Run iOS project tasks through scripts/with-xcode-lock.sh." >&2
   exit 1
 fi
@@ -24,8 +24,8 @@ case "${task}" in
   build)
     exec ./scripts/xcodebuild.sh build \
       -quiet \
-      -project HealthRelay.xcodeproj \
-      -scheme HealthRelay \
+      -project HealthMule.xcodeproj \
+      -scheme HealthMule \
       -destination "generic/platform=iOS Simulator" \
       -derivedDataPath .artifacts/DerivedData \
       CODE_SIGNING_ALLOWED=NO
@@ -36,13 +36,13 @@ case "${task}" in
     if [[ "${task}" == "smoke" ]]; then
       set -- \
         "$@" \
-        "-only-testing:HealthRelayUITests/HealthRelayUITests/testAppShellUsesFocusedNavigation"
+        "-only-testing:HealthMuleUITests/HealthMuleUITests/testAppShellUsesFocusedNavigation"
     fi
 
     exec ./scripts/xcodebuild.sh test \
       -quiet \
-      -project HealthRelay.xcodeproj \
-      -scheme HealthRelay \
+      -project HealthMule.xcodeproj \
+      -scheme HealthMule \
       "$@" \
       -destination "${destination}" \
       -derivedDataPath .artifacts/DerivedData \
@@ -55,8 +55,8 @@ case "${task}" in
     ;;
   clean)
     exec ./scripts/xcodebuild.sh clean \
-      -project HealthRelay.xcodeproj \
-      -scheme HealthRelay \
+      -project HealthMule.xcodeproj \
+      -scheme HealthMule \
       -derivedDataPath .artifacts/DerivedData
     ;;
 esac

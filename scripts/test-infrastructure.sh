@@ -16,6 +16,9 @@ done
 for script in \
   scripts/check-swift-syntax.sh \
   scripts/check-app-dependencies.sh \
+  scripts/ci/cleanup-testflight.sh \
+  scripts/ci/configure-testflight.sh \
+  scripts/ci/upload-testflight.sh \
   scripts/install-xcodegen.sh \
   scripts/ios-project-task.sh \
   scripts/parse-booted-iphone-ids.sh \
@@ -30,7 +33,7 @@ done
 ./scripts/check-app-dependencies.sh
 
 dependency_fixture_dir="$(
-  mktemp -d "${TMPDIR:-/tmp}/health-relay-dependencies.XXXXXX"
+  mktemp -d "${TMPDIR:-/tmp}/health-mule-dependencies.XXXXXX"
 )"
 trap 'rm -rf "${dependency_fixture_dir}"' EXIT
 declared_fixture="${dependency_fixture_dir}/project.yml"
@@ -48,7 +51,7 @@ EOF
   else
     cat >"${declared_fixture}" <<'EOF'
 packages:
-  HealthRelayCore:
+  HealthMuleCore:
     path: .
 EOF
   fi
@@ -133,11 +136,11 @@ grep -Fq "platform: watchOS" project.yml ||
   fail "The project must keep the watchOS companion target."
 grep -Fq "INFOPLIST_KEY_WKCompanionAppBundleIdentifier" project.yml ||
   fail "The watchOS target must remain paired to the iPhone app."
-grep -Fq "HealthRelayShared HealthRelayWatchApp" scripts/check-swift-syntax.sh ||
+grep -Fq "HealthMuleShared HealthMuleWatchApp" scripts/check-swift-syntax.sh ||
   fail "The fast syntax gate must include the Watch companion sources."
 if grep -R -E \
   '^(@preconcurrency )?import (HealthKit|GoogleSignIn)' \
-  HealthRelayShared HealthRelayWatchApp; then
+  HealthMuleShared HealthMuleWatchApp; then
   fail "The Watch companion must not own HealthKit or Google dependencies."
 else
   forbidden_import_status=$?
@@ -218,6 +221,7 @@ checkout_action="actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 for workflow in \
   .github/workflows/verify.yml \
   .github/workflows/full-verify.yml \
+  .github/workflows/testflight.yml \
   .github/workflows/dependency-watch.yml; do
   grep -Fq "uses: ${checkout_action}" "${workflow}" ||
     fail "${workflow} must pin the supported Node 24 checkout action."
@@ -234,7 +238,7 @@ grep -Fq '${{ github.event.repository.name }}' .github/workflows/verify.yml ||
   fail "Fast CI must scope path-bound Swift build caches to the repository name."
 grep -Fq "'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh'" .github/workflows/verify.yml ||
   fail "Fast CI must invalidate its build cache for every SwiftPM input."
-grep -Fq 'HEALTH_RELAY_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
+grep -Fq 'HEALTH_MULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
   fail "Fast CI must keep Swift module caches inside the cached build directory."
 grep -Fq "if: steps.swift-build-cache.outputs.cache-hit == 'true'" .github/workflows/verify.yml ||
   fail "Exact cache hits must use the no-rebuild verification path."
@@ -259,5 +263,41 @@ if grep -Eq '^  (pull_request|push|schedule):' .github/workflows/full-verify.yml
 fi
 grep -Eq '^[[:space:]]+run:[[:space:]]+make verify-full[[:space:]]*$' .github/workflows/full-verify.yml ||
   fail "Full CI must call the explicit full gate."
+testflight_workflow=.github/workflows/testflight.yml
+grep -Eq '^  workflow_dispatch:[[:space:]]*$' "${testflight_workflow}" ||
+  fail "TestFlight uploads must remain manually dispatched."
+if grep -Eq '^  (pull_request|pull_request_target|push|schedule):' "${testflight_workflow}"; then
+  fail "TestFlight uploads must not run automatically or from pull requests."
+fi
+grep -Fq 'RELEASE_REF: ${{ github.ref }}' "${testflight_workflow}" ||
+  fail "TestFlight must validate the selected release ref before loading its environment."
+grep -Fq 'refs/heads/main' "${testflight_workflow}" ||
+  fail "TestFlight uploads must be restricted to main."
+grep -Fq 'cancel-in-progress: false' "${testflight_workflow}" ||
+  fail "An in-progress TestFlight upload must never be cancelled by another dispatch."
+grep -Fq 'name: testflight' "${testflight_workflow}" ||
+  fail "TestFlight credentials must come from the dedicated GitHub Environment."
+grep -Eq '^[[:space:]]+run:[[:space:]]+make verify-full[[:space:]]*$' "${testflight_workflow}" ||
+  fail "TestFlight must run the complete verification gate before credentials are configured."
+grep -Fq 'run: ./scripts/ci/configure-testflight.sh' "${testflight_workflow}" ||
+  fail "TestFlight must use the repository-owned credential setup script."
+grep -Fq 'run: ./scripts/ci/upload-testflight.sh' "${testflight_workflow}" ||
+  fail "TestFlight must use the repository-owned archive and upload script."
+grep -Fq 'if: always()' "${testflight_workflow}" ||
+  fail "TestFlight must clean up credentials even after a failed upload."
+grep -Fq 'run: ./scripts/ci/cleanup-testflight.sh' "${testflight_workflow}" ||
+  fail "TestFlight must use the repository-owned cleanup script."
+grep -Fq 'APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}' "${testflight_workflow}" ||
+  fail "The App Store Connect private key must be sourced from an Environment secret."
+grep -Fq 'method -string app-store-connect' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight export must use the current App Store Connect distribution method."
+grep -Fq 'destination -string upload' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight export must upload directly instead of leaving a local IPA."
+grep -Fq 'signingStyle -string automatic' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight must use Xcode-managed automatic signing."
+grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight must allow Xcode to manage CI provisioning assets."
+grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight signing must authenticate with the App Store Connect API key."
 grep -Eq 'xcodegen_sha256="[0-9a-f]{64}"' scripts/install-xcodegen.sh ||
   fail "The XcodeGen installer must pin a SHA-256 digest."

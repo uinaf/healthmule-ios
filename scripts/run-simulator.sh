@@ -11,8 +11,8 @@ derived_data=".artifacts/DerivedData"
 
 ./scripts/xcodebuild.sh build \
   -quiet \
-  -project HealthRelay.xcodeproj \
-  -scheme HealthRelay \
+  -project HealthMule.xcodeproj \
+  -scheme HealthMule \
   -sdk iphonesimulator \
   -destination "${destination}" \
   -derivedDataPath "${derived_data}" \
@@ -21,11 +21,11 @@ derived_data=".artifacts/DerivedData"
   CODE_SIGN_IDENTITY=-
 
 app_path="$(
-  find "${derived_data}/Build/Products" -path "*/Debug-iphonesimulator/HealthRelay.app" -print -quit
+  find "${derived_data}/Build/Products" -path "*/Debug-iphonesimulator/HealthMule.app" -print -quit
 )"
 
 if [[ -z "${app_path}" ]]; then
-  echo "error: HealthRelay.app was not found after the build." >&2
+  echo "error: HealthMule.app was not found after the build." >&2
   exit 1
 fi
 
@@ -33,7 +33,7 @@ bundle_id="$(
   /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "${app_path}/Info.plist"
 )"
 if [[ -z "${bundle_id}" ]]; then
-  echo "error: HealthRelay.app has no CFBundleIdentifier." >&2
+  echo "error: HealthMule.app has no CFBundleIdentifier." >&2
   exit 1
 fi
 
