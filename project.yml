@@ -64,9 +64,6 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         DEVELOPMENT_TEAM: $(HEALTHMULE_DEVELOPMENT_TEAM)
         TARGETED_DEVICE_FAMILY: "1,2"
-      configs:
-        Release:
-          CODE_SIGN_IDENTITY: Apple Distribution
     info:
       path: HealthMuleApp/Resources/Info.plist
       properties:
@@ -121,9 +118,6 @@ targets:
         INFOPLIST_KEY_WKCompanionAppBundleIdentifier: $(HEALTHMULE_BUNDLE_IDENTIFIER)
         SKIP_INSTALL: YES
         TARGETED_DEVICE_FAMILY: "4"
-      configs:
-        Release:
-          CODE_SIGN_IDENTITY: Apple Distribution
 
   HealthMuleTests:
     type: bundle.unit-test
