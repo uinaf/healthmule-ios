@@ -16,6 +16,14 @@ App Store Connect API**. Give it enough access to upload builds and manage
 Certificates, Identifiers & Profiles. Download the `.p8` file immediately;
 Apple only offers the download once.
 
+Register at least one physical iPhone with the Apple Developer team under
+**Certificates, Identifiers & Profiles > Devices**. Xcode's automatic archive
+phase requires a development provisioning profile, which contains registered
+device IDs, before the export phase re-signs the archive for App Store Connect.
+The device does not need to participate in the CI build or upload. Apple's
+[development provisioning profile guide](https://developer.apple.com/help/account/provisioning-profiles/create-a-development-provisioning-profile/)
+documents the device requirement.
+
 Configure the `testflight` GitHub Environment with this secret:
 
 - `HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY`: the complete contents of the downloaded

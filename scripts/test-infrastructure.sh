@@ -364,18 +364,9 @@ grep -Fq 'destination -string upload' scripts/ci/upload-testflight.sh ||
   fail "TestFlight export must upload directly instead of leaving a local IPA."
 grep -Fq 'signingStyle -string automatic' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must use Xcode-managed automatic signing."
-awk '
-  $0 == "  HealthMule:" { target = "phone"; in_settings = 0; next }
-  $0 == "  HealthMuleWatch:" { target = "watch"; in_settings = 0; next }
-  /^  [^ ]/ { target = ""; in_settings = 0 }
-  target != "" && $0 == "    settings:" { in_settings = 1; next }
-  in_settings && /^    [^ ]/ { in_settings = 0 }
-  in_settings && $0 == "          CODE_SIGN_IDENTITY: Apple Distribution" {
-    found[target] = 1
-  }
-  END { exit(found["phone"] && found["watch"] ? 0 : 1) }
-' project.yml ||
-  fail "Release signing must be distribution-scoped to the iPhone and Watch targets."
+if grep -Fq 'Apple Distribution' project.yml scripts/ci/upload-testflight.sh; then
+  fail "Automatic TestFlight signing must not force a manual distribution identity."
+fi
 grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
