@@ -95,20 +95,31 @@ enum HealthChangeDateMapper {
     }
 }
 
-actor HealthKitClient {
+struct HealthAnchoredChangeBatch: Sendable {
+    let metric: HealthMetric
+    let affectedDates: Set<String>
+    let anchor: HKQueryAnchor
+    let queryStart: Date
+    let sampleDates: [UUID: Set<String>]
+    let deletedUUIDs: Set<UUID>
+}
+
+protocol HealthChangeTracking: Actor {
+    func startDate(for date: LocalDate) async throws -> Date
+    func changedDates(
+        for metric: HealthMetric,
+        calendar: Calendar,
+        notBefore requestedStart: Date
+    ) async throws -> HealthAnchoredChangeBatch
+    func commit(_ batch: HealthAnchoredChangeBatch) async throws
+    func resetAnchors() async throws
+}
+
+actor HealthKitClient: HealthChangeTracking {
     private static let authorizationRequestedKey =
         "health.authorization.requested"
     private static let requestedMetricsKey =
         "health.authorization.requestedMetrics"
-
-    struct AnchoredChangeBatch: Sendable {
-        let metric: HealthMetric
-        let affectedDates: Set<String>
-        let anchor: HKQueryAnchor
-        let queryStart: Date
-        let sampleDates: [UUID: Set<String>]
-        let deletedUUIDs: Set<UUID>
-    }
 
     typealias ObservationHandler = @MainActor @Sendable (HealthMetric) async -> Void
 
@@ -329,7 +340,7 @@ actor HealthKitClient {
         for metric: HealthMetric,
         calendar: Calendar,
         notBefore requestedStart: Date
-    ) async throws -> AnchoredChangeBatch {
+    ) async throws -> HealthAnchoredChangeBatch {
         guard let sampleType = metric.sampleType else {
             throw HealthKitClientError.queryFailed
         }
@@ -389,7 +400,7 @@ actor HealthKitClient {
             )
         }
 
-        return AnchoredChangeBatch(
+        return HealthAnchoredChangeBatch(
             metric: metric,
             affectedDates: dates,
             anchor: result.anchor,
@@ -399,7 +410,7 @@ actor HealthKitClient {
         )
     }
 
-    func commit(_ batch: AnchoredChangeBatch) throws {
+    func commit(_ batch: HealthAnchoredChangeBatch) async throws {
         try anchorStore.commit(
             metric: batch.metric,
             anchor: batch.anchor,
@@ -409,11 +420,11 @@ actor HealthKitClient {
         )
     }
 
-    func resetAnchors() throws {
+    func resetAnchors() async throws {
         try anchorStore.reset()
     }
 
-    func startDate(for date: LocalDate) throws -> Date {
+    func startDate(for date: LocalDate) async throws -> Date {
         try dayBoundaryStore.boundary(
             for: date,
             currentTimeZone: .current
