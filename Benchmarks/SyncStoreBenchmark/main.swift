@@ -71,7 +71,7 @@ private struct SyncStoreBenchmark {
     ) async throws -> TrialResult {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-sync-benchmark-\(UUID().uuidString)",
+                "healthmule-sync-benchmark-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer {

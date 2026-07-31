@@ -306,7 +306,7 @@ actor DiagnosticsRecorder {
             withIntermediateDirectories: true
         )
         let url = exportDirectory.appendingPathComponent(
-            "health-mule-diagnostics.json"
+            "healthmule-diagnostics.json"
         )
         try encoder.encode(export).write(to: url, options: [.atomic])
         return url

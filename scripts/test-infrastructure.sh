@@ -34,7 +34,7 @@ done
 ./scripts/check-app-dependencies.sh
 
 dependency_fixture_dir="$(
-  mktemp -d "${TMPDIR:-/tmp}/health-mule-dependencies.XXXXXX"
+  mktemp -d "${TMPDIR:-/tmp}/healthmule-dependencies.XXXXXX"
 )"
 trap 'rm -rf "${dependency_fixture_dir}"' EXIT
 declared_fixture="${dependency_fixture_dir}/project.yml"
@@ -148,6 +148,38 @@ case "${branding_scan_status}" in
   1) ;;
   *) fail "The user-facing branding scan failed." ;;
 esac
+identifier_hyphen=-
+identifier_underscore=_
+legacy_kebab="health${identifier_hyphen}mule"
+legacy_upper_snake="HEALTH${identifier_underscore}MULE"
+legacy_lower_snake="health${identifier_underscore}mule"
+identifier_scan_status=0
+git grep -n -E "${legacy_kebab}|${legacy_upper_snake}|${legacy_lower_snake}" -- . ||
+  identifier_scan_status=$?
+case "${identifier_scan_status}" in
+  0) fail "Repository identifiers must use the canonical unsplit HealthMule spelling." ;;
+  1) ;;
+  *) fail "The repository identifier scan failed." ;;
+esac
+legacy_ci_variables=(
+  "APP${identifier_underscore}STORE${identifier_underscore}CONNECT${identifier_underscore}API${identifier_underscore}KEY${identifier_underscore}PATH"
+  "APP${identifier_underscore}STORE${identifier_underscore}CONNECT${identifier_underscore}API${identifier_underscore}PRIVATE${identifier_underscore}KEY"
+  "APP${identifier_underscore}STORE${identifier_underscore}CONNECT${identifier_underscore}ISSUER${identifier_underscore}ID"
+  "APP${identifier_underscore}STORE${identifier_underscore}CONNECT${identifier_underscore}KEY${identifier_underscore}ID"
+  "APPLE${identifier_underscore}TEAM${identifier_underscore}ID"
+  "GOOGLE${identifier_underscore}CLIENT${identifier_underscore}ID"
+  "GOOGLE${identifier_underscore}REDIRECT${identifier_underscore}SCHEME"
+)
+for legacy_ci_variable in "${legacy_ci_variables[@]}"; do
+  ci_variable_scan_status=0
+  git grep -n -w "${legacy_ci_variable}" -- . ||
+    ci_variable_scan_status=$?
+  case "${ci_variable_scan_status}" in
+    0) fail "App-specific configuration variables must use the HEALTHMULE_ namespace." ;;
+    1) ;;
+    *) fail "The app-specific configuration variable scan failed." ;;
+  esac
+done
 grep -Fq "HealthMuleShared HealthMuleWatchApp" scripts/check-swift-syntax.sh ||
   fail "The fast syntax gate must include the Watch companion sources."
 if grep -R -E \
@@ -250,7 +282,7 @@ grep -Fq '${{ github.event.repository.name }}' .github/workflows/verify.yml ||
   fail "Fast CI must scope path-bound Swift build caches to the repository name."
 grep -Fq "'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh'" .github/workflows/verify.yml ||
   fail "Fast CI must invalidate its build cache for every SwiftPM input."
-grep -Fq 'HEALTH_MULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
+grep -Fq 'HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
   fail "Fast CI must keep Swift module caches inside the cached build directory."
 grep -Fq "if: steps.swift-build-cache.outputs.cache-hit == 'true'" .github/workflows/verify.yml ||
   fail "Exact cache hits must use the no-rebuild verification path."
@@ -314,7 +346,7 @@ upload_step_line="$(grep -nF -- '- name: Archive and upload to App Store Connect
 cleanup_step_line="$(grep -nF -- '- name: Remove release credentials' "${testflight_workflow}" | cut -d: -f1)"
 [[ -n "${upload_step_line}" && -n "${cleanup_step_line}" && "${cleanup_step_line}" -gt "${upload_step_line}" ]] ||
   fail "TestFlight cleanup must run after the archive and upload step."
-grep -Fq 'APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}' "${testflight_workflow}" ||
+grep -Fq 'HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY }}' "${testflight_workflow}" ||
   fail "The App Store Connect private key must be sourced from an Environment secret."
 grep -Fq 'method -string app-store-connect' scripts/ci/upload-testflight.sh ||
   fail "TestFlight export must use the current App Store Connect distribution method."
@@ -331,26 +363,26 @@ grep -Fq 'exec ./scripts/with-xcode-lock.sh "$0"' scripts/ci/upload-testflight.s
 
 valid_testflight_environment=(
   env
-  APPLE_TEAM_ID=54QY62678F
-  APP_STORE_CONNECT_API_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'
-  APP_STORE_CONNECT_ISSUER_ID=12345678-1234-1234-1234-123456789abc
-  APP_STORE_CONNECT_KEY_ID=ABC123DEFG
-  GOOGLE_CLIENT_ID=123-valid.apps.googleusercontent.com
-  GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.123-valid
+  HEALTHMULE_APPLE_TEAM_ID=54QY62678F
+  HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'
+  HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID=12345678-1234-1234-1234-123456789abc
+  HEALTHMULE_APP_STORE_CONNECT_KEY_ID=ABC123DEFG
+  HEALTHMULE_GOOGLE_CLIENT_ID=123-valid.apps.googleusercontent.com
+  HEALTHMULE_GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.123-valid
 )
 "${valid_testflight_environment[@]}" ./scripts/ci/validate-testflight-configuration.sh
 if "${valid_testflight_environment[@]}" \
-  APP_STORE_CONNECT_ISSUER_ID=12345678-12341234-1234-123456789abc \
+  HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID=12345678-12341234-1234-123456789abc \
   ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
   fail "TestFlight validation must reject a non-canonical issuer UUID."
 fi
 if "${valid_testflight_environment[@]}" \
-  GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.wrong \
+  HEALTHMULE_GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.wrong \
   ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
   fail "TestFlight validation must reject an OAuth redirect scheme from another client."
 fi
 if "${valid_testflight_environment[@]}" \
-  GOOGLE_CLIENT_ID=123-valid.googleusercontent.com \
+  HEALTHMULE_GOOGLE_CLIENT_ID=123-valid.googleusercontent.com \
   ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
   fail "TestFlight validation must reject a non-iOS Google OAuth client ID."
 fi

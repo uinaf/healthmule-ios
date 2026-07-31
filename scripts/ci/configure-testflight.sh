@@ -14,22 +14,22 @@ fail() {
 
 ./scripts/ci/validate-testflight-configuration.sh
 
-credentials_dir="${RUNNER_TEMP}/health-mule-testflight"
-api_key_path="${credentials_dir}/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+credentials_dir="${RUNNER_TEMP}/healthmule-testflight"
+api_key_path="${credentials_dir}/AuthKey_${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}.p8"
 
 umask 077
 mkdir -p "${credentials_dir}"
-printf '%s\n' "${APP_STORE_CONNECT_API_PRIVATE_KEY}" >"${api_key_path}"
+printf '%s\n' "${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY}" >"${api_key_path}"
 
 printf '%s\n' \
-  "HEALTH_MULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule" \
-  "HEALTH_MULE_DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}" \
+  "HEALTHMULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule" \
+  "HEALTHMULE_DEVELOPMENT_TEAM = ${HEALTHMULE_APPLE_TEAM_ID}" \
   >Config/Signing.xcconfig
 
 printf '%s\n' \
-  "GOOGLE_CLIENT_ID = ${GOOGLE_CLIENT_ID}" \
-  "GOOGLE_REDIRECT_SCHEME = ${GOOGLE_REDIRECT_SCHEME}" \
+  "HEALTHMULE_GOOGLE_CLIENT_ID = ${HEALTHMULE_GOOGLE_CLIENT_ID}" \
+  "HEALTHMULE_GOOGLE_REDIRECT_SCHEME = ${HEALTHMULE_GOOGLE_REDIRECT_SCHEME}" \
   >Config/Secrets.xcconfig
 
-printf 'APP_STORE_CONNECT_API_KEY_PATH=%s\n' "${api_key_path}" >>"${GITHUB_ENV}"
+printf 'HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH=%s\n' "${api_key_path}" >>"${GITHUB_ENV}"
 echo "Configured ephemeral TestFlight credentials."

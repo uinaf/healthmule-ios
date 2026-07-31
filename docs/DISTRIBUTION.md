@@ -18,16 +18,16 @@ Apple only offers the download once.
 
 Configure the `testflight` GitHub Environment with this secret:
 
-- `APP_STORE_CONNECT_API_PRIVATE_KEY`: the complete contents of the downloaded
+- `HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY`: the complete contents of the downloaded
   `.p8` file
 
 Configure these environment variables:
 
-- `APPLE_TEAM_ID`: `54QY62678F`
-- `APP_STORE_CONNECT_KEY_ID`: the API key's 10-character key ID
-- `APP_STORE_CONNECT_ISSUER_ID`: the issuer UUID shown by App Store Connect
-- `GOOGLE_CLIENT_ID`: the iOS OAuth client ID used by HealthMule
-- `GOOGLE_REDIRECT_SCHEME`: the reversed-client-ID URL scheme
+- `HEALTHMULE_APPLE_TEAM_ID`: `54QY62678F`
+- `HEALTHMULE_APP_STORE_CONNECT_KEY_ID`: the API key's 10-character key ID
+- `HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID`: the issuer UUID shown by App Store Connect
+- `HEALTHMULE_GOOGLE_CLIENT_ID`: the iOS OAuth client ID used by HealthMule
+- `HEALTHMULE_GOOGLE_REDIRECT_SCHEME`: the reversed-client-ID URL scheme
 
 The Google values are embedded in the signed app and are identifiers, not
 client secrets. The Apple private key is the only GitHub secret required. The

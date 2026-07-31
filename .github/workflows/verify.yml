@@ -45,7 +45,7 @@ jobs:
       - name: Run cached verification
         if: steps.swift-build-cache.outputs.cache-hit == 'true'
         env:
-          HEALTH_MULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
+          HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
         run: |
           make test-infra check-app-syntax
           ./scripts/swift.sh test --skip-build --parallel --disable-sandbox
@@ -53,5 +53,5 @@ jobs:
       - name: Build and run verification
         if: steps.swift-build-cache.outputs.cache-hit != 'true'
         env:
-          HEALTH_MULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
+          HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
         run: make verify
