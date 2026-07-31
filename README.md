@@ -1,25 +1,18 @@
 # HealthMule
 
-HealthMule is an open-source iOS 18 app paired with a lightweight watchOS 11 companion.
-It turns a small, read-only allowlist of Apple Health metrics into stable daily
-JSON records in a user-controlled Google Drive folder.
+HealthMule is an open-source iPhone and Apple Watch app that exports a small,
+read-only selection of Apple Health metrics as stable daily JSON files in your
+Google Drive.
 
-The repository contains the SwiftUI app, deterministic export and aggregation
-core, read-only HealthKit daily provider, protected local staging and retry
-queue, Google OAuth, and an idempotent Drive destination. Foreground sync
-combines anchored changes with a rolling three-day reconciliation and a
-resumable selected-range backfill. Metric switches limit HealthKit queries and
-rebuild existing records to scrub disabled fields. The Apple Watch companion
-shows sanitized sync status and can request a sync while the iPhone is
-reachable; the iPhone remains the only HealthKit, Google credential, and
-Drive-upload owner.
+The iPhone owns HealthKit access, Google authorization, protected local staging,
+and Drive uploads. The Watch companion displays sanitized sync status and can
+request a sync while the phone is reachable. HealthMule has no developer
+backend, analytics, ads, or telemetry.
 
-The full sync path is implemented, but its platform integrations still need
-acceptance proof with a configured Google OAuth client, a real Drive account,
-and HealthKit on a physical iPhone. Multipart Drive bodies are staged as
-protected, backup-excluded files and uploaded through a background
-`URLSession`; a matching SwiftUI background task reconnects the session after a
-system relaunch and lets the durable sync queue reconcile the result.
+The complete sync path is implemented and covered by deterministic core tests
+and Simulator checks. HealthKit background delivery, real Drive uploads, and
+process-interruption recovery still require acceptance testing with a signed
+build on physical devices; see [Physical-device testing](docs/DEVICE_TESTING.md).
 
 ## Quick start
 
@@ -53,38 +46,15 @@ The default build intentionally has no Google credentials. The UI and automated
 tests work in that state. Follow [Google OAuth setup](docs/GOOGLE_OAUTH.md) when
 you are ready to connect a Drive account.
 
-## Validation
+## Develop and validate
 
-```sh
-make test-core  # Foundation-only export, sync, and companion-message contracts
-make test-infra # Static checks for the serialized Xcode and CI tool contracts
-make build      # Unsigned iOS build including the embedded Watch app
-make test       # App unit tests and Simulator UI tests
-make smoke      # Launches only the app-shell UI smoke test
-make verify      # Fast CI: infrastructure + Swift syntax + core tests
-make verify-full # Complete Xcode app, unit, and Simulator UI gate
-```
+Run `make verify` for the fast required gate. App and UI changes also need an
+appropriate Xcode or Simulator check. The complete command matrix and pull
+request expectations live in [Contributing](CONTRIBUTING.md).
 
-Run `make clean` to remove SwiftPM and Xcode build products managed by these
-commands.
-
-Required CI checks infrastructure, parses all app and iOS test Swift, and runs
-the deterministic core suite on Linux. App and UI changes should also run
-`make build` or `make smoke` locally. The complete Simulator suite remains
-available through `make verify-full` and the manual `Full Verify` GitHub
-workflow, without spending macOS runner time on every push.
-
-Production archives are built and uploaded from the manual, main-only
-`Upload TestFlight` GitHub workflow. A developer Mac is not part of the release
-path. See [TestFlight distribution](docs/DISTRIBUTION.md) for its one-time
-credential setup and delivery boundary.
-
-HealthKit authorization and background delivery require a signed build on a
-physical iPhone. Background Watch Connectivity delivery requires a paired
-physical iPhone and Apple Watch. Google OAuth and real Drive uploads require
-local client configuration and an integration account. Those boundaries are not
-proved by the automated Simulator gate; use the
-[device testing checklist](docs/DEVICE_TESTING.md).
+Releases are archived and uploaded by the manual, main-only GitHub Actions
+workflow rather than a developer Mac. See
+[TestFlight distribution](docs/DISTRIBUTION.md).
 
 ## Privacy boundary
 
@@ -98,11 +68,12 @@ proved by the automated Simulator gate; use the
 
 ## Documentation
 
-- [Product specification](docs/specs/healthkit-drive-exporter.md)
-- [Architecture and current implementation](docs/ARCHITECTURE.md)
 - [Google OAuth setup](docs/GOOGLE_OAUTH.md)
-- [TestFlight distribution](docs/DISTRIBUTION.md)
 - [Physical-device acceptance testing](docs/DEVICE_TESTING.md)
+- [Architecture and privacy boundaries](docs/ARCHITECTURE.md)
+- [Product and export contract](docs/specs/healthkit-drive-exporter.md)
+- [TestFlight distribution](docs/DISTRIBUTION.md)
+- [Sync-store scaling decision](docs/decisions/sync-store-persistence.md)
 - [Security reporting](SECURITY.md)
 
 ## Contributing

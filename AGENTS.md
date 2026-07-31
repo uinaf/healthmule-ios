@@ -5,6 +5,8 @@
 - Product contract: `docs/specs/healthkit-drive-exporter.md`
 - Architecture and privacy boundaries: `docs/ARCHITECTURE.md`
 - Google OAuth setup: `docs/GOOGLE_OAUTH.md`
+- Physical-device acceptance: `docs/DEVICE_TESTING.md`
+- TestFlight delivery: `docs/DISTRIBUTION.md`
 - Generate the Xcode project: `make project`
 - Build and launch in Simulator: `make run`
 

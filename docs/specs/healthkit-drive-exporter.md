@@ -14,7 +14,7 @@ and incrementally uploads those records to a user-controlled Google Drive
 folder. A separate trusted agent can then ingest the records into a calorie,
 weight, and training tracker without receiving unrelated medical data.
 
-## Product Principles
+## Product principles
 
 - Private by default: no developer backend, analytics SDK, ads, or third-party
   health-data processor.
@@ -26,7 +26,7 @@ weight, and training tracker without receiving unrelated medical data.
 
 ## Requirements
 
-### R1 — HealthKit Authorization
+### R1 — HealthKit authorization
 
 Request read access only for:
 
@@ -45,7 +45,7 @@ currently enabled subset; enabling a new type must return setup to Health access
 review before that type is queried. The app must still function when any subset
 is denied. It must never request write access.
 
-### R2 — Google Drive Authorization
+### R2 — Google Drive authorization
 
 Use Google OAuth with the `drive.file` scope. Do not request unrestricted Drive
 access.
@@ -67,7 +67,7 @@ discoverable.
 Store OAuth credentials in Keychain. Provide explicit Disconnect and Reconnect
 actions.
 
-### R3 — Daily Export Contract
+### R3 — Daily export contract
 
 Write one file per local calendar day:
 
@@ -135,7 +135,7 @@ Rules:
   significant decimal digits after insignificant leading and trailing zeroes
   are removed. Reject wider values before decoding instead of rounding them.
 
-### R4 — Aggregation Semantics
+### R4 — Aggregation semantics
 
 - Steps, active energy, and resting energy: cumulative sum for the local day.
 - Weight: latest authorized sample in the local day.
@@ -157,7 +157,7 @@ Rules:
 - Use HealthKit statistics queries for cumulative metrics so multiple sources
   are de-duplicated according to HealthKit semantics.
 
-### R5 — Incremental and Idempotent Sync
+### R5 — Incremental and idempotent sync
 
 - Keep an `HKQueryAnchor` per sample type in local application support storage.
 - Use `HKObserverQuery` to learn that a type changed, then
@@ -197,7 +197,7 @@ Maintain `manifest.json`:
 
 Update the manifest only after all daily-file uploads in that sync succeed.
 
-### R7 — Initial Backfill
+### R7 — Initial backfill
 
 During onboarding, let the user choose:
 
@@ -208,7 +208,7 @@ During onboarding, let the user choose:
 Default to 30 days. Process the backfill in bounded day-sized batches and show
 progress. It must resume after interruption without duplicating records.
 
-### R8 — Background Behavior
+### R8 — Background behavior
 
 - Enable HealthKit background delivery for the allowlisted data types.
 - Register observer queries at app launch.
@@ -217,7 +217,7 @@ progress. It must resume after interruption without duplicating records.
 - Background timing is best-effort; the UI must never promise an exact schedule.
 - Opening the app always triggers a reconciliation and retry pass.
 
-### R9 — User Interface
+### R9 — User interface
 
 The app has four small screens:
 
@@ -244,17 +244,18 @@ The app has four small screens:
 Resetting local state must not delete Drive data without a separate destructive
 confirmation.
 
-### R10 — Diagnostics and Privacy
+### R10 — Diagnostics and privacy
 
-- Log sync lifecycle, counts, durations, Drive file IDs, and error codes.
-- Never log health values, OAuth tokens, file contents, or raw HealthKit
-  metadata.
+- Log only allowlisted sync lifecycle events, counts, durations, and redacted
+  error classifications.
+- Never log health values, OAuth tokens, file contents, Drive identifiers,
+  account identifiers, local paths, or raw HealthKit metadata.
 - Provide an in-app Share Diagnostics action that exports redacted JSON.
 - Use `OSLog` privacy annotations.
 - No telemetry leaves the device except the selected normalized records sent to
   the user's Google Drive.
 
-### R11 — Apple Watch Companion
+### R11 — Apple Watch companion
 
 Provide a paired watchOS companion that:
 
@@ -310,7 +311,7 @@ actor SyncEngine {
 Use dependency injection so aggregation and sync logic can be tested without
 HealthKit or Google.
 
-## Drive Upload Rules
+## Drive upload rules
 
 - Daily JSON files are expected to stay well below 5 MB; use multipart uploads.
 - Search for the file by exact name within the configured parent folder once,
@@ -321,7 +322,7 @@ HealthKit or Google.
 - Do not retry other 4xx responses indefinitely.
 - Serialize uploads to prevent two background triggers racing on the manifest.
 
-## Conformance Fixtures
+## Conformance fixtures
 
 Commit language-independent fixtures under `Tests/Fixtures/`:
 
@@ -336,7 +337,7 @@ Commit language-independent fixtures under `Tests/Fixtures/`:
 The fixture format may use simplified sample objects rather than archived
 HealthKit instances, but expected output must be exact JSON.
 
-## Acceptance Criteria
+## Acceptance criteria
 
 - AC1: A fresh install can authorize HealthKit, connect Google, and create its
   Drive folder without a developer-operated server.
@@ -387,7 +388,7 @@ HealthKit instances, but expected output must be exact JSON.
 - Perfectly timed background synchronization.
 - A standalone Watch-to-Drive exporter or Watch-side Google authorization.
 
-## Implementation Order
+## Implementation order
 
 1. Define Codable schema, fixtures, and aggregation tests.
 2. Implement HealthKit authorization and foreground daily queries.
@@ -399,7 +400,7 @@ HealthKit instances, but expected output must be exact JSON.
 7. Add the Watch status and sync-request companion over Watch Connectivity.
 8. Run physical-device conformance tests and reconcile code/spec differences.
 
-## Upstream References
+## Upstream references
 
 - [Setting up HealthKit](https://developer.apple.com/documentation/healthkit/setting-up-healthkit)
 - [Authorizing access to health data](https://developer.apple.com/documentation/healthkit/authorizing-access-to-health-data)

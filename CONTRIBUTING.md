@@ -36,10 +36,20 @@ Run the fast required gate for every change:
 make verify
 ```
 
-App, UI, HealthKit, Google, and Watch changes should also run the relevant
-Xcode proof, normally `make build`, `make smoke`, or `make verify-full`. The
-[device testing checklist](docs/DEVICE_TESTING.md) owns physical-device
-acceptance.
+Choose additional proof based on the change:
+
+| Command | Purpose |
+| --- | --- |
+| `make test-core` | Foundation-only export, sync, and companion contracts |
+| `make test-infra` | Xcode, workflow, and toolchain contract checks |
+| `make build` | Unsigned iOS build with the embedded Watch app |
+| `make test` | App unit tests and Simulator UI tests |
+| `make smoke` | App-shell launch smoke test |
+| `make verify-full` | Complete local iOS and Simulator gate |
+
+Run `make clean` to remove build products managed by these commands. HealthKit,
+Google, background-delivery, and Watch changes may also need the
+[physical-device checklist](docs/DEVICE_TESTING.md).
 
 ## Development notes
 
