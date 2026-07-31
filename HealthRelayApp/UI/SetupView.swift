@@ -22,6 +22,7 @@ struct SetupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 OperationBanner(state: model.operationState)
+                backgroundDeliveryAdvisory
                 healthCard
                 historyCard
                 googleCard
@@ -49,6 +50,35 @@ struct SetupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .accessibilityIdentifier("setup-screen")
+    }
+
+    @ViewBuilder
+    private var backgroundDeliveryAdvisory: some View {
+        if let advisory = model.backgroundDeliveryAdvisory {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(
+                    advisory.title,
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(StatusTone.warning.color)
+
+                Text(advisory.message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Button("Check Again") {
+                    Task {
+                        await model.retryHealthStatus()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.operationState.isWorking)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .healthRelayCard(padding: 14)
+            .accessibilityIdentifier("background-delivery-advisory")
+        }
     }
 
     private var healthCard: some View {

@@ -2,6 +2,44 @@
 import Foundation
 import HealthRelayCore
 
+struct BackgroundDeliveryRegistrationResult: Equatable, Sendable {
+    enum Operation: Equatable, Sendable {
+        case enable
+        case disable
+    }
+
+    enum Outcome: Equatable, Sendable {
+        case succeeded
+        case failed(BackgroundDeliveryFailureCode)
+    }
+
+    let metric: HealthMetric
+    let operation: Operation
+    let outcome: Outcome
+}
+
+enum BackgroundDeliveryFailureCode: Equatable, Sendable {
+    case unsuccessful
+    case healthKit(Int)
+    case errorType(String)
+}
+
+struct BackgroundDeliveryRegistrationSummary: Equatable, Sendable {
+    let results: [BackgroundDeliveryRegistrationResult]
+
+    var failedEnabledMetrics: Set<HealthMetric> {
+        Set(results.compactMap { result in
+            guard
+                result.operation == .enable,
+                case .failed = result.outcome
+            else {
+                return nil
+            }
+            return result.metric
+        })
+    }
+}
+
 // HealthKit's completion callback predates Sendable annotations but is
 // explicitly designed to be retained until observer processing finishes.
 private final class HealthObserverCompletion: @unchecked Sendable {
@@ -159,7 +197,7 @@ actor HealthKitClient: HealthChangeTracking {
 
     func requestAuthorization(
         for enabledMetrics: Set<HealthMetric>
-    ) async throws {
+    ) async throws -> BackgroundDeliveryRegistrationSummary {
         guard isAvailable else {
             throw HealthKitClientError.unavailable
         }
@@ -178,7 +216,7 @@ actor HealthKitClient: HealthChangeTracking {
         persistRequestedMetrics(
             previouslyRequestedMetrics.union(enabledMetrics)
         )
-        await updateBackgroundDelivery(for: enabledMetrics)
+        return await updateBackgroundDelivery(for: enabledMetrics)
     }
 
     func authorizationWasRequested() -> Bool {
@@ -494,27 +532,59 @@ actor HealthKitClient: HealthChangeTracking {
 
     func updateBackgroundDelivery(
         for enabledMetrics: Set<HealthMetric>
-    ) async {
+    ) async -> BackgroundDeliveryRegistrationSummary {
         let observableMetrics = queryableMetrics(from: enabledMetrics)
+        var results: [BackgroundDeliveryRegistrationResult] = []
         for metric in HealthMetric.allCases {
             guard let sampleType = metric.sampleType else { continue }
-            await withCheckedContinuation { continuation in
-                if observableMetrics.contains(metric) {
+            let operation: BackgroundDeliveryRegistrationResult.Operation =
+                observableMetrics.contains(metric) ? .enable : .disable
+            let outcome = await withCheckedContinuation { continuation in
+                let callback: @Sendable (Bool, Error?) -> Void = {
+                    success, error in
+                    continuation.resume(
+                        returning: Self.backgroundDeliveryOutcome(
+                            success: success,
+                            error: error
+                        )
+                    )
+                }
+                if operation == .enable {
                     store.enableBackgroundDelivery(
                         for: sampleType,
                         frequency: .immediate
-                    ) { _, _ in
-                        continuation.resume()
-                    }
+                    ) { success, error in callback(success, error) }
                 } else {
                     store.disableBackgroundDelivery(
                         for: sampleType
-                    ) { _, _ in
-                        continuation.resume()
-                    }
+                    ) { success, error in callback(success, error) }
                 }
             }
+            results.append(
+                BackgroundDeliveryRegistrationResult(
+                    metric: metric,
+                    operation: operation,
+                    outcome: outcome
+                )
+            )
         }
+        return BackgroundDeliveryRegistrationSummary(results: results)
+    }
+
+    nonisolated static func backgroundDeliveryOutcome(
+        success: Bool,
+        error: Error?
+    ) -> BackgroundDeliveryRegistrationResult.Outcome {
+        if let error {
+            let nsError = error as NSError
+            if nsError.domain == HKErrorDomain {
+                return .failed(.healthKit(nsError.code))
+            }
+            return .failed(
+                .errorType(String(reflecting: type(of: error)))
+            )
+        }
+        return success ? .succeeded : .failed(.unsuccessful)
     }
 
     private func requestedMetrics() -> Set<HealthMetric> {
