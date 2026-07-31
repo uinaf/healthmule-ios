@@ -65,9 +65,10 @@ Generate the project after changing checked-in project configuration:
 make project
 ```
 
-The package declaration in `project.yml` pins GoogleSignIn exactly to 9.1.0 and
-includes both `GoogleSignIn` and `GoogleSignInSwift`. The shared Xcode workspace
-lock resolves the same version and records its transitive dependencies.
+The package declaration in `project.yml` pins GoogleSignIn to an exact version
+and includes both `GoogleSignIn` and `GoogleSignInSwift`. The shared Xcode
+workspace lock resolves the same version and records its transitive
+dependencies. Treat `project.yml` as the source of truth for the current pin.
 
 ## OAuth publishing status
 

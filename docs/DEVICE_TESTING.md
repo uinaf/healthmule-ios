@@ -26,7 +26,8 @@ They still require the signed-device scenarios below.
 - A physical iPhone running iOS 18 or later.
 - A paired Apple Watch running watchOS 11 or later for companion acceptance.
 - Full Xcode with an Apple Development team capable of signing the app.
-- A native iOS Google OAuth client configured as described in [Google OAuth setup](GOOGLE_OAUTH.md).
+- A native iOS Google OAuth client configured as described in
+  [Google OAuth setup](GOOGLE_OAUTH.md).
 - Health data suitable for the scenario being tested.
 - A clean local verification run:
 
@@ -57,7 +58,8 @@ They still require the signed-device scenarios below.
 The embedded companion installs on the paired Apple Watch. Its bundle ID is the
 iPhone bundle ID plus `.watchkitapp`; it has no HealthKit or Google capability.
 
-Do not use a personal production Drive account for destructive or failure-injection scenarios.
+Do not use a personal production Drive account for destructive or
+failure-injection scenarios.
 
 ## Onboarding and permissions
 
@@ -166,4 +168,7 @@ Development](https://developer.apple.com/documentation/backgroundtasks/starting-
 
 ## Evidence to retain
 
-Record the app version or commit, iOS version, permission combination, foreground/background state, and pass/fail result. Sanitize screenshots and diagnostics before sharing them; do not retain personal health values, account identifiers, access tokens, or device identifiers.
+Record the app version or commit, iOS version, permission combination,
+foreground or background state, and pass/fail result. Sanitize screenshots and
+diagnostics before sharing them; do not retain personal health values, account
+identifiers, access tokens, or device identifiers.
