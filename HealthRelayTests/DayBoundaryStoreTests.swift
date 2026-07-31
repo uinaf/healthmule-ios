@@ -130,4 +130,115 @@ final class DayBoundaryStoreTests: XCTestCase {
         )
         XCTAssertEqual(persisted[date.rawValue], retry)
     }
+
+    func testMissingBoundaryFileIsEmptyState() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "health-relay-missing-boundary-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = DayBoundaryStore(directoryURL: directory)
+
+        XCTAssertFalse(try store.inspectBoundaries())
+    }
+
+    func testInvalidBoundaryFileIsSurfaced() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "health-relay-invalid-boundary-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try Data("not-json".utf8).write(
+            to: directory.appendingPathComponent("day-boundaries.json"),
+            options: .atomic
+        )
+        let store = DayBoundaryStore(directoryURL: directory)
+
+        XCTAssertThrowsError(try store.inspectBoundaries()) { error in
+            XCTAssertEqual(
+                error as? DayBoundaryStoreError,
+                .invalidState
+            )
+        }
+        XCTAssertThrowsError(
+            try store.boundary(
+                for: LocalDate(rawValue: "2026-07-23"),
+                currentTimeZone: TimeZone(secondsFromGMT: 0)!
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? DayBoundaryStoreError,
+                .invalidState
+            )
+        }
+    }
+
+    func testRebuildUsesDurableRecordTimezoneAcrossDST() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "health-relay-rebuilt-boundary-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try Data("not-json".utf8).write(
+            to: directory.appendingPathComponent("day-boundaries.json"),
+            options: .atomic
+        )
+        let store = DayBoundaryStore(directoryURL: directory)
+        let record = try boundaryTestRecord(
+            date: "2026-09-06",
+            timeZone: "America/Santiago"
+        )
+
+        XCTAssertThrowsError(try store.inspectBoundaries())
+        XCTAssertEqual(try store.rebuild(from: [record]), 1)
+        let boundary = try store.boundary(
+            for: record.date,
+            currentTimeZone: TimeZone(secondsFromGMT: 0)!
+        )
+
+        XCTAssertEqual(
+            boundary.timeZoneIdentifier,
+            record.timeZone
+        )
+        XCTAssertEqual(
+            boundary.end.timeIntervalSince(boundary.start),
+            23 * 60 * 60
+        )
+        XCTAssertTrue(try store.inspectBoundaries())
+    }
+}
+
+private func boundaryTestRecord(
+    date: String,
+    timeZone: String
+) throws -> DailyHealthRecord {
+    let localDate = try LocalDate(rawValue: date)
+    return DailyHealthRecord(
+        date: localDate,
+        timeZone: timeZone,
+        generatedAt: try ISO8601Timestamp(
+            rawValue: "2026-09-06T12:00:00-03:00"
+        ),
+        metrics: DailyHealthMetrics(),
+        workouts: [],
+        totals: WorkoutTotals(
+            workoutMinutes: 0,
+            workoutActiveEnergyKcal: 0
+        ),
+        sources: HealthRecordSources(
+            deviceNames: [],
+            sampleCount: 0
+        )
+    )
 }

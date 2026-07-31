@@ -12,10 +12,15 @@ final class LiveSyncCoordinatorTests: XCTestCase {
             records: fixture.records,
             failureDate: fixture.dates[0]
         )
-        let health = CoordinatorHealthChanges(startDate: fixture.startInstant)
+        let events = CoordinatorEventLog()
+        let health = CoordinatorHealthChanges(
+            startDate: fixture.startInstant,
+            events: events
+        )
         let coordinator = try fixture.makeCoordinator(
             health: health,
-            provider: provider
+            provider: provider,
+            events: events
         )
 
         do {
@@ -30,7 +35,20 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         }
 
         let committedMetrics = await health.committedMetrics()
+        let recordedEvents = await events.snapshot()
         XCTAssertTrue(committedMetrics.isEmpty)
+        XCTAssertEqual(
+            Array(recordedEvents.prefix(3)),
+            [.recover(0), .startDate, .change(.stepCount)]
+        )
+        XCTAssertFalse(
+            recordedEvents.contains {
+                if case .commit = $0 {
+                    return true
+                }
+                return false
+            }
+        )
         XCTAssertNil(
             fixture.defaults.stringArray(
                 forKey: "sync.lastStagedMetrics"
@@ -217,6 +235,25 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
 
         let recordedEvents = await events.snapshot()
+        let recoveryIndex = try XCTUnwrap(
+            recordedEvents.firstIndex {
+                if case .recover = $0 {
+                    return true
+                }
+                return false
+            }
+        )
+        let startIndex = try XCTUnwrap(
+            recordedEvents.firstIndex(of: .startDate)
+        )
+        let firstChangeIndex = try XCTUnwrap(
+            recordedEvents.firstIndex {
+                if case .change = $0 {
+                    return true
+                }
+                return false
+            }
+        )
         let stageIndexes = recordedEvents.indices.filter {
             if case .stage = recordedEvents[$0] {
                 return true
@@ -240,6 +277,9 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         let lastStageIndex = try XCTUnwrap(stageIndexes.last)
         XCTAssertEqual(stageIndexes.count, fixture.dates.count)
         XCTAssertEqual(commitIndexes.count, 2)
+        XCTAssertLessThan(recoveryIndex, startIndex)
+        XCTAssertLessThan(startIndex, firstChangeIndex)
+        XCTAssertLessThan(firstChangeIndex, lastStageIndex)
         XCTAssertTrue(
             commitIndexes.allSatisfy {
                 lastStageIndex < $0 && $0 < firstUploadIndex
@@ -477,8 +517,19 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
         shouldBlockFirstChange = blockFirstChange
     }
 
+    func recoverAuxiliaryState(
+        from existingRecords: [DailyHealthRecord]
+    ) async throws -> HealthAuxiliaryRecoverySummary {
+        await events?.append(.recover(existingRecords.count))
+        return HealthAuxiliaryRecoverySummary(
+            resetAnchors: false,
+            rebuiltBoundaryCount: 0
+        )
+    }
+
     func startDate(for _: LocalDate) async throws -> Date {
-        queryStart
+        await events?.append(.startDate)
+        return queryStart
     }
 
     func changedDates(
@@ -487,6 +538,7 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
         notBefore _: Date
     ) async throws -> HealthAnchoredChangeBatch {
         changes.append(metric)
+        await events?.append(.change(metric))
         if shouldBlockFirstChange {
             shouldBlockFirstChange = false
             firstChangeStarted = true
@@ -573,6 +625,9 @@ private actor CoordinatorDestination: ExportArtifactDestination {
 
 private actor CoordinatorEventLog {
     enum Event: Equatable, Sendable {
+        case recover(Int)
+        case startDate
+        case change(HealthMetric)
         case stage(LocalDate)
         case commit(HealthMetric)
         case upload(ExportArtifactID)

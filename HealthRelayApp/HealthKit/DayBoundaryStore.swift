@@ -1,6 +1,11 @@
 import Foundation
 import HealthRelayCore
 
+enum DayBoundaryStoreError: Error, Equatable {
+    case unreadableState
+    case invalidState
+}
+
 struct StoredDayBoundary: Codable, Equatable, Sendable {
     let date: LocalDate
     let timeZoneIdentifier: String
@@ -30,7 +35,7 @@ final class DayBoundaryStore {
         for date: LocalDate,
         currentTimeZone: TimeZone
     ) throws -> StoredDayBoundary {
-        let boundaries = loadBoundaries()
+        let boundaries = try loadBoundaries()
         if let existing = boundaries[date.rawValue] {
             guard let storedTimeZone = TimeZone(
                 identifier: existing.timeZoneIdentifier
@@ -52,32 +57,9 @@ final class DayBoundaryStore {
             return normalized
         }
 
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "en_US_POSIX")
-        calendar.timeZone = currentTimeZone
-        let components = date.rawValue.split(separator: "-").compactMap {
-            Int($0)
-        }
-        guard
-            components.count == 3,
-            let start = calendar.date(
-                from: DateComponents(
-                    year: components[0],
-                    month: components[1],
-                    day: components[2]
-                )
-            ),
-            let nextDay = calendar.date(byAdding: .day, value: 1, to: start)
-        else {
-            throw SchemaValidationError.invalidLocalDate(date.rawValue)
-        }
-        let end = calendar.startOfDay(for: nextDay)
-
-        let boundary = StoredDayBoundary(
-            date: date,
-            timeZoneIdentifier: currentTimeZone.identifier,
-            start: start,
-            end: end
+        let boundary = try Self.makeBoundary(
+            for: date,
+            timeZone: currentTimeZone
         )
         var nextBoundaries = boundaries
         nextBoundaries[date.rawValue] = boundary
@@ -114,8 +96,8 @@ final class DayBoundaryStore {
         overlappingStart start: Date,
         end: Date,
         fallbackCalendar: Calendar
-    ) -> Set<String> {
-        let boundaries = loadBoundaries()
+    ) throws -> Set<String> {
+        let boundaries = try loadBoundaries()
         let endProbe = max(start, end.addingTimeInterval(-0.001))
         let storedMatches = boundaries.values.compactMap { boundary -> String? in
             guard start < boundary.end, endProbe >= boundary.start else {
@@ -136,6 +118,53 @@ final class DayBoundaryStore {
             formatter.string(from: start),
             formatter.string(from: endProbe),
         ]
+    }
+
+    @discardableResult
+    func inspectBoundaries() throws -> Bool {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            boundaries = [:]
+            return false
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            boundaries = nil
+            throw DayBoundaryStoreError.unreadableState
+        }
+        do {
+            let decoded = try JSONDecoder().decode(
+                [String: StoredDayBoundary].self,
+                from: data
+            )
+            boundaries = decoded
+            return true
+        } catch {
+            boundaries = nil
+            throw DayBoundaryStoreError.invalidState
+        }
+    }
+
+    @discardableResult
+    func rebuild(
+        from records: [DailyHealthRecord]
+    ) throws -> Int {
+        var rebuilt: [String: StoredDayBoundary] = [:]
+        for record in records {
+            guard let timeZone = TimeZone(identifier: record.timeZone) else {
+                throw SchemaValidationError.invalidTimeZone(
+                    record.timeZone
+                )
+            }
+            rebuilt[record.date.rawValue] = try Self.makeBoundary(
+                for: record.date,
+                timeZone: timeZone
+            )
+        }
+        try persist(rebuilt)
+        boundaries = rebuilt
+        return rebuilt.count
     }
 
     private func persist(
@@ -162,22 +191,46 @@ final class DayBoundaryStore {
         try mutableURL.setResourceValues(values)
     }
 
-    private func loadBoundaries() -> [String: StoredDayBoundary] {
+    private func loadBoundaries() throws -> [String: StoredDayBoundary] {
         if let boundaries {
             return boundaries
         }
-        let loaded: [String: StoredDayBoundary]
-        if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode(
-               [String: StoredDayBoundary].self,
-               from: data
-           )
-        {
-            loaded = decoded
-        } else {
-            loaded = [:]
+        _ = try inspectBoundaries()
+        return boundaries ?? [:]
+    }
+
+    private static func makeBoundary(
+        for date: LocalDate,
+        timeZone: TimeZone
+    ) throws -> StoredDayBoundary {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.timeZone = timeZone
+        let components = date.rawValue.split(separator: "-").compactMap {
+            Int($0)
         }
-        boundaries = loaded
-        return loaded
+        guard
+            components.count == 3,
+            let start = calendar.date(
+                from: DateComponents(
+                    year: components[0],
+                    month: components[1],
+                    day: components[2]
+                )
+            ),
+            let nextDay = calendar.date(
+                byAdding: .day,
+                value: 1,
+                to: start
+            )
+        else {
+            throw SchemaValidationError.invalidLocalDate(date.rawValue)
+        }
+        return StoredDayBoundary(
+            date: date,
+            timeZoneIdentifier: timeZone.identifier,
+            start: start,
+            end: calendar.startOfDay(for: nextDay)
+        )
     }
 }

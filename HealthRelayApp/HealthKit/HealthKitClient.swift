@@ -104,7 +104,15 @@ struct HealthAnchoredChangeBatch: Sendable {
     let deletedUUIDs: Set<UUID>
 }
 
+struct HealthAuxiliaryRecoverySummary: Equatable, Sendable {
+    let resetAnchors: Bool
+    let rebuiltBoundaryCount: Int
+}
+
 protocol HealthChangeTracking: Actor {
+    func recoverAuxiliaryState(
+        from existingRecords: [DailyHealthRecord]
+    ) async throws -> HealthAuxiliaryRecoverySummary
     func startDate(for date: LocalDate) async throws -> Date
     func changedDates(
         for metric: HealthMetric,
@@ -375,7 +383,7 @@ actor HealthKitClient: HealthChangeTracking {
         var dates: Set<String> = []
         var sampleDates: [UUID: Set<String>] = [:]
         for sample in result.samples {
-            let directlyAffectedDates = dayBoundaryStore.dateKeys(
+            let directlyAffectedDates = try dayBoundaryStore.dateKeys(
                 overlappingStart: sample.startDate,
                 end: sample.endDate,
                 fallbackCalendar: calendar
@@ -393,7 +401,7 @@ actor HealthKitClient: HealthChangeTracking {
             dates.formUnion(
                 try HealthChangeDateMapper.reconciliationDates(
                     for: metric,
-                    directlyAffectedDates: anchorStore.dates(
+                    directlyAffectedDates: try anchorStore.dates(
                         forDeletedUUID: uuid
                     )
                 )
@@ -407,6 +415,34 @@ actor HealthKitClient: HealthChangeTracking {
             queryStart: effectiveStart,
             sampleDates: sampleDates,
             deletedUUIDs: deletedUUIDs
+        )
+    }
+
+    func recoverAuxiliaryState(
+        from existingRecords: [DailyHealthRecord]
+    ) async throws -> HealthAuxiliaryRecoverySummary {
+        var resetAnchors = false
+        do {
+            _ = try anchorStore.inspectSampleIndex()
+        } catch is HealthAnchorStoreError {
+            try Task.checkCancellation()
+            try anchorStore.reset()
+            resetAnchors = true
+        }
+
+        var rebuiltBoundaryCount = 0
+        do {
+            _ = try dayBoundaryStore.inspectBoundaries()
+        } catch is DayBoundaryStoreError {
+            try Task.checkCancellation()
+            rebuiltBoundaryCount = try dayBoundaryStore.rebuild(
+                from: existingRecords
+            )
+        }
+        try Task.checkCancellation()
+        return HealthAuxiliaryRecoverySummary(
+            resetAnchors: resetAnchors,
+            rebuiltBoundaryCount: rebuiltBoundaryCount
         )
     }
 
