@@ -17,12 +17,12 @@ fi
 : "${GITHUB_RUN_NUMBER:?GITHUB_RUN_NUMBER is required}"
 : "${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}"
 : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY is required}"
-: "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required}"
-: "${APP_STORE_CONNECT_API_KEY_PATH:?APP_STORE_CONNECT_API_KEY_PATH is required}"
-: "${APP_STORE_CONNECT_ISSUER_ID:?APP_STORE_CONNECT_ISSUER_ID is required}"
-: "${APP_STORE_CONNECT_KEY_ID:?APP_STORE_CONNECT_KEY_ID is required}"
+: "${HEALTHMULE_APPLE_TEAM_ID:?HEALTHMULE_APPLE_TEAM_ID is required}"
+: "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH:?HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH is required}"
+: "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID:?HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID is required}"
+: "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID:?HEALTHMULE_APP_STORE_CONNECT_KEY_ID is required}"
 
-[[ -s "${APP_STORE_CONNECT_API_KEY_PATH}" ]] ||
+[[ -s "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}" ]] ||
   fail "The App Store Connect private key file is missing."
 
 archive_path="${RUNNER_TEMP}/HealthMule.xcarchive"
@@ -40,12 +40,12 @@ build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
   -destination "generic/platform=iOS" \
   -archivePath "${archive_path}" \
   -allowProvisioningUpdates \
-  -authenticationKeyPath "${APP_STORE_CONNECT_API_KEY_PATH}" \
-  -authenticationKeyID "${APP_STORE_CONNECT_KEY_ID}" \
-  -authenticationKeyIssuerID "${APP_STORE_CONNECT_ISSUER_ID}" \
+  -authenticationKeyPath "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}" \
+  -authenticationKeyID "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}" \
+  -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}" \
   -showBuildTimingSummary \
   CODE_SIGN_STYLE=Automatic \
-  DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+  DEVELOPMENT_TEAM="${HEALTHMULE_APPLE_TEAM_ID}" \
   CURRENT_PROJECT_VERSION="${build_number}"
 
 archive_info="${archive_path}/Info.plist"
@@ -58,7 +58,7 @@ plutil -insert destination -string upload "${export_options_path}"
 plutil -insert manageAppVersionAndBuildNumber -bool false "${export_options_path}"
 plutil -insert method -string app-store-connect "${export_options_path}"
 plutil -insert signingStyle -string automatic "${export_options_path}"
-plutil -insert teamID -string "${APPLE_TEAM_ID}" "${export_options_path}"
+plutil -insert teamID -string "${HEALTHMULE_APPLE_TEAM_ID}" "${export_options_path}"
 plutil -insert uploadSymbols -bool true "${export_options_path}"
 
 ./scripts/xcodebuild.sh -exportArchive \
@@ -67,9 +67,9 @@ plutil -insert uploadSymbols -bool true "${export_options_path}"
   -exportPath "${export_path}" \
   -exportOptionsPlist "${export_options_path}" \
   -allowProvisioningUpdates \
-  -authenticationKeyPath "${APP_STORE_CONNECT_API_KEY_PATH}" \
-  -authenticationKeyID "${APP_STORE_CONNECT_KEY_ID}" \
-  -authenticationKeyIssuerID "${APP_STORE_CONNECT_ISSUER_ID}"
+  -authenticationKeyPath "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}" \
+  -authenticationKeyID "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}" \
+  -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}"
 
 {
   echo "## TestFlight upload accepted"

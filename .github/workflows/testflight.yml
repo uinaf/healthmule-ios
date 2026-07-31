@@ -51,19 +51,19 @@ jobs:
 
       - name: Configure release credentials
         env:
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          GOOGLE_REDIRECT_SCHEME: ${{ vars.GOOGLE_REDIRECT_SCHEME }}
+          HEALTHMULE_APPLE_TEAM_ID: ${{ vars.HEALTHMULE_APPLE_TEAM_ID }}
+          HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID: ${{ vars.HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID }}
+          HEALTHMULE_APP_STORE_CONNECT_KEY_ID: ${{ vars.HEALTHMULE_APP_STORE_CONNECT_KEY_ID }}
+          HEALTHMULE_GOOGLE_CLIENT_ID: ${{ vars.HEALTHMULE_GOOGLE_CLIENT_ID }}
+          HEALTHMULE_GOOGLE_REDIRECT_SCHEME: ${{ vars.HEALTHMULE_GOOGLE_REDIRECT_SCHEME }}
         run: ./scripts/ci/configure-testflight.sh
 
       - name: Archive and upload to App Store Connect
         env:
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          HEALTHMULE_APPLE_TEAM_ID: ${{ vars.HEALTHMULE_APPLE_TEAM_ID }}
+          HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID: ${{ vars.HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID }}
+          HEALTHMULE_APP_STORE_CONNECT_KEY_ID: ${{ vars.HEALTHMULE_APP_STORE_CONNECT_KEY_ID }}
         run: ./scripts/ci/upload-testflight.sh
 
       - name: Remove release credentials

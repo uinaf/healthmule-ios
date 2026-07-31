@@ -6,8 +6,8 @@ CURRENT_PROJECT_VERSION = 1
 HEALTHMULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule
 HEALTHMULE_DEVELOPMENT_TEAM =
 
-GOOGLE_CLIENT_ID =
-GOOGLE_REDIRECT_SCHEME = dev.uinaf.healthmule.oauth.unconfigured
+HEALTHMULE_GOOGLE_CLIENT_ID =
+HEALTHMULE_GOOGLE_REDIRECT_SCHEME = dev.uinaf.healthmule.oauth.unconfigured
 
 #include? "Signing.xcconfig"
 #include? "Secrets.xcconfig"

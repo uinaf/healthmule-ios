@@ -44,8 +44,8 @@ cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
 Set both values:
 
 ```text
-GOOGLE_CLIENT_ID = 123456789-example.apps.googleusercontent.com
-GOOGLE_REDIRECT_SCHEME = com.googleusercontent.apps.123456789-example
+HEALTHMULE_GOOGLE_CLIENT_ID = 123456789-example.apps.googleusercontent.com
+HEALTHMULE_GOOGLE_REDIRECT_SCHEME = com.googleusercontent.apps.123456789-example
 ```
 
 The URL scheme is the client ID’s dot-separated prefix in reverse-domain form,
@@ -217,8 +217,8 @@ Confirm all three values describe the same iOS client:
 
 - Google Cloud client bundle ID: the resolved
   `HEALTHMULE_BUNDLE_IDENTIFIER`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_REDIRECT_SCHEME`
+- `HEALTHMULE_GOOGLE_CLIENT_ID`
+- `HEALTHMULE_GOOGLE_REDIRECT_SCHEME`
 
 Also confirm that the Drive API is enabled in the same Google Cloud project.
 

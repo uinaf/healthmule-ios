@@ -75,11 +75,11 @@ targets:
           - CFBundleTypeRole: Editor
             CFBundleURLName: Google OAuth
             CFBundleURLSchemes:
-              - $(GOOGLE_REDIRECT_SCHEME)
+              - $(HEALTHMULE_GOOGLE_REDIRECT_SCHEME)
         NSHealthShareUsageDescription: HealthMule reads only the fitness metrics you select and exports normalized daily summaries to your Google Drive.
         UIRequiredDeviceCapabilities:
           - healthkit
-        GIDClientID: $(GOOGLE_CLIENT_ID)
+        GIDClientID: $(HEALTHMULE_GOOGLE_CLIENT_ID)
         BGTaskSchedulerPermittedIdentifiers:
           - dev.uinaf.healthmule.refresh
         UIBackgroundModes:
