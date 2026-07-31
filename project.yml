@@ -1,4 +1,4 @@
-name: HealthRelay
+name: HealthMule
 
 options:
   bundleIdPrefix: dev.uinaf
@@ -13,7 +13,7 @@ configs:
   Release: release
 
 packages:
-  HealthRelayCore:
+  HealthMuleCore:
     path: .
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
@@ -32,40 +32,40 @@ settings:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
 
 targets:
-  HealthRelay:
+  HealthMule:
     type: application
     platform: iOS
     sources:
-      - path: HealthRelayApp
+      - path: HealthMuleApp
         excludes:
           - Resources
-      - path: HealthRelayApp/Resources/Assets.xcassets
+      - path: HealthMuleApp/Resources/Assets.xcassets
         buildPhase: resources
-      - path: HealthRelayApp/Resources/PrivacyInfo.xcprivacy
+      - path: HealthMuleApp/Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
     dependencies:
-      - package: HealthRelayCore
-        product: HealthRelayCore
-      - package: HealthRelayCore
-        product: HealthRelayCompanion
+      - package: HealthMuleCore
+        product: HealthMuleCore
+      - package: HealthMuleCore
+        product: HealthMuleCompanion
       - package: GoogleSignIn
         product: GoogleSignIn
       - package: GoogleSignIn
         product: GoogleSignInSwift
-      - target: HealthRelayWatch
+      - target: HealthMuleWatch
     configFiles:
       Debug: Config/App.xcconfig
       Release: Config/App.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(HEALTH_RELAY_BUNDLE_IDENTIFIER)
-        CODE_SIGN_ENTITLEMENTS: HealthRelayApp/Resources/HealthRelay.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: $(HEALTH_MULE_BUNDLE_IDENTIFIER)
+        CODE_SIGN_ENTITLEMENTS: HealthMuleApp/Resources/HealthMule.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        DEVELOPMENT_TEAM: $(HEALTH_RELAY_DEVELOPMENT_TEAM)
+        DEVELOPMENT_TEAM: $(HEALTH_MULE_DEVELOPMENT_TEAM)
         TARGETED_DEVICE_FAMILY: "1,2"
     info:
-      path: HealthRelayApp/Resources/Info.plist
+      path: HealthMuleApp/Resources/Info.plist
       properties:
         CFBundleDisplayName: Health Mule
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -81,7 +81,7 @@ targets:
           - healthkit
         GIDClientID: $(GOOGLE_CLIENT_ID)
         BGTaskSchedulerPermittedIdentifiers:
-          - dev.uinaf.healthrelay.refresh
+          - dev.uinaf.healthmule.refresh
         UIBackgroundModes:
           - fetch
         UILaunchScreen: {}
@@ -93,81 +93,81 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
-  HealthRelayWatch:
+  HealthMuleWatch:
     type: application
     platform: watchOS
     sources:
-      - path: HealthRelayWatchApp
+      - path: HealthMuleWatchApp
         excludes:
           - Resources
-      - path: HealthRelayWatchApp/Resources/Assets.xcassets
+      - path: HealthMuleWatchApp/Resources/Assets.xcassets
         buildPhase: resources
     dependencies:
-      - package: HealthRelayCore
-        product: HealthRelayCompanion
+      - package: HealthMuleCore
+        product: HealthMuleCompanion
     configFiles:
       Debug: Config/App.xcconfig
       Release: Config/App.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(HEALTH_RELAY_BUNDLE_IDENTIFIER).watchkitapp
+        PRODUCT_BUNDLE_IDENTIFIER: $(HEALTH_MULE_BUNDLE_IDENTIFIER).watchkitapp
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        DEVELOPMENT_TEAM: $(HEALTH_RELAY_DEVELOPMENT_TEAM)
+        DEVELOPMENT_TEAM: $(HEALTH_MULE_DEVELOPMENT_TEAM)
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Health Mule
         INFOPLIST_KEY_WKApplication: YES
-        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: $(HEALTH_RELAY_BUNDLE_IDENTIFIER)
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: $(HEALTH_MULE_BUNDLE_IDENTIFIER)
         SKIP_INSTALL: YES
         TARGETED_DEVICE_FAMILY: "4"
 
-  HealthRelayTests:
+  HealthMuleTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: HealthRelayTests
+      - path: HealthMuleTests
       - path: Tests/Fixtures
         buildPhase: resources
     dependencies:
-      - target: HealthRelay
-      - package: HealthRelayCore
-        product: HealthRelayCore
+      - target: HealthMule
+      - package: HealthMuleCore
+        product: HealthMuleCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.uinaf.healthrelay.tests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.uinaf.healthmule.tests
         GENERATE_INFOPLIST_FILE: YES
 
-  HealthRelayUITests:
+  HealthMuleUITests:
     type: bundle.ui-testing
     platform: iOS
     sources:
-      - path: HealthRelayUITests
+      - path: HealthMuleUITests
     dependencies:
-      - target: HealthRelay
+      - target: HealthMule
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.uinaf.healthrelay.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.uinaf.healthmule.uitests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: HealthRelay
+        TEST_TARGET_NAME: HealthMule
 
 schemes:
-  HealthRelay:
+  HealthMule:
     build:
       targets:
-        HealthRelay: all
-        HealthRelayWatch: all
-        HealthRelayTests: [test]
-        HealthRelayUITests: [test]
+        HealthMule: all
+        HealthMuleWatch: all
+        HealthMuleTests: [test]
+        HealthMuleUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - name: HealthRelayTests
-        - name: HealthRelayUITests
+        - name: HealthMuleTests
+        - name: HealthMuleUITests
 
-  HealthRelayWatch:
+  HealthMuleWatch:
     build:
       targets:
-        HealthRelayWatch: all
+        HealthMuleWatch: all
     run:
       config: Debug

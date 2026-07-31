@@ -3,17 +3,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "HealthRelayCore",
+    name: "HealthMuleCore",
     platforms: [
         .iOS(.v18),
         .macOS(.v15),
         .watchOS(.v11),
     ],
     products: [
-        .library(name: "HealthRelayCore", targets: ["HealthRelayCore"]),
+        .library(name: "HealthMuleCore", targets: ["HealthMuleCore"]),
         .library(
-            name: "HealthRelayCompanion",
-            targets: ["HealthRelayCompanion"]
+            name: "HealthMuleCompanion",
+            targets: ["HealthMuleCompanion"]
         ),
         .executable(
             name: "SyncStoreBenchmark",
@@ -22,23 +22,23 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "HealthRelayCore",
-            path: "Sources/HealthRelayCore"
+            name: "HealthMuleCore",
+            path: "Sources/HealthMuleCore"
         ),
         .target(
-            name: "HealthRelayCompanion",
-            path: "HealthRelayShared"
+            name: "HealthMuleCompanion",
+            path: "HealthMuleShared"
         ),
         .executableTarget(
             name: "SyncStoreBenchmark",
-            dependencies: ["HealthRelayCore"],
+            dependencies: ["HealthMuleCore"],
             path: "Benchmarks/SyncStoreBenchmark"
         ),
         .testTarget(
-            name: "HealthRelayCoreTests",
-            dependencies: ["HealthRelayCore", "HealthRelayCompanion"],
+            name: "HealthMuleCoreTests",
+            dependencies: ["HealthMuleCore", "HealthMuleCompanion"],
             path: "Tests",
-            sources: ["HealthRelayCoreTests"],
+            sources: ["HealthMuleCoreTests"],
             resources: [.copy("Fixtures")]
         ),
     ]

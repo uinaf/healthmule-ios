@@ -8,8 +8,8 @@ swift_files=()
 while IFS= read -r -d '' swift_file; do
   swift_files+=("${swift_file}")
 done < <(
-  find HealthRelayApp HealthRelayShared HealthRelayWatchApp \
-    HealthRelayTests HealthRelayUITests \
+  find HealthMuleApp HealthMuleShared HealthMuleWatchApp \
+    HealthMuleTests HealthMuleUITests \
     -type f \
     -name '*.swift' \
     -print0
@@ -20,5 +20,5 @@ if [[ "${#swift_files[@]}" -eq 0 ]]; then
   exit 1
 fi
 
-HEALTH_RELAY_SWIFT_TOOL=swiftc \
+HEALTH_MULE_SWIFT_TOOL=swiftc \
   ./scripts/swift.sh -frontend -parse "${swift_files[@]}"

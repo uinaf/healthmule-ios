@@ -81,7 +81,7 @@ Any replacement must preserve:
 - canonical record encoding and semantic equality behavior;
 - explicit JSON nulls and unknown record fields;
 - iOS file protection and backup exclusion on every persisted component;
-- Foundation-only, deterministic `HealthRelayCore` behavior;
+- Foundation-only, deterministic `HealthMuleCore` behavior;
 - no logs or benchmark output containing record bodies, health values,
   metadata, paths, tokens, or identifiers.
 

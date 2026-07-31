@@ -50,7 +50,7 @@ They still require the signed-device scenarios below.
    make project
    ```
 
-3. Open `HealthRelay.xcodeproj`.
+3. Open `HealthMule.xcodeproj`.
 4. Confirm the HealthKit and Background Delivery capabilities remain present.
 5. Select the physical iPhone, build, and run.
 
@@ -142,7 +142,7 @@ queue.
 For development-only task simulation, attach LLDB to the running app and use Apple’s private debug selector:
 
 ```text
-e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"dev.uinaf.healthrelay.refresh"]
+e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"dev.uinaf.healthmule.refresh"]
 ```
 
 The current handler runs the integrated reconciliation and in-process queue

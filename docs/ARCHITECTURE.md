@@ -2,12 +2,10 @@
 
 Health Mule separates deterministic export, sync, and companion-message
 contracts from iOS/watchOS platform adapters.
-The `HealthRelay…` labels below are intentionally preserved internal target,
-type, and storage names rather than the user-facing product name.
 
 ```mermaid
 flowchart LR
-    subgraph App["HealthRelay iOS app"]
+    subgraph App["HealthMule iOS app"]
         UI["SwiftUI screens"] --> Model["AppModel"]
         Model --> Coordinator["LiveSyncCoordinator"]
         Observer["HKObserverQuery"] --> Coordinator
@@ -24,17 +22,17 @@ flowchart LR
         PhoneBridge["Phone WatchConnectivity"] --> Model
     end
 
-    subgraph Core["HealthRelayCore (Foundation only)"]
+    subgraph Core["HealthMuleCore (Foundation only)"]
         Aggregate["DailyHealthRecordAggregator"] --> Schema["Schema v1 + canonical JSON"]
         Engine["SyncEngine"] --> Outbox["FileSyncStore"]
         Engine --> Destination["ExportArtifactDestination"]
     end
 
-    subgraph Companion["HealthRelay watchOS companion"]
+    subgraph Companion["HealthMule watchOS companion"]
         WatchUI["SwiftUI status + Sync Now"] --> WatchBridge["WatchConnectivity"]
     end
 
-    Contract["HealthRelayCompanion versioned messages"]
+    Contract["HealthMuleCompanion versioned messages"]
     WatchBridge <--> Contract
     Contract <--> PhoneBridge
     Provider --> Aggregate
@@ -53,7 +51,7 @@ Solid arrows are implemented runtime paths.
 | Area | Current contract |
 |---|---|
 | App shell | An adaptive SwiftUI tab shell keeps Home and Settings as permanent destinations. Setup, sync repair, and per-metric status are focused Home drill-ins, preserving the four required product screens without giving one-time workflows permanent tab weight. `AppModel` owns observable UI state and platform services. |
-| Schema | `HealthRelayCore` encodes explicit JSON `null` values, validates local dates and offset-bearing timestamps, preserves unknown fields, and emits canonical sorted JSON. |
+| Schema | `HealthMuleCore` encodes explicit JSON `null` values, validates local dates and offset-bearing timestamps, preserves unknown fields, and emits canonical sorted JSON. |
 | Aggregation | Pure Swift inputs cover latest values, stable arithmetic means, asleep-interval unioning, workout de-duplication, derived totals, and deterministic source ordering. |
 | Durable sync | `SyncEngine` and `FileSyncStore` implement semantic no-op detection, artifact revisions, a persistent retry queue, manifest ordering, retry backoff, reauthorization blocking, and full republishing when the destination account or managed folder identity changes. |
 | Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
@@ -300,7 +298,7 @@ Connected while the Home and Sync surfaces report a blocking storage error.
   `DriveMetadataStore`;
 - folder validation by MIME type and trash state, plus a present My Drive
   parent for a rediscovered root and the `daily` folder's exact root parent;
-- private `appProperties` named `healthRelayKind` and `healthRelayDate`;
+- private `appProperties` named `healthMuleKind` and `healthMuleDate`;
 - Drive-generated IDs supplied on create, making an ambiguous retry resolve as
   either a successful create or `409 Conflict`;
 - `PATCH` multipart uploads for updates by file ID.
@@ -350,9 +348,9 @@ not deleted and may no longer appear in the new manifest.
 | Drive folder and file IDs | Per-account `UserDefaults` namespaces through `DriveMetadataStore` | Namespaces use a SHA-256 digest of the stable Google user ID. IDs contain no record bodies; diagnostics must still treat them as private. |
 | Prepared Drive destination | SHA-256 digest of account, root-folder, and daily-folder identity in `UserDefaults` | Used only to detect destination changes and force a complete republish; raw identifiers are not stored in this key. |
 | Metric switches and backfill selection | `UserDefaults` | Preferences only, with no health values. |
-| HealthKit anchors and UUID/date index | Application Support under `HealthRelay/Anchors` | Uses complete-until-first-authentication file protection and is excluded from backups. |
-| Saved local-day boundaries | Application Support under `HealthRelay/day-boundaries.json` | Uses complete-until-first-authentication file protection and is excluded from backups. |
-| Daily records, manifest, and retry state | Application Support under `HealthRelay/Staging` through `FileSyncStore` | The staging root uses complete-until-first-authentication protection and is excluded from backups before records are written. |
+| HealthKit anchors and UUID/date index | Application Support under `HealthMule/Anchors` | Uses complete-until-first-authentication file protection and is excluded from backups. |
+| Saved local-day boundaries | Application Support under `HealthMule/day-boundaries.json` | Uses complete-until-first-authentication file protection and is excluded from backups. |
+| Daily records, manifest, and retry state | Application Support under `HealthMule/Staging` through `FileSyncStore` | The staging root uses complete-until-first-authentication protection and is excluded from backups before records are written. |
 | Diagnostics | Bounded memory plus an explicit temporary share file | A closed typed event enum is the export allowlist. Callers cannot supply arbitrary categories, event names, field keys, raw errors, identifiers, metadata, or health values. |
 
 The no-backup rule is part of the product boundary: Apple’s [App Review
@@ -404,7 +402,7 @@ transfers](https://developer.apple.com/documentation/foundation/downloading-file
 ## Build and verification boundaries
 
 `project.yml` is the XcodeGen source of truth for the generated
-`HealthRelay.xcodeproj`. GoogleSignIn is pinned exactly in `project.yml`; the
+`HealthMule.xcodeproj`. GoogleSignIn is pinned exactly in `project.yml`; the
 shared workspace `Package.resolved` is explicitly retained by `.gitignore` so
 the resolved transitive graph can be committed with the project.
 `scripts/check-app-dependencies.sh` verifies those versions match without
@@ -418,7 +416,7 @@ the full gate. Do not hand-edit generated project structure or lock entries:
 
 ```sh
 make project
-./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthRelay.xcodeproj -scheme HealthRelay
+./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthMule.xcodeproj -scheme HealthMule
 ./scripts/check-app-dependencies.sh
 make verify-full
 ```

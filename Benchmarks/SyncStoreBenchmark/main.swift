@@ -1,5 +1,5 @@
 import Foundation
-import HealthRelayCore
+import HealthMuleCore
 
 #if canImport(Darwin)
 import Darwin
@@ -71,7 +71,7 @@ private struct SyncStoreBenchmark {
     ) async throws -> TrialResult {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-relay-sync-benchmark-\(UUID().uuidString)",
+                "health-mule-sync-benchmark-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer {
