@@ -15,6 +15,10 @@ let package = Package(
             name: "HealthRelayCompanion",
             targets: ["HealthRelayCompanion"]
         ),
+        .executable(
+            name: "SyncStoreBenchmark",
+            targets: ["SyncStoreBenchmark"]
+        ),
     ],
     targets: [
         .target(
@@ -24,6 +28,11 @@ let package = Package(
         .target(
             name: "HealthRelayCompanion",
             path: "HealthRelayShared"
+        ),
+        .executableTarget(
+            name: "SyncStoreBenchmark",
+            dependencies: ["HealthRelayCore"],
+            path: "Benchmarks/SyncStoreBenchmark"
         ),
         .testTarget(
             name: "HealthRelayCoreTests",
