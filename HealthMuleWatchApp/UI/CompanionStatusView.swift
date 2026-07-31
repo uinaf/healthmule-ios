@@ -27,7 +27,7 @@ struct CompanionStatusView: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
         }
-        .navigationTitle("Health Mule")
+        .navigationTitle("HealthMule")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             model.activate()

@@ -931,7 +931,7 @@ final class AppModel {
         } else if case .temporarilyUnavailable = googleConnection {
             operationState = .failed(
                 .googleConnection,
-                "Google could not be reached yet. Health Mule will retry when the app becomes active again."
+                "Google could not be reached yet. HealthMule will retry when the app becomes active again."
             )
         } else if case .reauthorizationRequired = googleConnection {
             operationState = .failed(
@@ -1934,7 +1934,7 @@ final class AppModel {
         case .temporarilyUnavailable:
             operationState = .failed(
                 .googleConnection,
-                "Google could not be reached yet. Health Mule will retry when the app becomes active again."
+                "Google could not be reached yet. HealthMule will retry when the app becomes active again."
             )
         case .authorized, .driveUnavailable:
             operationState = .failed(

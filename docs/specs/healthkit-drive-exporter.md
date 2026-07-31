@@ -1,4 +1,4 @@
-# Health Mule — Apple Health to Google Drive
+# HealthMule — Apple Health to Google Drive
 
 Status: implementation-ready v1 specification
 Target: native iPhone app with a lightweight Apple Watch companion
