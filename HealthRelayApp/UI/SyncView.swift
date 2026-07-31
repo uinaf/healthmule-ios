@@ -85,6 +85,13 @@ struct SyncView: View {
                 .foregroundStyle(.secondary)
             }
 
+            if
+                let progress = model.syncProgress,
+                progress.totalDays > 0
+            {
+                SyncDayProgressView(progress: progress)
+            }
+
             if model.syncReadiness.canSync {
                 Button {
                     Task {
@@ -358,6 +365,27 @@ struct SyncView: View {
     private var lastSyncValue: String {
         model.syncSummary.lastSuccessfulSyncAt?
             .formatted(date: .abbreviated, time: .shortened) ?? "Never"
+    }
+}
+
+struct SyncDayProgressView: View {
+    let progress: SyncProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(progress.presentationText)
+                .font(.subheadline.weight(.medium))
+                .monospacedDigit()
+            ProgressView(
+                value: Double(progress.completedDays),
+                total: Double(progress.totalDays)
+            )
+            .tint(HealthRelayStyle.tint)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Reconciliation progress")
+        .accessibilityValue(progress.accessibilityValue)
+        .accessibilityIdentifier("sync-day-progress")
     }
 }
 

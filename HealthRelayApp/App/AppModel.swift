@@ -17,10 +17,17 @@ private enum AppModelStorageError: LocalizedError {
 @Observable
 final class AppModel {
     var selectedTab: AppTab = .home
+    private var syncProgressState = SyncProgressState()
+    var syncProgress: SyncProgress? {
+        syncProgressState.progress
+    }
     var operationState: OperationState = .idle {
         didSet {
             if case .working = operationState {
                 operationEpoch &+= 1
+                syncProgressState.clear()
+            } else if oldValue != operationState {
+                syncProgressState.clear()
             }
             publishCompanionStatus()
         }
@@ -707,6 +714,7 @@ final class AppModel {
         )
         operationState = syncingState
         let expectedOperationEpoch = operationEpoch
+        syncProgressState.begin(epoch: expectedOperationEpoch)
         let expectedGoogleEpoch = googleTransitionEpoch
         let clock = ContinuousClock()
         let startedAt = clock.now
@@ -720,7 +728,14 @@ final class AppModel {
             let outcome = try await syncCoordinator.reconcile(
                 trigger: trigger,
                 enabledMetrics: queryableMetrics,
-                backfillStart: backfillStart
+                backfillStart: backfillStart,
+                progress: { [weak self] progress in
+                    await self?.publishSyncProgress(
+                        progress,
+                        expectedOperationEpoch: expectedOperationEpoch,
+                        expectedOperationState: syncingState
+                    )
+                }
             )
             guard
                 isGoogleTransitionCurrent(expectedGoogleEpoch),
@@ -840,6 +855,20 @@ final class AppModel {
 
     func retryFailedUploads() async {
         await reconcile(trigger: .retry)
+    }
+
+    private func publishSyncProgress(
+        _ progress: SyncProgress,
+        expectedOperationEpoch: UInt64,
+        expectedOperationState: OperationState
+    ) {
+        guard operationState == expectedOperationState else {
+            return
+        }
+        syncProgressState.publish(
+            progress,
+            epoch: expectedOperationEpoch
+        )
     }
 
     func retryGoogleRestore() async {
@@ -2019,6 +2048,19 @@ final class AppModel {
         enabledMetrics = Set(HealthMetric.allCases)
         if arguments.contains("--ui-operation-working") {
             operationState = .working(.sync, "Syncing")
+            if arguments.contains("--ui-sync-progress") {
+                syncProgressState.begin(epoch: operationEpoch)
+                syncProgressState.publish(
+                    SyncProgress(
+                        completedDays: 12,
+                        totalDays: 30,
+                        currentDate: try? LocalDate(
+                            rawValue: "2026-07-12"
+                        )
+                    ),
+                    epoch: operationEpoch
+                )
+            }
         } else if arguments.contains("--ui-permanent-failure") {
             operationState = .failed(
                 .sync,

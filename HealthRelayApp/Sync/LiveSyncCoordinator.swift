@@ -99,7 +99,8 @@ actor LiveSyncCoordinator {
     func reconcile(
         trigger: SyncTrigger,
         enabledMetrics: Set<HealthMetric>,
-        backfillStart: LocalDate
+        backfillStart: LocalDate,
+        progress: (@Sendable (SyncProgress) async -> Void)? = nil
     ) async throws -> LiveSyncOutcome {
         let operationID = try await acquireOperation()
         defer { releaseOperation(id: operationID) }
@@ -121,6 +122,13 @@ actor LiveSyncCoordinator {
             !exportContractChanged,
             missingDates.isEmpty
         {
+            await progress?(
+                SyncProgress(
+                    completedDays: 0,
+                    totalDays: 0,
+                    currentDate: nil
+                )
+            )
             let report = try await runtime.engine.retryPendingUploads(force: true)
             return try await outcome(report: report)
         }
@@ -177,7 +185,10 @@ actor LiveSyncCoordinator {
             dates.formUnion(missingDates)
         }
 
-        var report = try await stage(dates: dates)
+        var report = try await stage(
+            dates: dates,
+            progress: progress
+        )
         if selectionChanged {
             persistStagedMetrics(enabledMetrics)
         }
@@ -373,10 +384,22 @@ actor LiveSyncCoordinator {
         )
     }
 
-    private func stage(dates: Set<LocalDate>) async throws -> SyncReport {
+    private func stage(
+        dates: Set<LocalDate>,
+        progress: (@Sendable (SyncProgress) async -> Void)? = nil
+    ) async throws -> SyncReport {
+        let sortedDates = dates.sorted()
+        await progress?(
+            SyncProgress(
+                completedDays: 0,
+                totalDays: sortedDates.count,
+                currentDate: nil
+            )
+        )
         try await runtime.store.recover()
         var report = SyncReport()
-        for date in dates.sorted() {
+        for (index, date) in sortedDates.enumerated() {
+            try Task.checkCancellation()
             let record = try await recordProvider.record(for: date)
             switch try await runtime.store.stageDaily(record) {
             case .staged:
@@ -384,6 +407,14 @@ actor LiveSyncCoordinator {
             case .unchanged:
                 report.unchangedDailyCount += 1
             }
+            try Task.checkCancellation()
+            await progress?(
+                SyncProgress(
+                    completedDays: index + 1,
+                    totalDays: sortedDates.count,
+                    currentDate: date
+                )
+            )
             await recordStaged?(date)
         }
         report.pendingUploadCount = try await runtime.store.pendingUploadCount()
