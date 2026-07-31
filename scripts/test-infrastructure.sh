@@ -34,7 +34,7 @@ done
 ./scripts/check-app-dependencies.sh
 
 dependency_fixture_dir="$(
-  mktemp -d "${TMPDIR:-/tmp}/health-mule-dependencies.XXXXXX"
+  mktemp -d "${TMPDIR:-/tmp}/healthmule-dependencies.XXXXXX"
 )"
 trap 'rm -rf "${dependency_fixture_dir}"' EXIT
 declared_fixture="${dependency_fixture_dir}/project.yml"
@@ -148,6 +148,19 @@ case "${branding_scan_status}" in
   1) ;;
   *) fail "The user-facing branding scan failed." ;;
 esac
+identifier_hyphen=-
+identifier_underscore=_
+legacy_kebab="health${identifier_hyphen}mule"
+legacy_upper_snake="HEALTH${identifier_underscore}MULE"
+legacy_lower_snake="health${identifier_underscore}mule"
+identifier_scan_status=0
+git grep -n -E "${legacy_kebab}|${legacy_upper_snake}|${legacy_lower_snake}" -- . ||
+  identifier_scan_status=$?
+case "${identifier_scan_status}" in
+  0) fail "Repository identifiers must use the canonical unsplit HealthMule spelling." ;;
+  1) ;;
+  *) fail "The repository identifier scan failed." ;;
+esac
 grep -Fq "HealthMuleShared HealthMuleWatchApp" scripts/check-swift-syntax.sh ||
   fail "The fast syntax gate must include the Watch companion sources."
 if grep -R -E \
@@ -250,7 +263,7 @@ grep -Fq '${{ github.event.repository.name }}' .github/workflows/verify.yml ||
   fail "Fast CI must scope path-bound Swift build caches to the repository name."
 grep -Fq "'Package.resolved', 'Sources/**', 'Tests/**', 'Makefile', 'scripts/swift.sh'" .github/workflows/verify.yml ||
   fail "Fast CI must invalidate its build cache for every SwiftPM input."
-grep -Fq 'HEALTH_MULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
+grep -Fq 'HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' .github/workflows/verify.yml ||
   fail "Fast CI must keep Swift module caches inside the cached build directory."
 grep -Fq "if: steps.swift-build-cache.outputs.cache-hit == 'true'" .github/workflows/verify.yml ||
   fail "Exact cache hits must use the no-rebuild verification path."

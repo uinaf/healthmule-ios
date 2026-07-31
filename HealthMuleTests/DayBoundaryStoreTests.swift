@@ -8,7 +8,7 @@ final class DayBoundaryStoreTests: XCTestCase {
     func testMidnightDSTBoundaryEndsAtTheNextLocalDayStart() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-day-boundary-\(UUID().uuidString)",
+                "healthmule-day-boundary-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -30,7 +30,7 @@ final class DayBoundaryStoreTests: XCTestCase {
     func testLegacyMidnightDSTBoundaryIsNormalizedAndPersisted() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-legacy-boundary-\(UUID().uuidString)",
+                "healthmule-legacy-boundary-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -82,7 +82,7 @@ final class DayBoundaryStoreTests: XCTestCase {
     func testFailedWriteDoesNotPublishBoundaryInMemory() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-failed-boundary-\(UUID().uuidString)",
+                "healthmule-failed-boundary-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -134,7 +134,7 @@ final class DayBoundaryStoreTests: XCTestCase {
     func testMissingBoundaryFileIsEmptyState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-missing-boundary-\(UUID().uuidString)",
+                "healthmule-missing-boundary-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -146,7 +146,7 @@ final class DayBoundaryStoreTests: XCTestCase {
     func testInvalidBoundaryFileIsSurfaced() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-invalid-boundary-\(UUID().uuidString)",
+                "healthmule-invalid-boundary-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -182,7 +182,7 @@ final class DayBoundaryStoreTests: XCTestCase {
     func testRebuildUsesDurableRecordTimezoneAcrossDST() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-rebuilt-boundary-\(UUID().uuidString)",
+                "healthmule-rebuilt-boundary-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }

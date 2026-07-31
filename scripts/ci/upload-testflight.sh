@@ -9,7 +9,7 @@ fail() {
 [[ "${CI:-}" == "true" && "${GITHUB_ACTIONS:-}" == "true" ]] ||
   fail "TestFlight uploads may only run in GitHub Actions."
 
-if [[ "${HEALTH_MULE_XCODE_LOCKED:-}" != "1" ]]; then
+if [[ "${HEALTHMULE_XCODE_LOCKED:-}" != "1" ]]; then
   exec ./scripts/with-xcode-lock.sh "$0"
 fi
 

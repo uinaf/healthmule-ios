@@ -89,7 +89,7 @@ final class FixtureContractTests: XCTestCase {
 
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(
-            "health-mule-fixture-\(UUID().uuidString)",
+            "healthmule-fixture-\(UUID().uuidString)",
             isDirectory: true
         )
     }

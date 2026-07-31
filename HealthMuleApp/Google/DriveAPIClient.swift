@@ -1028,7 +1028,7 @@ actor DriveAPIClient {
         destinationScopeID: String,
         expectedActivationGeneration: UInt64
     ) async throws -> DriveRemoteItem {
-        let boundary = "health-mule-\(UUID().uuidString)"
+        let boundary = "healthmule-\(UUID().uuidString)"
         var appProperties = ["healthMuleKind": kind]
         if let date {
             appProperties["healthMuleDate"] = date

@@ -14,7 +14,7 @@ fail() {
 
 ./scripts/ci/validate-testflight-configuration.sh
 
-credentials_dir="${RUNNER_TEMP}/health-mule-testflight"
+credentials_dir="${RUNNER_TEMP}/healthmule-testflight"
 api_key_path="${credentials_dir}/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
 
 umask 077
@@ -22,8 +22,8 @@ mkdir -p "${credentials_dir}"
 printf '%s\n' "${APP_STORE_CONNECT_API_PRIVATE_KEY}" >"${api_key_path}"
 
 printf '%s\n' \
-  "HEALTH_MULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule" \
-  "HEALTH_MULE_DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}" \
+  "HEALTHMULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule" \
+  "HEALTHMULE_DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}" \
   >Config/Signing.xcconfig
 
 printf '%s\n' \

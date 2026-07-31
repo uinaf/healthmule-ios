@@ -1,4 +1,4 @@
 // Copy this file to Signing.xcconfig for signed device builds.
 // The bundle identifier must match the native iOS Google OAuth client.
-HEALTH_MULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule
-HEALTH_MULE_DEVELOPMENT_TEAM = ABCDE12345
+HEALTHMULE_BUNDLE_IDENTIFIER = dev.uinaf.healthmule
+HEALTHMULE_DEVELOPMENT_TEAM = ABCDE12345

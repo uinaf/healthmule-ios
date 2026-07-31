@@ -9,7 +9,7 @@ fi
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 
 rm -rf \
-  "${RUNNER_TEMP}/health-mule-testflight" \
+  "${RUNNER_TEMP}/healthmule-testflight" \
   "${RUNNER_TEMP}/HealthMule.xcarchive" \
   "${RUNNER_TEMP}/HealthMuleExport"
 rm -f \

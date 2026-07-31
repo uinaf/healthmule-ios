@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${HEALTH_MULE_XCODE_LOCKED:-}" != "1" ]]; then
+if [[ "${HEALTHMULE_XCODE_LOCKED:-}" != "1" ]]; then
   echo "error: Run iOS project tasks through scripts/with-xcode-lock.sh." >&2
   exit 1
 fi

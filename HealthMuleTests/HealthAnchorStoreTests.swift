@@ -9,7 +9,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testDeletionMappingSurvivesAnchorWriteFailure() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-anchor-\(UUID().uuidString)",
+                "healthmule-anchor-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -69,7 +69,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testStoredSleepMappingRebuildsPlausibleSessionEndingDate() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-sleep-anchor-\(UUID().uuidString)",
+                "healthmule-sleep-anchor-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -102,7 +102,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testMissingSampleIndexIsEmptyState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-missing-index-\(UUID().uuidString)",
+                "healthmule-missing-index-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -117,7 +117,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testMissingSampleIndexWithAnchorDomainIsCorrupt() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-partial-index-\(UUID().uuidString)",
+                "healthmule-partial-index-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -154,7 +154,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testMissingSampleIndexWithHiddenAnchorDomainIsCorrupt() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-hidden-partial-index-\(UUID().uuidString)",
+                "healthmule-hidden-partial-index-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -178,7 +178,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testInvalidSampleIndexIsSurfacedWithoutCachingEmptyState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-invalid-index-\(UUID().uuidString)",
+                "healthmule-invalid-index-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -211,7 +211,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testCorruptIndexRecoveryResetsAllAnchorsBeforeReplay() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-reset-index-\(UUID().uuidString)",
+                "healthmule-reset-index-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -263,7 +263,7 @@ final class HealthAnchorStoreTests: XCTestCase {
     func testClientRecoversCorruptAuxiliaryStateFromDurableRecords() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "health-mule-client-recovery-\(UUID().uuidString)",
+                "healthmule-client-recovery-\(UUID().uuidString)",
                 isDirectory: true
             )
         defer { try? FileManager.default.removeItem(at: root) }

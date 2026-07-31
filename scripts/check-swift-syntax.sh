@@ -20,5 +20,5 @@ if [[ "${#swift_files[@]}" -eq 0 ]]; then
   exit 1
 fi
 
-HEALTH_MULE_SWIFT_TOOL=swiftc \
+HEALTHMULE_SWIFT_TOOL=swiftc \
   ./scripts/swift.sh -frontend -parse "${swift_files[@]}"
