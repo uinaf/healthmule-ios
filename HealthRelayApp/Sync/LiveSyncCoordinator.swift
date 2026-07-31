@@ -400,19 +400,7 @@ actor LiveSyncCoordinator {
         }
         let summary = try await summary()
         await diagnostics.record(
-            category: "sync",
-            event: "core-report",
-            fields: [
-                "failedCount": String(report.failures.count),
-                "failureCodes": report.failures
-                    .map(\.code)
-                    .sorted()
-                    .joined(separator: ","),
-                "pendingCount": String(report.pendingUploadCount),
-                "stagedCount": String(report.stagedDailyCount),
-                "unchangedCount": String(report.unchangedDailyCount),
-                "uploadedCount": String(report.uploadedDailyCount),
-            ]
+            .syncCoreReport(DiagnosticCoreReport(report))
         )
         return LiveSyncOutcome(report: report, summary: summary)
     }
