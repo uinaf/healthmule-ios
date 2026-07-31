@@ -15,6 +15,7 @@ done
 
 for script in \
   scripts/check-swift-syntax.sh \
+  scripts/check-app-dependencies.sh \
   scripts/install-xcodegen.sh \
   scripts/ios-project-task.sh \
   scripts/parse-booted-iphone-ids.sh \
@@ -25,6 +26,108 @@ for script in \
   scripts/with-xcode-lock.sh; do
   /bin/bash -n "${script}"
 done
+
+./scripts/check-app-dependencies.sh
+
+dependency_fixture_dir="$(
+  mktemp -d "${TMPDIR:-/tmp}/health-relay-dependencies.XXXXXX"
+)"
+trap 'rm -rf "${dependency_fixture_dir}"' EXIT
+declared_fixture="${dependency_fixture_dir}/project.yml"
+lock_fixture="${dependency_fixture_dir}/Package.resolved"
+
+write_declared_fixture() {
+  version="${1:-}"
+  if [[ -n "${version}" ]]; then
+    cat >"${declared_fixture}" <<EOF
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: ${version}
+EOF
+  else
+    cat >"${declared_fixture}" <<'EOF'
+packages:
+  HealthRelayCore:
+    path: .
+EOF
+  fi
+}
+
+write_lock_fixture() {
+  first_version="${1:-}"
+  second_version="${2:-}"
+  {
+    printf '{"pins":['
+    if [[ -n "${first_version}" ]]; then
+      printf '{"identity":"googlesignin-ios","state":{"version":"%s"}}' \
+        "${first_version}"
+    fi
+    if [[ -n "${second_version}" ]]; then
+      printf ',{"identity":"googlesignin-ios","state":{"version":"%s"}}' \
+        "${second_version}"
+    fi
+    printf ']}\n'
+  } >"${lock_fixture}"
+}
+
+write_declared_fixture "9.2.0"
+write_lock_fixture "9.2.0"
+./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null
+
+write_lock_fixture "9.1.0"
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject version drift."
+fi
+
+write_declared_fixture
+write_lock_fixture "9.2.0"
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject a missing declaration."
+fi
+
+write_declared_fixture "9.2.0"
+write_lock_fixture
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject a missing pin."
+fi
+
+write_lock_fixture "9.2.0" "9.2.0"
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject duplicate pins."
+fi
+
+cat >"${declared_fixture}" <<'EOF'
+--- !ruby/object:Object {}
+EOF
+write_lock_fixture "9.2.0"
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject tagged YAML objects."
+fi
+
+cat >"${declared_fixture}" <<'EOF'
+dependency: &google_sign_in
+  exactVersion: 9.2.0
+packages:
+  GoogleSignIn: *google_sign_in
+EOF
+if ./scripts/check-app-dependencies.sh \
+  "${declared_fixture}" \
+  "${lock_fixture}" >/dev/null 2>&1; then
+  fail "The app dependency check must reject YAML aliases."
+fi
 
 grep -Fq "platform: watchOS" project.yml ||
   fail "The project must keep the watchOS companion target."
@@ -112,7 +215,10 @@ if grep -Fq "./scripts/install-xcodegen.sh" .github/workflows/verify.yml; then
   fail "Fast CI must not install Xcode-only tooling."
 fi
 checkout_action="actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-for workflow in .github/workflows/verify.yml .github/workflows/full-verify.yml; do
+for workflow in \
+  .github/workflows/verify.yml \
+  .github/workflows/full-verify.yml \
+  .github/workflows/dependency-watch.yml; do
   grep -Fq "uses: ${checkout_action}" "${workflow}" ||
     fail "${workflow} must pin the supported Node 24 checkout action."
 done
