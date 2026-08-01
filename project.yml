@@ -77,6 +77,7 @@ targets:
             CFBundleURLSchemes:
               - $(HEALTHMULE_GOOGLE_REDIRECT_SCHEME)
         NSHealthShareUsageDescription: HealthMule reads only the fitness metrics you select and exports normalized daily summaries to your Google Drive.
+        NSHealthUpdateUsageDescription: HealthMule does not write to or modify your Health data; it only reads the fitness metrics you select for export to your Google Drive.
         UIRequiredDeviceCapabilities:
           - healthkit
         GIDClientID: $(HEALTHMULE_GOOGLE_CLIENT_ID)
