@@ -137,6 +137,8 @@ grep -Fq "platform: watchOS" project.yml ||
   fail "The project must keep the watchOS companion target."
 grep -Fq "INFOPLIST_KEY_WKCompanionAppBundleIdentifier" project.yml ||
   fail "The watchOS target must remain paired to the iPhone app."
+grep -Fq "NSHealthUpdateUsageDescription:" project.yml ||
+  fail "The iPhone app must declare Apple's required HealthKit update purpose string."
 spaced_brand="Health"' '"Mule"
 misspelled_brand="Healt"' '"Mule"
 branding_scan_status=0
