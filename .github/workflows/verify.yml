@@ -55,3 +55,19 @@ jobs:
         env:
           HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
         run: make verify
+
+  compile:
+    name: Compile app and Watch app
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # make verify only parses Swift. This is the gate that type checks the
+      # iOS app and the embedded Watch app.
+      - name: Build unsigned app and Watch app
+        run: make build
