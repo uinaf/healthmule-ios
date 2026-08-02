@@ -57,7 +57,7 @@ Solid arrows are implemented runtime paths.
 | Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
 | HealthKit | A dedicated `HealthKitClient` actor keeps queries, sample transformation, aggregation, and anchor/day-boundary persistence off the UI actor. The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
 | Google | GoogleSignIn restores and refreshes credentials, distinguishing a revoked grant, an account change, and a temporary network failure. OAuth authorization and verified Drive readiness are separate states. Every token refresh and Drive request is bound to its expected stable account ID. `DriveArtifactDestination` maps core artifacts and retry classifications onto account-scoped folder discovery and stable-ID multipart upserts. |
-| Watch companion | A watchOS 11 SwiftUI app receives a sanitized versioned status snapshot and sends an idempotent sync request through reachable Watch Connectivity messaging. The action is disabled while the iPhone is unavailable. The iPhone owns the sync state machine and publishes the latest status through application context. |
+| Watch companion | A watchOS 26 SwiftUI app receives a sanitized versioned status snapshot and sends an idempotent sync request through reachable Watch Connectivity messaging. The action is disabled while the iPhone is unavailable. The iPhone owns the sync state machine and publishes the latest status through application context. |
 | Background refresh | The app registers a SwiftUI `BGAppRefreshTask` handler, bootstraps the same services if launched cold, and submits a best-effort request with a one-hour earliest start. |
 | Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, and redacted sync counts. |
 | Diagnostics | A bounded in-memory recorder emits redacted lifecycle metadata through `OSLog` and a shareable JSON file. |
@@ -437,12 +437,35 @@ make verify-full
 
 `make verify` is the fast cross-platform gate: it checks the serialized tooling
 contract, parses all app and iOS test Swift, and runs the deterministic
-Foundation package tests. Required CI runs that target on Linux.
+Foundation package tests. Required CI runs that target on Linux. Parsing is not
+type checking, so `make verify` alone never proves that the app or the Watch app
+compiles.
 `make verify-full` adds the iOS app and UI tests on an available Simulator and
-is available through the manual `Full Verify` workflow.
+is available through the manual `Full Verify` workflow. No required CI job
+compiles either app today, so run `make build` locally for app and Watch
+changes.
+`make test`, `make smoke`, and `make run` additionally require `xcode-select` to
+point at a full Xcode; they fail early with that instruction when it points at
+CommandLineTools.
 Neither command proves HealthKit authorization, observer delivery, Google OAuth,
 Drive uploads, or background relaunch behavior; those belong to the
 [physical-device checklist](DEVICE_TESTING.md).
+
+## Reconciliation progress
+
+A reconciliation reports two sequential phases so the UI can show real
+movement across both halves of the work:
+
+1. **Staging** counts days as HealthKit records are read and written to
+   protected local storage.
+2. **Uploading** counts due artifacts as the core engine settles each one
+   against Drive. `SyncEngine.retryPendingUploads` emits `UploadProgress` before
+   the first artifact and after each artifact settles, whether it uploaded or
+   failed.
+
+The phase determines the presented noun, so a pinned staging bar can no longer
+stand in for an unreported upload. Progress carries counts and an optional local
+date only; it never carries health values or artifact contents.
 
 ## Remaining integration gaps
 
@@ -451,4 +474,7 @@ Drive uploads, or background relaunch behavior; those belong to the
   physical device.
 - Prove HealthKit authorization, queries, observer delivery, and reconciliation
   on a signed physical-iPhone build.
-- Surface granular day-by-day progress for a long custom backfill.
+- Cover the Watch companion automatically. `CompanionAppModel` and
+  `PhoneWatchConnectivityCoordinator` have no test target, and
+  `activateWatchConnectivity` is skipped under `--ui-testing`, so the paired
+  request path is only ever exercised by hand.

@@ -6,11 +6,10 @@ privacy boundaries.
 
 ## Setup
 
-Install a full Xcode toolchain with the iOS 18 and watchOS 11 SDKs, Swift 6,
-and XcodeGen. Then generate the Xcode project:
+Install a full Xcode toolchain with the iOS 26 and watchOS 26 SDKs and Swift 6.
+Then generate the Xcode project, which also provisions the pinned XcodeGen:
 
 ```sh
-brew install xcodegen
 make project
 ```
 
