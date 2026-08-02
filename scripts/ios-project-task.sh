@@ -15,6 +15,22 @@ case "${task}" in
     ;;
 esac
 
+case "${task}" in
+  test | smoke | run)
+    # xcodebuild spawns its Simulator helpers through xcode-select rather than
+    # DEVELOPER_DIR, so the wrappers cannot compensate for a CommandLineTools
+    # selection the way they do for plain builds.
+    if ! /usr/bin/xcrun --find simctl >/dev/null 2>&1; then
+      selected="$(/usr/bin/xcode-select -p 2>/dev/null || echo unknown)"
+      echo "error: make ${task} needs xcode-select to point at a full Xcode." >&2
+      echo "       Currently selected: ${selected}" >&2
+      echo "       Fix it with: sudo xcode-select -s /Applications/Xcode.app" >&2
+      echo "       'make verify' and 'make build' work without this." >&2
+      exit 78
+    fi
+    ;;
+esac
+
 ./scripts/generate-project.sh
 
 case "${task}" in

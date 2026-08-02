@@ -10,6 +10,22 @@
 - Generate the Xcode project: `make project`
 - Build and launch in Simulator: `make run`
 
+## Runner contract
+
+- Core tests and `make verify` need only a Swift 6 toolchain and run on Linux.
+- Everything that compiles the app or the Watch app needs a full Xcode with the
+  iOS and watchOS SDKs.
+- Always call the `scripts/` wrappers instead of bare `swift`, `xcodebuild`, or
+  `xcrun`. They locate `/Applications/Xcode*.app` themselves, so the gates work
+  even when `xcode-select` points at CommandLineTools.
+- `xcrun simctl` and any tool that resolves Xcode through `xcode-select` — the
+  Claude Code iOS Simulator MCP included — fail until an operator runs
+  `sudo xcode-select -s /Applications/Xcode.app`. Use `./scripts/xcrun.sh`
+  meanwhile.
+- XcodeGen is pinned and provisioned into `.artifacts/toolchain` by
+  `make project`. Do not install it separately; a different version rewrites the
+  whole project file.
+
 ## Validation
 
 - Fast contract tests: `make test-core`
@@ -18,9 +34,11 @@
 - Runtime smoke test: `make smoke`
 
 `make verify` checks the infrastructure contract, parses all app and iOS test
-Swift, and runs the deterministic core tests on Linux or macOS. App and UI
-changes also need `make build` or `make smoke`. `make verify-full` owns the
-complete iOS unit and Simulator UI suite.
+Swift, and runs the deterministic core tests on Linux or macOS. It does not type
+check or compile the app, so app, Watch, and UI changes also need `make build`
+or `make smoke`. `make verify-full` owns the complete iOS unit and Simulator UI
+suite; nothing in required CI compiles the app or the Watch app today, so run it
+locally before shipping either.
 
 ## Repo rules
 

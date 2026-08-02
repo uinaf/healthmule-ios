@@ -13,23 +13,25 @@ for task in project build test smoke run; do
     fail "make ${task} must run exactly one complete task behind the Xcode lock."
 done
 
-for script in \
-  scripts/check-swift-syntax.sh \
-  scripts/check-app-dependencies.sh \
-  scripts/ci/cleanup-testflight.sh \
-  scripts/ci/configure-testflight.sh \
-  scripts/ci/upload-testflight.sh \
-  scripts/ci/validate-testflight-configuration.sh \
-  scripts/install-xcodegen.sh \
-  scripts/ios-project-task.sh \
-  scripts/parse-booted-iphone-ids.sh \
-  scripts/run-simulator.sh \
-  scripts/select-simulator-id.sh \
-  scripts/simulator-destination.sh \
-  scripts/swift.sh \
-  scripts/with-xcode-lock.sh; do
+shell_scripts=()
+while IFS= read -r -d '' script; do
+  shell_scripts+=("${script}")
+done < <(find scripts -type f -name '*.sh' -print0)
+
+[[ "${#shell_scripts[@]}" -gt 0 ]] || fail "No shell scripts were found under scripts/."
+
+for script in "${shell_scripts[@]}"; do
+  [[ -x "${script}" ]] || fail "${script} must be executable."
   /bin/bash -n "${script}"
 done
+
+pinned_xcodegen="$(
+  sed -n 's/^xcodegen_version="\(.*\)"$/\1/p' scripts/install-xcodegen.sh
+)"
+[[ -n "${pinned_xcodegen}" ]] ||
+  fail "scripts/install-xcodegen.sh must declare a pinned xcodegen_version."
+grep -q 'install-xcodegen.sh' scripts/generate-project.sh ||
+  fail "scripts/generate-project.sh must provision the pinned XcodeGen."
 
 ./scripts/check-app-dependencies.sh
 
@@ -257,12 +259,14 @@ launch_line="$(grep -nF 'simctl launch "${simulator_id}"' scripts/run-simulator.
 [[ -n "${open_line}" && -n "${launch_line}" && "${open_line}" -lt "${launch_line}" ]] ||
   fail "make run must open the selected Simulator before launching the app."
 
-if grep -Fq "brew install xcodegen" .github/workflows/verify.yml; then
-  fail "CI must not install an unpinned Homebrew XcodeGen formula."
-fi
-if grep -Fq "./scripts/install-xcodegen.sh" .github/workflows/verify.yml; then
-  fail "Fast CI must not install Xcode-only tooling."
-fi
+for workflow in .github/workflows/*.yml; do
+  if grep -Fq "brew install xcodegen" "${workflow}"; then
+    fail "CI must not install an unpinned Homebrew XcodeGen formula."
+  fi
+  if grep -Fq "./scripts/install-xcodegen.sh" "${workflow}"; then
+    fail "CI must let make project provision the pinned XcodeGen."
+  fi
+done
 checkout_action="actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 for workflow in \
   .github/workflows/verify.yml \
@@ -310,8 +314,6 @@ grep -Eq '^[[:space:]]+timeout-minutes:[[:space:]]+5[[:space:]]*$' .github/workf
   fail "Fast CI must stay capped at five minutes."
 grep -Eq '^[[:space:]]+run:[[:space:]]+make verify[[:space:]]*$' .github/workflows/verify.yml ||
   fail "Fast CI must call the canonical fast gate."
-grep -Fq "./scripts/install-xcodegen.sh" .github/workflows/full-verify.yml ||
-  fail "Full CI must use the checksum-verifying XcodeGen installer."
 grep -Eq '^  workflow_dispatch:[[:space:]]*$' .github/workflows/full-verify.yml ||
   fail "Full CI must remain manually dispatched."
 if grep -Eq '^  (pull_request|push|schedule):' .github/workflows/full-verify.yml; then

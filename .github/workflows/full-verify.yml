@@ -22,10 +22,5 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install XcodeGen
-        run: |
-          ./scripts/install-xcodegen.sh "${RUNNER_TEMP}/xcodegen"
-          echo "${RUNNER_TEMP}/xcodegen/xcodegen/bin" >> "${GITHUB_PATH}"
-
       - name: Run full verification
         run: make verify-full
