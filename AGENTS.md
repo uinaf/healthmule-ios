@@ -2,11 +2,12 @@
 
 ## Start here
 
-- Product contract: `docs/specs/healthkit-drive-exporter.md`
-- Architecture and privacy boundaries: `docs/ARCHITECTURE.md`
-- Google OAuth setup: `docs/GOOGLE_OAUTH.md`
-- Physical-device acceptance: `docs/DEVICE_TESTING.md`
-- TestFlight delivery: `docs/DISTRIBUTION.md`
+- [Product and export contract](docs/specs/healthkit-drive-exporter.md)
+- [Architecture and privacy boundaries](docs/ARCHITECTURE.md)
+- [Google OAuth setup](docs/GOOGLE_OAUTH.md)
+- [Physical-device acceptance](docs/DEVICE_TESTING.md)
+- [TestFlight delivery](docs/DISTRIBUTION.md)
+- [Sync-store scaling decision](docs/decisions/sync-store-persistence.md)
 - Generate the Xcode project: `make project`
 - Build and launch in Simulator: `make run`
 
@@ -22,6 +23,10 @@
   Claude Code iOS Simulator MCP included — fail until an operator runs
   `sudo xcode-select -s /Applications/Xcode.app`. Use `./scripts/xcrun.sh`
   meanwhile.
+- Boot the target Simulator before `make test`, `make smoke`, or
+  `make verify-full`. Against a cold device the test runner loses a launch race
+  and every UI test fails with `SBMainWorkspace ... Busy`, which reads like a
+  product failure but is not one.
 - XcodeGen is pinned and provisioned into `.artifacts/toolchain` by
   `make project`. Do not install it separately; a different version rewrites the
   whole project file.
@@ -34,11 +39,12 @@
 - Runtime smoke test: `make smoke`
 
 `make verify` checks the infrastructure contract, parses all app and iOS test
-Swift, and runs the deterministic core tests on Linux or macOS. It does not type
-check or compile the app, so app, Watch, and UI changes also need `make build`
-or `make smoke`. `make verify-full` owns the complete iOS unit and Simulator UI
-suite; nothing in required CI compiles the app or the Watch app today, so run it
-locally before shipping either.
+Swift, and runs the deterministic core tests on Linux or macOS. Parsing is not
+type checking, so app, Watch, and UI changes also need `make build` or
+`make smoke` locally. Required CI runs `make verify` on Linux plus `make build`
+on macOS, so a compile break is caught on the pull request. The iOS unit and
+Simulator UI suites belong to `make verify-full`, which only ever runs locally
+or through the manual `Full Verify` workflow.
 
 ## Repo rules
 

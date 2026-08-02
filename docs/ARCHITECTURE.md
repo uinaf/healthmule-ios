@@ -29,7 +29,7 @@ flowchart LR
     end
 
     subgraph Companion["HealthMule watchOS companion"]
-        WatchUI["SwiftUI status + Sync Now"] --> WatchBridge["WatchConnectivity"]
+        WatchUI["SwiftUI status + Sync"] --> WatchBridge["WatchConnectivity"]
     end
 
     Contract["HealthMuleCompanion versioned messages"]
@@ -421,34 +421,28 @@ make project
 make verify-full
 ```
 
-The canonical development commands are:
-
-```sh
-make project
-make test-infra
-make test-core
-make build
-make test
-make smoke
-make run
-make verify
-make verify-full
-```
+[Contributing](../CONTRIBUTING.md#validation) owns the command matrix and what
+each command is for. What matters architecturally is which boundary each gate
+actually proves.
 
 `make verify` is the fast cross-platform gate: it checks the serialized tooling
 contract, parses all app and iOS test Swift, and runs the deterministic
-Foundation package tests. Required CI runs that target on Linux. Parsing is not
-type checking, so `make verify` alone never proves that the app or the Watch app
-compiles.
-`make verify-full` adds the iOS app and UI tests on an available Simulator and
-is available through the manual `Full Verify` workflow. No required CI job
-compiles either app today, so run `make build` locally for app and Watch
-changes.
-`make test`, `make smoke`, and `make run` additionally require `xcode-select` to
-point at a full Xcode; they fail early with that instruction when it points at
-CommandLineTools.
-Neither command proves HealthKit authorization, observer delivery, Google OAuth,
-Drive uploads, or background relaunch behavior; those belong to the
+Foundation package tests. Parsing is not type checking, so `make verify` alone
+never proves that the app or the Watch app compiles. The `Verify` workflow
+therefore pairs it with a macOS job running `make build`, which type checks the
+iOS app and the embedded Watch app on every pull request.
+
+`make verify-full` adds the iOS app and UI tests on an available Simulator. It
+runs locally or through the manual `Full Verify` workflow, never on a pull
+request.
+
+`make test`, `make smoke`, and `make run` require `xcode-select` to point at a
+full Xcode and fail early with that instruction otherwise. They also need the
+target Simulator already booted; a cold device loses a launch race and reports
+`SBMainWorkspace ... Busy` for every UI test.
+
+No gate proves HealthKit authorization, observer delivery, Google OAuth, Drive
+uploads, or background relaunch behavior; those belong to the
 [physical-device checklist](DEVICE_TESTING.md).
 
 ## Reconciliation progress
