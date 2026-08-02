@@ -69,59 +69,36 @@ struct SyncView: View {
     }
 
     private var syncHero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            StatusBadge(
-                title: syncPresentation.badge,
-                tone: syncPresentation.tone
-            )
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(syncPresentation.title)
-                    .font(HealthMuleStyle.Text.heroTitle)
-                Text(syncPresentation.message)
-                    .font(HealthMuleStyle.Text.heroMessage)
-                    .foregroundStyle(.secondary)
-            }
-
-            if
-                let progress = model.syncProgress,
-                progress.totalUnits > 0
-            {
-                SyncDayProgressView(progress: progress)
-            }
-
-            if model.syncReadiness.canSync {
-                Button {
-                    Task {
-                        await model.reconcile(trigger: .manual)
-                    }
-                } label: {
-                    Label(
-                        model.operationState.isWorking(.sync)
-                            ? "Syncing"
-                            : "Sync now",
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(HealthMuleStyle.tint)
-                .controlSize(.large)
-                .disabled(model.operationState.isWorking)
-                .accessibilityIdentifier("sync-now-action")
-            } else if let setupActionLabel {
-                NavigationLink(value: HomeRoute.setup) {
-                    Label(setupActionLabel, systemImage: "arrow.right")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(HealthMuleStyle.tint)
-                .controlSize(.large)
-                .accessibilityIdentifier("sync-setup-action")
-            }
+        StatusHero(
+            badge: syncPresentation.badge,
+            tone: syncPresentation.tone,
+            title: syncPresentation.title,
+            message: syncPresentation.message,
+            needsAttention: syncPresentation.needsAttention,
+            progress: model.syncProgress
+        ) {
+            syncHeroAction
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .healthMuleCard(padding: 22)
+    }
+
+    @ViewBuilder
+    private var syncHeroAction: some View {
+        if model.syncReadiness.canSync {
+            Button {
+                Task {
+                    await model.reconcile(trigger: .manual)
+                }
+            } label: {
+                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .disabled(model.operationState.isWorking)
+            .accessibilityIdentifier("sync-now-action")
+        } else if let setupActionLabel {
+            NavigationLink(value: HomeRoute.setup) {
+                Label(setupActionLabel, systemImage: "arrow.right")
+            }
+            .accessibilityIdentifier("sync-setup-action")
+        }
     }
 
     private var queueCard: some View {
@@ -335,6 +312,10 @@ private struct SyncPresentation {
     let tone: StatusTone
     let title: String
     let message: String
+
+    var needsAttention: Bool {
+        tone == .warning || tone == .danger
+    }
 
     static func connection(
         badge: String,

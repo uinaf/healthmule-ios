@@ -86,38 +86,15 @@ struct StatusView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            StatusBadge(
-                title: heroPresentation.badge,
-                tone: heroPresentation.tone
-            )
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text(heroPresentation.title)
-                    .font(HealthMuleStyle.Text.heroTitle)
-                Text(heroPresentation.message)
-                    .font(HealthMuleStyle.Text.heroMessage)
-                    .foregroundStyle(.secondary)
-            }
-
-            if
-                let progress = model.syncProgress,
-                progress.totalUnits > 0
-            {
-                SyncDayProgressView(progress: progress)
-            }
-
+        StatusHero(
+            badge: heroPresentation.badge,
+            tone: heroPresentation.tone,
+            title: heroPresentation.title,
+            message: heroPresentation.message,
+            needsAttention: heroPresentation.needsAttention,
+            progress: model.syncProgress
+        ) {
             heroAction
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(22)
-        .background(
-            HealthMuleStyle.surface,
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(HealthMuleStyle.hairline, lineWidth: 1)
         }
     }
 
@@ -129,11 +106,7 @@ struct StatusView: View {
         case .setup(let title):
             NavigationLink(value: HomeRoute.setup) {
                 Label(title, systemImage: "arrow.right")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HealthMuleStyle.tint)
-            .controlSize(.large)
             .accessibilityIdentifier("open-setup-action")
         case .sync:
             Button {
@@ -141,15 +114,8 @@ struct StatusView: View {
                     await model.reconcile(trigger: .manual)
                 }
             } label: {
-                Label(
-                    model.operationState.isWorking(.sync) ? "Syncing" : "Sync now",
-                    systemImage: "arrow.triangle.2.circlepath"
-                )
-                .frame(maxWidth: .infinity)
+                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HealthMuleStyle.tint)
-            .controlSize(.large)
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
         case .retry:
@@ -164,9 +130,6 @@ struct StatusView: View {
                 )
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HealthMuleStyle.tint)
-            .controlSize(.large)
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-retry-action")
         }
@@ -701,6 +664,10 @@ private struct HeroPresentation {
     let title: String
     let message: String
     let action: Action
+
+    var needsAttention: Bool {
+        tone == .warning || tone == .danger
+    }
 }
 
 private struct ConnectionCard: View {
