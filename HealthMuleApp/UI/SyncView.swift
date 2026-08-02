@@ -89,7 +89,14 @@ struct SyncView: View {
                     await model.reconcile(trigger: .manual)
                 }
             } label: {
+                // The spinning glyph carries "in progress" so the label does
+                // not have to restate a badge that already says Syncing.
                 Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeating,
+                        isActive: model.operationState.isWorking(.sync)
+                    )
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("sync-now-action")
@@ -290,16 +297,20 @@ struct SyncDayProgressView: View {
     let progress: SyncProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        ProgressView(
+            value: Double(progress.completedUnits),
+            total: Double(progress.totalUnits)
+        ) {
+            EmptyView()
+        } currentValueLabel: {
             Text(progress.presentationText)
-                .font(.subheadline.weight(.medium))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .monospacedDigit()
-            ProgressView(
-                value: Double(progress.completedUnits),
-                total: Double(progress.totalUnits)
-            )
-            .tint(HealthMuleStyle.tint)
+                .contentTransition(.numericText())
         }
+        .tint(HealthMuleStyle.tint)
+        .animation(.default, value: progress.completedUnits)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Reconciliation progress")
         .accessibilityValue(progress.accessibilityValue)

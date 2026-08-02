@@ -79,19 +79,26 @@ struct StatusBadge: View {
 
 struct SectionHeading: View {
     let title: String
-    var subtitle: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(HealthMuleStyle.Text.sectionTitle)
-            if let subtitle {
-                Text(subtitle)
-                    .font(HealthMuleStyle.Text.sectionSubtitle)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Text(title)
+            .font(HealthMuleStyle.Text.sectionTitle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Explanatory copy for the group above it. iOS puts this below its section,
+/// not above it as a subtitle — a heading answers "what is this", a footer
+/// answers "what does it mean".
+struct SectionFooter: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(HealthMuleStyle.Text.sectionSubtitle)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
     }
 }
 
@@ -217,6 +224,8 @@ struct SyncFactsRow: View {
             Text(shown)
                 .font(HealthMuleStyle.Text.factValue)
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.default, value: shown)
                 .lineLimit(compact ? 1 : nil)
                 .minimumScaleFactor(compact ? 0.82 : 1)
                 .allowsTightening(compact)

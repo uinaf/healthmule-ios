@@ -26,15 +26,14 @@ struct StatusView: View {
                     connectionCards
                 }
 
-                VStack(spacing: 12) {
-                    SectionHeading(
-                        title: "Health data",
-                        subtitle: metricSummarySubtitle
-                    )
+                VStack(spacing: 8) {
+                    SectionHeading(title: "Health data")
+                        .padding(.bottom, 4)
                     NavigationLink(value: HomeRoute.metrics) {
                         metricSummaryCard
                     }
                     .buttonStyle(.plain)
+                    SectionFooter(text: metricSummarySubtitle)
                 }
 
                 privacyNote
@@ -114,7 +113,14 @@ struct StatusView: View {
                     await model.reconcile(trigger: .manual)
                 }
             } label: {
+                // The spinning glyph carries "in progress" so the label does
+                // not have to restate a badge that already says Syncing.
                 Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeating,
+                        isActive: model.operationState.isWorking(.sync)
+                    )
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
@@ -695,19 +701,21 @@ private struct ConnectionCard: View {
 
     private var standardLayout: some View {
         HStack(alignment: .center, spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline) {
+            connectionIcon
+            VStack(alignment: .leading, spacing: 4) {
+                // iOS states a row's value as trailing text rather than a
+                // badge; the capsule is reserved for the hero, where the state
+                // is the headline.
+                LabeledContent {
+                    Text(badge)
+                        .font(.subheadline)
+                        .foregroundStyle(statusForeground)
+                        .multilineTextAlignment(.trailing)
+                } label: {
                     connectionTitle
-                    Spacer()
-                    StatusBadge(title: badge, tone: tone)
                 }
                 Text(detail)
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
             }
@@ -719,22 +727,33 @@ private struct ConnectionCard: View {
     }
 
     private var accessibilityLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 10) {
+            connectionIcon
             connectionTitle
-            StatusBadge(title: badge, tone: tone)
-            Text(detail)
+            Text(badge)
                 .font(.subheadline)
+                .foregroundStyle(statusForeground)
+            Text(detail)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
         }
     }
 
+    private var connectionIcon: some View {
+        Image(systemName: systemImage)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .frame(width: 24)
+            .accessibilityHidden(true)
+    }
+
     private var connectionTitle: some View {
         Text(title)
-            .font(.headline)
+            .font(.subheadline.weight(.semibold))
+    }
+
+    private var statusForeground: Color {
+        tone == .danger ? tone.color : .secondary
     }
 }
