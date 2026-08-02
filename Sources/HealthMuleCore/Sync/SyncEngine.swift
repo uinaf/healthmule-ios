@@ -79,11 +79,15 @@ public actor SyncEngine {
         return report
     }
 
-    public func retryPendingUploads(force: Bool = false) async throws -> SyncReport {
+    public func retryPendingUploads(
+        force: Bool = false,
+        progress: UploadProgressObserver? = nil
+    ) async throws -> SyncReport {
         try await store.recover()
         var report = try await uploadPending(
             includeDeferred: force,
-            kind: .daily
+            kind: .daily,
+            progress: progress
         )
 
         guard
@@ -181,7 +185,8 @@ public actor SyncEngine {
 
     private func uploadPending(
         includeDeferred: Bool,
-        kind: ExportArtifactID.Kind? = nil
+        kind: ExportArtifactID.Kind? = nil,
+        progress: UploadProgressObserver? = nil
     ) async throws -> SyncReport {
         var report = SyncReport()
         let now = await clock.now()
@@ -191,9 +196,16 @@ public actor SyncEngine {
             kind: kind
         )
         try Task.checkCancellation()
+        await progress?(
+            UploadProgress(
+                settledArtifacts: 0,
+                totalArtifacts: artifacts.count
+            )
+        )
 
-        for artifact in artifacts {
+        for (index, artifact) in artifacts.enumerated() {
             try Task.checkCancellation()
+            var isLastSettledArtifact = false
             do {
                 try await destination.upsert(artifact)
                 try Task.checkCancellation()
@@ -230,8 +242,17 @@ public actor SyncEngine {
                     )
                 )
                 if artifact.id.kind == .daily {
-                    break
+                    isLastSettledArtifact = true
                 }
+            }
+            await progress?(
+                UploadProgress(
+                    settledArtifacts: index + 1,
+                    totalArtifacts: artifacts.count
+                )
+            )
+            if isLastSettledArtifact {
+                break
             }
         }
         report.pendingUploadCount = try await store.pendingUploadCount()

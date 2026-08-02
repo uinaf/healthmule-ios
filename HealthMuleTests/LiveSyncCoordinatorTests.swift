@@ -309,11 +309,12 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
         let emptyProgress = await emptyLog.snapshot()
         XCTAssertEqual(
-            emptyProgress,
+            emptyProgress.filter { $0.phase == .staging },
             [
                 SyncProgress(
-                    completedDays: 0,
-                    totalDays: 0,
+                    phase: .staging,
+                    completedUnits: 0,
+                    totalUnits: 0,
                     currentDate: nil
                 )
             ]
@@ -338,16 +339,18 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
         let oneProgress = await oneLog.snapshot()
         XCTAssertEqual(
-            oneProgress,
+            oneProgress.filter { $0.phase == .staging },
             [
                 SyncProgress(
-                    completedDays: 0,
-                    totalDays: 1,
+                    phase: .staging,
+                    completedUnits: 0,
+                    totalUnits: 1,
                     currentDate: nil
                 ),
                 SyncProgress(
-                    completedDays: 1,
-                    totalDays: 1,
+                    phase: .staging,
+                    completedUnits: 1,
+                    totalUnits: 1,
                     currentDate: oneFixture.dates[0]
                 ),
             ]
@@ -374,29 +377,68 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
         let multipleProgress = await multipleLog.snapshot()
         XCTAssertEqual(
-            multipleProgress,
+            multipleProgress.filter { $0.phase == .staging },
             [
                 SyncProgress(
-                    completedDays: 0,
-                    totalDays: 3,
+                    phase: .staging,
+                    completedUnits: 0,
+                    totalUnits: 3,
                     currentDate: nil
                 ),
                 SyncProgress(
-                    completedDays: 1,
-                    totalDays: 3,
+                    phase: .staging,
+                    completedUnits: 1,
+                    totalUnits: 3,
                     currentDate: multipleFixture.dates[0]
                 ),
                 SyncProgress(
-                    completedDays: 2,
-                    totalDays: 3,
+                    phase: .staging,
+                    completedUnits: 2,
+                    totalUnits: 3,
                     currentDate: multipleFixture.dates[1]
                 ),
                 SyncProgress(
-                    completedDays: 3,
-                    totalDays: 3,
+                    phase: .staging,
+                    completedUnits: 3,
+                    totalUnits: 3,
                     currentDate: multipleFixture.dates[2]
                 ),
             ]
+        )
+    }
+
+    func testProgressReportsUploadPhaseAfterStaging() async throws {
+        let fixture = try CoordinatorFixture(dayCount: 3)
+        defer { fixture.cleanUp() }
+        let progressLog = SyncProgressLog()
+        let coordinator = try fixture.makeCoordinator(
+            health: CoordinatorHealthChanges(
+                startDate: fixture.startInstant
+            ),
+            provider: CoordinatorRecordProvider(records: fixture.records)
+        )
+
+        _ = try await coordinator.reconcile(
+            trigger: .manual,
+            enabledMetrics: [],
+            backfillStart: fixture.dates[0],
+            progress: { progress in
+                await progressLog.append(progress)
+            }
+        )
+
+        let progress = await progressLog.snapshot()
+        let uploading = progress.filter { $0.phase == .uploading }
+        XCTAssertEqual(
+            uploading.map(\.completedUnits),
+            [0, 1, 2, 3],
+            "Every uploaded day must advance the progress bar."
+        )
+        XCTAssertTrue(uploading.allSatisfy { $0.totalUnits == 3 })
+        XCTAssertEqual(progress.last?.phase, .uploading)
+        XCTAssertEqual(
+            progress.last?.presentationText,
+            "Uploading 3 of 3 files"
         )
     }
 
@@ -433,13 +475,15 @@ final class LiveSyncCoordinatorTests: XCTestCase {
             progress,
             [
                 SyncProgress(
-                    completedDays: 0,
-                    totalDays: 3,
+                    phase: .staging,
+                    completedUnits: 0,
+                    totalUnits: 3,
                     currentDate: nil
                 ),
                 SyncProgress(
-                    completedDays: 1,
-                    totalDays: 3,
+                    phase: .staging,
+                    completedUnits: 1,
+                    totalUnits: 3,
                     currentDate: fixture.dates[0]
                 ),
             ]
@@ -482,9 +526,10 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         } catch is CancellationError {
             // Expected.
         }
-        let completedDays = await progressLog.snapshot()
-            .map(\.completedDays)
-        XCTAssertEqual(completedDays, [0, 1])
+        let stagingUnits = await progressLog.snapshot()
+            .filter { $0.phase == .staging }
+            .map(\.completedUnits)
+        XCTAssertEqual(stagingUnits, [0, 1])
     }
 
     func testResumedProgressUsesRemainingDateSet() async throws {
@@ -536,9 +581,15 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
 
         let resumedProgress = await resumedLog.snapshot()
-        XCTAssertEqual(resumedProgress.first?.totalDays, 4)
-        XCTAssertEqual(resumedProgress.last?.completedDays, 4)
-        XCTAssertEqual(resumedProgress.last?.currentDate, fixture.dates[4])
+        XCTAssertEqual(resumedProgress.first?.totalUnits, 4)
+        XCTAssertEqual(
+            resumedProgress.last(where: { $0.phase == .staging })?.completedUnits,
+            4
+        )
+        XCTAssertEqual(
+            resumedProgress.last(where: { $0.phase == .staging })?.currentDate,
+            fixture.dates[4]
+        )
     }
 }
 

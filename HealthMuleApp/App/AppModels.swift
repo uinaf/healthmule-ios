@@ -20,16 +20,36 @@ enum SyncTrigger: String, Sendable {
 }
 
 struct SyncProgress: Equatable, Sendable {
-    let completedDays: Int
-    let totalDays: Int
+    enum Phase: Equatable, Sendable {
+        case staging
+        case uploading
+
+        var unitNoun: String {
+            switch self {
+            case .staging: "days"
+            case .uploading: "files"
+            }
+        }
+
+        var verb: String {
+            switch self {
+            case .staging: "Processing"
+            case .uploading: "Uploading"
+            }
+        }
+    }
+
+    let phase: Phase
+    let completedUnits: Int
+    let totalUnits: Int
     let currentDate: LocalDate?
 
     var presentationText: String {
-        "Processing \(completedDays.formatted()) of \(totalDays.formatted()) days"
+        "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
     }
 
     var accessibilityValue: String {
-        "\(completedDays.formatted()) of \(totalDays.formatted()) days"
+        "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
     }
 }
 

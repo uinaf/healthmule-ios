@@ -108,7 +108,7 @@ struct StatusView: View {
 
             if
                 let progress = model.syncProgress,
-                progress.totalDays > 0
+                progress.totalUnits > 0
             {
                 SyncDayProgressView(progress: progress)
             }

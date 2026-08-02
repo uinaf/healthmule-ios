@@ -907,6 +907,90 @@ struct SyncEngineTests {
             #expect(await destination.contains(.daily(record.date)))
         }
     }
+
+    @Test
+    func retryReportsUploadProgressForEveryPendingDailyArtifact() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let records = try (0..<4).map { offset in
+            try makeRecord(date: String(format: "2026-06-%02d", offset + 1))
+        }
+        let destination = TestDestination()
+        let store = try FileSyncStore(rootDirectory: directory)
+        let engine = SyncEngine(
+            configuration: .init(exporterVersion: "1.0.0"),
+            recordProvider: TestRecordProvider(records: records),
+            destination: destination,
+            store: store,
+            clock: TestClock(Date(timeIntervalSince1970: 1_000)),
+            jitterSource: FixedJitterSource(value: 0.5)
+        )
+
+        _ = try await engine.reconcile(dates: Set(records.map(\.date)))
+        try await store.enqueueCurrentDailyArtifactsForUpload()
+        let observed = ProgressRecorder()
+        let retry = try await engine.retryPendingUploads(
+            force: true,
+            progress: { await observed.append($0) }
+        )
+
+        #expect(retry.uploadedDailyCount == 4)
+        #expect(
+            await observed.values == [
+                UploadProgress(settledArtifacts: 0, totalArtifacts: 4),
+                UploadProgress(settledArtifacts: 1, totalArtifacts: 4),
+                UploadProgress(settledArtifacts: 2, totalArtifacts: 4),
+                UploadProgress(settledArtifacts: 3, totalArtifacts: 4),
+                UploadProgress(settledArtifacts: 4, totalArtifacts: 4),
+            ]
+        )
+    }
+
+    @Test
+    func uploadProgressStopsAtTheArtifactThatFailed() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let records = try (0..<3).map { offset in
+            try makeRecord(date: String(format: "2026-06-%02d", offset + 1))
+        }
+        let destination = TestDestination()
+        let store = try FileSyncStore(rootDirectory: directory)
+        let engine = SyncEngine(
+            configuration: .init(exporterVersion: "1.0.0"),
+            recordProvider: TestRecordProvider(records: records),
+            destination: destination,
+            store: store,
+            clock: TestClock(Date(timeIntervalSince1970: 1_000)),
+            jitterSource: FixedJitterSource(value: 0.5)
+        )
+
+        _ = try await engine.reconcile(dates: Set(records.map(\.date)))
+        try await store.enqueueCurrentDailyArtifactsForUpload()
+        await destination.setFailureMode(
+            .permanent,
+            for: .daily(records[1].date)
+        )
+
+        let observed = ProgressRecorder()
+        _ = try await engine.retryPendingUploads(
+            force: true,
+            progress: { await observed.append($0) }
+        )
+
+        #expect(
+            await observed.values.last
+                == UploadProgress(settledArtifacts: 2, totalArtifacts: 3)
+        )
+        #expect(await observed.values.allSatisfy { $0.totalArtifacts == 3 })
+    }
+}
+
+private actor ProgressRecorder {
+    private(set) var values: [UploadProgress] = []
+
+    func append(_ progress: UploadProgress) {
+        values.append(progress)
+    }
 }
 
 private struct ManifestRetryHarness {

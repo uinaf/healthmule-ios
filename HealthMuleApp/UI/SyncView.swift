@@ -87,7 +87,7 @@ struct SyncView: View {
 
             if
                 let progress = model.syncProgress,
-                progress.totalDays > 0
+                progress.totalUnits > 0
             {
                 SyncDayProgressView(progress: progress)
             }
@@ -377,8 +377,8 @@ struct SyncDayProgressView: View {
                 .font(.subheadline.weight(.medium))
                 .monospacedDigit()
             ProgressView(
-                value: Double(progress.completedDays),
-                total: Double(progress.totalDays)
+                value: Double(progress.completedUnits),
+                total: Double(progress.totalUnits)
             )
             .tint(HealthMuleStyle.tint)
         }
