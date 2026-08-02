@@ -5,6 +5,20 @@ enum HealthMuleStyle {
     static let pagePadding: CGFloat = 20
     static let cardRadius: CGFloat = 20
 
+    /// One canonical scale so screens cannot drift apart. Card titles and body
+    /// copy sit a step below the system defaults, which read oversized in a
+    /// dense status app.
+    enum Text {
+        static let heroTitle = Font.title3.weight(.semibold)
+        static let heroMessage = Font.callout
+        static let sectionTitle = Font.headline
+        static let sectionSubtitle = Font.footnote
+        static let cardTitle = Font.subheadline.weight(.semibold)
+        static let cardBody = Font.footnote
+        static let factLabel = Font.caption2.weight(.medium)
+        static let factValue = Font.subheadline.weight(.semibold)
+    }
+
     static var canvas: Color {
         Color(uiColor: .systemBackground)
     }
@@ -70,14 +84,92 @@ struct SectionHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(HealthMuleStyle.Text.sectionTitle)
             if let subtitle {
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(HealthMuleStyle.Text.sectionSubtitle)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The queue facts shown on both Home and Sync. One component so the two
+/// screens cannot disagree about their order, labels, or type.
+struct SyncFactsRow: View {
+    let summary: SyncSummary
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize > .large {
+            VStack(spacing: 14) {
+                fact(.lastSync, compact: false)
+                Divider()
+                fact(.latestDay, compact: false)
+                Divider()
+                fact(.pending, compact: false)
+            }
+        } else {
+            HStack(alignment: .top, spacing: 0) {
+                fact(.lastSync, compact: true)
+                    .padding(.trailing, 10)
+                Divider()
+                fact(.latestDay, compact: true)
+                    .padding(.horizontal, 10)
+                Divider()
+                fact(.pending, compact: true)
+                    .padding(.leading, 10)
+            }
+        }
+    }
+
+    private enum Fact {
+        case lastSync
+        case latestDay
+        case pending
+
+        var label: String {
+            switch self {
+            case .lastSync: "Last sync"
+            case .latestDay: "Latest day"
+            case .pending: "Pending"
+            }
+        }
+    }
+
+    private func fact(_ fact: Fact, compact: Bool) -> some View {
+        let full: String
+        let shown: String
+        switch fact {
+        case .lastSync:
+            full = summary.lastSyncText
+            shown = compact ? summary.compactLastSyncText : full
+        case .latestDay:
+            full = summary.latestExportedDayText
+            shown = compact ? summary.compactLatestDayText : full
+        case .pending:
+            full = summary.pendingUploadCount.formatted()
+            shown = full
+        }
+
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(fact.label)
+                .font(HealthMuleStyle.Text.factLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(shown)
+                .font(HealthMuleStyle.Text.factValue)
+                .monospacedDigit()
+                .lineLimit(compact ? 1 : nil)
+                .minimumScaleFactor(compact ? 0.82 : 1)
+                .allowsTightening(compact)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(fact.label)
+        .accessibilityValue(full)
     }
 }
 

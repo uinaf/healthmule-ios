@@ -13,10 +13,7 @@ struct StatusView: View {
 
                 if shouldShowSummary {
                     VStack(spacing: 12) {
-                        SectionHeading(
-                            title: "Sync summary",
-                            subtitle: "Your local export queue at a glance."
-                        )
+                        SectionHeading(title: "Sync summary")
                         NavigationLink(value: HomeRoute.sync) {
                             summaryCard
                         }
@@ -25,10 +22,7 @@ struct StatusView: View {
                 }
 
                 VStack(spacing: 12) {
-                    SectionHeading(
-                        title: "Connections",
-                        subtitle: "Both sources stay under your control."
-                    )
+                    SectionHeading(title: "Connections")
                     connectionCards
                 }
 
@@ -100,9 +94,9 @@ struct StatusView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(heroPresentation.title)
-                    .font(.title2.weight(.semibold))
+                    .font(HealthMuleStyle.Text.heroTitle)
                 Text(heroPresentation.message)
-                    .font(.body)
+                    .font(HealthMuleStyle.Text.heroMessage)
                     .foregroundStyle(.secondary)
             }
 
@@ -228,57 +222,7 @@ struct StatusView: View {
                     .accessibilityHidden(true)
             }
 
-            if dynamicTypeSize > .large {
-                VStack(spacing: 14) {
-                    summaryValue(
-                        "Last sync",
-                        value: lastSyncValue
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Divider()
-                    summaryValue(
-                        "Latest day",
-                        value: model.syncSummary.latestExportedDate ?? "None"
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Divider()
-                    summaryValue(
-                        "Pending",
-                        value: model.syncSummary.pendingUploadCount.formatted()
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                HStack(alignment: .top, spacing: 0) {
-                    summaryValue(
-                        "Last sync",
-                        value: compactLastSyncValue,
-                        accessibilityValue: lastSyncValue,
-                        staysOnOneLine: true
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.trailing, 10)
-                    Divider()
-                    summaryValue(
-                        "Latest day",
-                        value: compactLatestDayValue,
-                        accessibilityValue:
-                            model.syncSummary.latestExportedDate ?? "None",
-                        staysOnOneLine: true
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    Divider()
-                    summaryValue(
-                        "Pending",
-                        value: model.syncSummary.pendingUploadCount.formatted(),
-                        staysOnOneLine: true
-                    )
-                    .frame(width: 48, alignment: .leading)
-                    .padding(.leading, 10)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            SyncFactsRow(summary: model.syncSummary)
         }
         .healthMuleCard(padding: 16)
         .contentShape(Rectangle())
@@ -290,7 +234,7 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 Text(metricSummaryTitle)
-                .font(.title2.weight(.semibold))
+                .font(HealthMuleStyle.Text.heroTitle)
                 .monospacedDigit()
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -421,54 +365,6 @@ struct StatusView: View {
         }
     }
 
-    private var lastSyncValue: String {
-        model.syncSummary.lastSuccessfulSyncAt?
-            .formatted(date: .abbreviated, time: .shortened) ?? "Never"
-    }
-
-    private var compactLastSyncValue: String {
-        guard let lastSync = model.syncSummary.lastSuccessfulSyncAt else {
-            return "Never"
-        }
-
-        let calendar = Calendar.current
-        let date: String
-        if calendar.component(.year, from: lastSync)
-            == calendar.component(.year, from: .now)
-        {
-            date = lastSync.formatted(
-                .dateTime.month(.abbreviated).day()
-            )
-        } else {
-            date = lastSync.formatted(
-                .dateTime.month(.abbreviated).day().year()
-            )
-        }
-        let time = lastSync.formatted(date: .omitted, time: .shortened)
-        return "\(date) · \(time)"
-    }
-
-    private var compactLatestDayValue: String {
-        guard let rawValue = model.syncSummary.latestExportedDate else {
-            return "None"
-        }
-        guard let date = BackfillDateCodec.date(from: rawValue) else {
-            return rawValue
-        }
-
-        let calendar = Calendar.current
-        if calendar.component(.year, from: date)
-            == calendar.component(.year, from: .now)
-        {
-            return date.formatted(
-                .dateTime.month(.abbreviated).day()
-            )
-        }
-        return date.formatted(
-            .dateTime.month(.abbreviated).day().year()
-        )
-    }
-
     private var healthConnectionDetail: String {
         switch model.healthAuthorizationState {
         case .unavailable:
@@ -487,7 +383,7 @@ struct StatusView: View {
             if readableMetricCount > 0 {
                 return "\(readableMetricCount) types currently expose samples."
             }
-            return "Request complete. Apple cannot distinguish denied access from no matching data."
+            return "Apple cannot distinguish denied access from no matching data."
         }
     }
 

@@ -13,7 +13,7 @@ struct SetupView: View {
             VStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Three small steps")
-                        .font(.title2.weight(.semibold))
+                        .font(HealthMuleStyle.Text.heroTitle)
                     Text(
                         "HealthMule reads a narrow fitness allowlist and writes normalized daily records directly to your Drive."
                     )
