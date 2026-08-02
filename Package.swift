@@ -5,9 +5,9 @@ import PackageDescription
 let package = Package(
     name: "HealthMuleCore",
     platforms: [
-        .iOS(.v18),
-        .macOS(.v15),
-        .watchOS(.v11),
+        .iOS("26.0"),
+        .macOS("26.0"),
+        .watchOS("26.0"),
     ],
     products: [
         .library(name: "HealthMuleCore", targets: ["HealthMuleCore"]),

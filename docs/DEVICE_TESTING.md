@@ -23,8 +23,8 @@ They still require the signed-device scenarios below.
 
 ## Prerequisites
 
-- A physical iPhone running iOS 18 or later.
-- A paired Apple Watch running watchOS 11 or later for companion acceptance.
+- A physical iPhone running iOS 26 or later.
+- A paired Apple Watch running watchOS 26 or later for companion acceptance.
 - Full Xcode with an Apple Development team capable of signing the app.
 - A native iOS Google OAuth client configured as described in
   [Google OAuth setup](GOOGLE_OAUTH.md).
