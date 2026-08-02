@@ -452,14 +452,21 @@ movement across both halves of the work:
 
 1. **Staging** counts days as HealthKit records are read and written to
    protected local storage.
-2. **Uploading** counts due artifacts as the core engine settles each one
-   against Drive. `SyncEngine.retryPendingUploads` emits `UploadProgress` before
-   the first artifact and after each artifact settles, whether it uploaded or
-   failed.
+2. **Uploading** counts *daily* artifacts as the core engine settles each one
+   against Drive. `SyncEngine.retryPendingUploads` passes the observer to its
+   daily pass only, emitting `UploadProgress` before the first artifact and
+   after each one settles, whether it uploaded or failed.
+
+The manifest publish that may follow is deliberately unreported. Whether a
+manifest is due is only known after every daily upload has settled
+(invariant 5), so no total covering both passes can be computed up front, and
+restarting the bar at `0 of 1` for a single-artifact tail would read as a
+regression rather than progress. The visible cost is that the bar sits at its
+maximum while one artifact publishes.
 
 The phase determines the presented noun, so a pinned staging bar can no longer
-stand in for an unreported upload. Progress carries counts and an optional local
-date only; it never carries health values or artifact contents.
+stand in for an unreported thirty-file upload. Progress carries counts and an
+optional local date only; it never carries health values or artifact contents.
 
 ## Remaining integration gaps
 
