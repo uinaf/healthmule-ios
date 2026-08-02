@@ -55,7 +55,7 @@ struct AppRootView: View {
             .tag(AppTab.settings)
         }
         .tabViewStyle(.sidebarAdaptable)
-        .tint(Color.primary)
+        .tint(HealthMuleStyle.tint)
     }
 }
 

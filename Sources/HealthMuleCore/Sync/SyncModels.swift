@@ -227,6 +227,19 @@ public struct SyncReport: Equatable, Sendable {
     public init() {}
 }
 
+public struct UploadProgress: Equatable, Sendable {
+    public let settledArtifacts: Int
+    public let totalArtifacts: Int
+
+    public init(settledArtifacts: Int, totalArtifacts: Int) {
+        self.settledArtifacts = settledArtifacts
+        self.totalArtifacts = totalArtifacts
+    }
+}
+
+public typealias UploadProgressObserver =
+    @Sendable (UploadProgress) async -> Void
+
 public enum FileSyncStoreError: Error, Equatable, Sendable {
     case unsupportedStateVersion(Int)
     case missingArtifact(String)

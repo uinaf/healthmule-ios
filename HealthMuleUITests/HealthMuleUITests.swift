@@ -79,7 +79,7 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(homeProgress.waitForExistence(timeout: 10))
         XCTAssertEqual(
             homeProgress.value as? String,
-            "12 of 30 days"
+            "Processing 12 of 30 days"
         )
         homeApp.terminate()
 
@@ -91,7 +91,7 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(syncProgress.waitForExistence(timeout: 10))
         XCTAssertEqual(
             syncProgress.value as? String,
-            "12 of 30 days"
+            "Processing 12 of 30 days"
         )
     }
 

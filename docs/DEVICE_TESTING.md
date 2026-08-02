@@ -23,8 +23,8 @@ They still require the signed-device scenarios below.
 
 ## Prerequisites
 
-- A physical iPhone running iOS 18 or later.
-- A paired Apple Watch running watchOS 11 or later for companion acceptance.
+- A physical iPhone running iOS 26 or later.
+- A paired Apple Watch running watchOS 26 or later for companion acceptance.
 - Full Xcode with an Apple Development team capable of signing the app.
 - A native iOS Google OAuth client configured as described in
   [Google OAuth setup](GOOGLE_OAUTH.md).
@@ -94,6 +94,10 @@ destination are implemented. Run these checks on a signed physical build with a
 configured OAuth client and integration Drive account.
 
 - [ ] An initial 30-day backfill creates one deterministic daily JSON object per calendar date and a manifest.
+- [ ] During that backfill the progress bar advances through both phases: it
+  counts days while staging, then counts files while uploading. It must not sit
+  pinned at 100% for the duration of the upload.
+- [ ] Retry pending uploads shows upload progress rather than no progress bar.
 - [ ] Running sync again without source changes creates no duplicate file and no semantic rewrite.
 - [ ] Adding or editing a workout updates only affected dates and the manifest.
 - [ ] Missing or unreadable values are encoded as explicit `null` values rather than omitted fields.
@@ -107,9 +111,9 @@ configured OAuth client and integration Drive account.
 - [ ] Launch the Watch app and confirm it shows only readiness, sync activity,
   last-success time, and queue counts. No health values, account details, Drive
   IDs, or error strings may cross the companion message.
-- [ ] With the iPhone reachable, tap Sync Now and confirm the Watch reports that
+- [ ] With the iPhone reachable, tap Sync and confirm the Watch reports that
   the request was accepted before the iPhone completes reconciliation.
-- [ ] Disable reachability and confirm Sync Now is unavailable rather than
+- [ ] Disable reachability and confirm Sync is unavailable rather than
   claiming that work was queued or completed.
 - [ ] Restore reachability, request another sync, and confirm the iPhone's
   existing reconciliation path publishes a fresh status snapshot.

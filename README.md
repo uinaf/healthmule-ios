@@ -10,28 +10,28 @@ request a sync while the phone is reachable. HealthMule has no developer
 backend, analytics, ads, or telemetry.
 
 The complete sync path is implemented and covered by deterministic core tests
-and Simulator checks. HealthKit background delivery, real Drive uploads, and
-process-interruption recovery still require acceptance testing with a signed
-build on physical devices; see [Physical-device testing](docs/DEVICE_TESTING.md).
+and Simulator checks. The Watch companion has no automated coverage yet.
+HealthKit background delivery, real Drive uploads, and process-interruption
+recovery require acceptance testing with a signed build on physical devices; see
+[Physical-device testing](docs/DEVICE_TESTING.md).
 
 ## Quick start
 
 Requirements:
 
-- A full Xcode installation with the iOS 18 and watchOS 11 SDKs
+- A full Xcode installation with the iOS 26 and watchOS 26 SDKs
 - Matching iOS and watchOS Simulator runtimes for app builds and launches
 - Swift 6
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 
-CI downloads the official XcodeGen release pinned in
-`scripts/install-xcodegen.sh` and verifies its published SHA-256 digest before
-use. Local development can use any compatible `xcodegen` on `PATH`.
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) needs no separate install.
+`make project` downloads the official release pinned in
+`scripts/install-xcodegen.sh`, verifies its published SHA-256 digest, and keeps
+it under `.artifacts/toolchain`.
 
 Generate the project and launch the phone app in the first available iPhone
 Simulator. Xcode also builds and embeds the Watch companion:
 
 ```sh
-brew install xcodegen
 make project
 make run
 ```

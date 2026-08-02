@@ -20,16 +20,36 @@ enum SyncTrigger: String, Sendable {
 }
 
 struct SyncProgress: Equatable, Sendable {
-    let completedDays: Int
-    let totalDays: Int
+    enum Phase: Equatable, Sendable {
+        case staging
+        case uploading
+
+        var unitNoun: String {
+            switch self {
+            case .staging: "days"
+            case .uploading: "files"
+            }
+        }
+
+        var verb: String {
+            switch self {
+            case .staging: "Processing"
+            case .uploading: "Uploading"
+            }
+        }
+    }
+
+    let phase: Phase
+    let completedUnits: Int
+    let totalUnits: Int
     let currentDate: LocalDate?
 
     var presentationText: String {
-        "Processing \(completedDays.formatted()) of \(totalDays.formatted()) days"
+        "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
     }
 
     var accessibilityValue: String {
-        "\(completedDays.formatted()) of \(totalDays.formatted()) days"
+        "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
     }
 }
 
@@ -441,6 +461,39 @@ struct SyncSummary: Equatable, Sendable {
         retryableUploadCount: 0,
         permanentFailureCount: 0
     )
+
+    var lastSyncText: String {
+        lastSuccessfulSyncAt?
+            .formatted(date: .abbreviated, time: .shortened) ?? "Never"
+    }
+
+    var compactLastSyncText: String {
+        guard let lastSync = lastSuccessfulSyncAt else { return "Never" }
+        let time = lastSync.formatted(date: .omitted, time: .shortened)
+        return "\(Self.compactDate(lastSync)) · \(time)"
+    }
+
+    var latestExportedDayText: String {
+        latestExportedDate ?? "None"
+    }
+
+    var compactLatestDayText: String {
+        guard let rawValue = latestExportedDate else { return "None" }
+        guard let date = BackfillDateCodec.date(from: rawValue) else {
+            return rawValue
+        }
+        return Self.compactDate(date)
+    }
+
+    private static func compactDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.component(.year, from: date)
+            == calendar.component(.year, from: .now)
+        {
+            return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
 }
 
 enum BackfillRange: String, CaseIterable, Identifiable, Codable, Sendable {

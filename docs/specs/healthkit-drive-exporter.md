@@ -3,7 +3,7 @@
 Status: implementation-ready v1 specification
 Target: native iPhone app with a lightweight Apple Watch companion
 Suggested stack: Swift 6, SwiftUI, HealthKit, Watch Connectivity, Google Drive API v3
-Minimum deployment targets: iOS 18 and watchOS 11
+Minimum deployment targets: iOS 26 and watchOS 26
 
 ## Problem
 

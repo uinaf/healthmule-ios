@@ -122,14 +122,10 @@ actor LiveSyncCoordinator {
             !exportContractChanged,
             missingDates.isEmpty
         {
-            await progress?(
-                SyncProgress(
-                    completedDays: 0,
-                    totalDays: 0,
-                    currentDate: nil
-                )
+            let report = try await runtime.engine.retryPendingUploads(
+                force: true,
+                progress: Self.uploadProgressObserver(forwardingTo: progress)
             )
-            let report = try await runtime.engine.retryPendingUploads(force: true)
             return try await outcome(report: report)
         }
 
@@ -204,10 +200,27 @@ actor LiveSyncCoordinator {
         }
 
         let uploadReport = try await runtime.engine.retryPendingUploads(
-            force: trigger == .retry
+            force: trigger == .retry,
+            progress: Self.uploadProgressObserver(forwardingTo: progress)
         )
         merge(uploadReport, into: &report)
         return try await outcome(report: report)
+    }
+
+    private static func uploadProgressObserver(
+        forwardingTo progress: (@Sendable (SyncProgress) async -> Void)?
+    ) -> UploadProgressObserver? {
+        guard let progress else { return nil }
+        return { uploadProgress in
+            await progress(
+                SyncProgress(
+                    phase: .uploading,
+                    completedUnits: uploadProgress.settledArtifacts,
+                    totalUnits: uploadProgress.totalArtifacts,
+                    currentDate: nil
+                )
+            )
+        }
     }
 
     func stageObservedChange(
@@ -391,8 +404,9 @@ actor LiveSyncCoordinator {
         let sortedDates = dates.sorted()
         await progress?(
             SyncProgress(
-                completedDays: 0,
-                totalDays: sortedDates.count,
+                phase: .staging,
+                completedUnits: 0,
+                totalUnits: sortedDates.count,
                 currentDate: nil
             )
         )
@@ -410,8 +424,9 @@ actor LiveSyncCoordinator {
             try Task.checkCancellation()
             await progress?(
                 SyncProgress(
-                    completedDays: index + 1,
-                    totalDays: sortedDates.count,
+                    phase: .staging,
+                    completedUnits: index + 1,
+                    totalUnits: sortedDates.count,
                     currentDate: date
                 )
             )

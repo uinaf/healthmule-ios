@@ -8,13 +8,15 @@ final class AppConfigurationTests: XCTestCase {
     func testSyncProgressStateRejectsStaleAndFinishedCallbacks() throws {
         var state = SyncProgressState()
         let firstProgress = SyncProgress(
-            completedDays: 1,
-            totalDays: 3,
+            phase: .staging,
+            completedUnits: 1,
+            totalUnits: 3,
             currentDate: try LocalDate(rawValue: "2026-07-27")
         )
         let staleProgress = SyncProgress(
-            completedDays: 2,
-            totalDays: 3,
+            phase: .staging,
+            completedUnits: 2,
+            totalUnits: 3,
             currentDate: try LocalDate(rawValue: "2026-07-28")
         )
 
@@ -37,16 +39,34 @@ final class AppConfigurationTests: XCTestCase {
 
     func testSyncProgressPresentationContainsNoHealthMetadata() throws {
         let progress = SyncProgress(
-            completedDays: 12,
-            totalDays: 30,
+            phase: .staging,
+            completedUnits: 12,
+            totalUnits: 30,
             currentDate: try LocalDate(rawValue: "2026-07-12")
+        )
+        let uploading = SyncProgress(
+            phase: .uploading,
+            completedUnits: 4,
+            totalUnits: 30,
+            currentDate: nil
         )
 
         XCTAssertEqual(
             progress.presentationText,
             "Processing 12 of 30 days"
         )
-        XCTAssertEqual(progress.accessibilityValue, "12 of 30 days")
+        XCTAssertEqual(
+            progress.accessibilityValue,
+            "Processing 12 of 30 days"
+        )
+        XCTAssertEqual(
+            uploading.presentationText,
+            "Uploading 4 of 30 files"
+        )
+        XCTAssertEqual(
+            uploading.accessibilityValue,
+            "Uploading 4 of 30 files"
+        )
     }
 
     func testBackgroundDeliveryCallbackMapping() {

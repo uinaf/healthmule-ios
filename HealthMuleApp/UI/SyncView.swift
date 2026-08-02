@@ -12,14 +12,11 @@ struct SyncView: View {
                 queueCard
 
                 VStack(spacing: 12) {
-                    SectionHeading(
-                        title: "Repair",
-                        subtitle: "Use these only when the normal reconciliation needs help."
-                    )
+                    SectionHeading(title: "Repair")
                     VStack(spacing: 10) {
                         SyncActionRow(
                             title: "Retry pending uploads",
-                            subtitle: "Retry locally staged records without rebuilding them.",
+                            subtitle: "Without rebuilding them.",
                             systemImage: "arrow.clockwise",
                             isDisabled: model.operationState.isWorking
                                 || !model.syncReadiness.canSync
@@ -33,7 +30,7 @@ struct SyncView: View {
 
                         SyncActionRow(
                             title: "Rebuild last 3 days",
-                            subtitle: "Recompute the rolling reconciliation window.",
+                            subtitle: "Recompute the rolling window.",
                             systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
                             isDisabled: model.operationState.isWorking
                                 || !model.syncReadiness.canSync
@@ -51,7 +48,7 @@ struct SyncView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                     Text(
-                        "Opening the app reconciles automatically. Background timing is controlled by iOS and is never guaranteed."
+                        "Opening the app reconciles automatically. iOS controls background timing."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -72,121 +69,53 @@ struct SyncView: View {
     }
 
     private var syncHero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            StatusBadge(
-                title: syncPresentation.badge,
-                tone: syncPresentation.tone
-            )
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(syncPresentation.title)
-                    .font(.title2.weight(.semibold))
-                Text(syncPresentation.message)
-                .foregroundStyle(.secondary)
-            }
-
-            if
-                let progress = model.syncProgress,
-                progress.totalDays > 0
-            {
-                SyncDayProgressView(progress: progress)
-            }
-
-            if model.syncReadiness.canSync {
-                Button {
-                    Task {
-                        await model.reconcile(trigger: .manual)
-                    }
-                } label: {
-                    Label(
-                        model.operationState.isWorking(.sync)
-                            ? "Syncing"
-                            : "Sync now",
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(HealthMuleStyle.tint)
-                .controlSize(.large)
-                .disabled(model.operationState.isWorking)
-                .accessibilityIdentifier("sync-now-action")
-            } else if let setupActionLabel {
-                NavigationLink(value: HomeRoute.setup) {
-                    Label(setupActionLabel, systemImage: "arrow.right")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(HealthMuleStyle.tint)
-                .controlSize(.large)
-                .accessibilityIdentifier("sync-setup-action")
-            }
+        StatusHero(
+            badge: syncPresentation.badge,
+            tone: syncPresentation.tone,
+            title: syncPresentation.title,
+            message: syncPresentation.message,
+            needsAttention: syncPresentation.needsAttention,
+            progress: model.syncProgress
+        ) {
+            syncHeroAction
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .healthMuleCard(padding: 22)
+    }
+
+    @ViewBuilder
+    private var syncHeroAction: some View {
+        if model.syncReadiness.canSync {
+            Button {
+                Task {
+                    await model.reconcile(trigger: .manual)
+                }
+            } label: {
+                // The spinning glyph carries "in progress" so the label does
+                // not have to restate a badge that already says Syncing.
+                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeating,
+                        isActive: model.operationState.isWorking(.sync)
+                    )
+            }
+            .disabled(model.operationState.isWorking)
+            .accessibilityIdentifier("sync-now-action")
+        } else if let setupActionLabel {
+            NavigationLink(value: HomeRoute.setup) {
+                Label(setupActionLabel, systemImage: "arrow.right")
+            }
+            .accessibilityIdentifier("sync-setup-action")
+        }
     }
 
     private var queueCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Queue")
-                .font(.headline)
+                .font(HealthMuleStyle.Text.cardTitle)
 
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 14) {
-                    queueValue(
-                        "Pending uploads",
-                        value: model.syncSummary.pendingUploadCount.formatted()
-                    )
-                    Divider()
-                    queueValue(
-                        "Latest exported day",
-                        value: model.syncSummary.latestExportedDate ?? "None"
-                    )
-                    Divider()
-                    queueValue(
-                        "Last successful sync",
-                        value: lastSyncValue
-                    )
-                }
-            } else {
-                HStack(alignment: .top, spacing: 0) {
-                    queueValue(
-                        "Pending",
-                        value: model.syncSummary.pendingUploadCount.formatted()
-                    )
-                    Divider()
-                    queueValue(
-                        "Latest day",
-                        value: model.syncSummary.latestExportedDate ?? "None"
-                    )
-                    Divider()
-                    queueValue(
-                        "Last sync",
-                        value: lastSyncValue
-                    )
-                }
-            }
+            SyncFactsRow(summary: model.syncSummary)
         }
-        .healthMuleCard()
-    }
-
-    private func queueValue(
-        _ label: String,
-        value: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
-                .monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(value)
+        .healthMuleCard(padding: 16)
     }
 
     private var syncPresentation: SyncPresentation {
@@ -333,7 +262,7 @@ struct SyncView: View {
     }
 
     private static let defaultSyncMessage =
-        "HealthMule reconciles changed days, the latest three-day window, and any missing backfill records."
+        "Changed days, the latest three days, and any missing backfill."
 
     private var setupActionLabel: String? {
         switch model.syncReadiness {
@@ -362,26 +291,26 @@ struct SyncView: View {
         }
     }
 
-    private var lastSyncValue: String {
-        model.syncSummary.lastSuccessfulSyncAt?
-            .formatted(date: .abbreviated, time: .shortened) ?? "Never"
-    }
 }
 
 struct SyncDayProgressView: View {
     let progress: SyncProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        ProgressView(
+            value: Double(progress.completedUnits),
+            total: Double(progress.totalUnits)
+        ) {
+            EmptyView()
+        } currentValueLabel: {
             Text(progress.presentationText)
-                .font(.subheadline.weight(.medium))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .monospacedDigit()
-            ProgressView(
-                value: Double(progress.completedDays),
-                total: Double(progress.totalDays)
-            )
-            .tint(HealthMuleStyle.tint)
+                .contentTransition(.numericText())
         }
+        .tint(HealthMuleStyle.tint)
+        .animation(.default, value: progress.completedUnits)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Reconciliation progress")
         .accessibilityValue(progress.accessibilityValue)
@@ -394,6 +323,10 @@ private struct SyncPresentation {
     let tone: StatusTone
     let title: String
     let message: String
+
+    var needsAttention: Bool {
+        tone == .warning || tone == .danger
+    }
 
     static func connection(
         badge: String,

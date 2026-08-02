@@ -13,10 +13,7 @@ struct StatusView: View {
 
                 if shouldShowSummary {
                     VStack(spacing: 12) {
-                        SectionHeading(
-                            title: "Sync summary",
-                            subtitle: "Your local export queue at a glance."
-                        )
+                        SectionHeading(title: "Sync summary")
                         NavigationLink(value: HomeRoute.sync) {
                             summaryCard
                         }
@@ -25,22 +22,21 @@ struct StatusView: View {
                 }
 
                 VStack(spacing: 12) {
-                    SectionHeading(
-                        title: "Connections",
-                        subtitle: "Both sources stay under your control."
-                    )
+                    SectionHeading(title: "Connections")
                     connectionCards
                 }
 
-                VStack(spacing: 12) {
-                    SectionHeading(
-                        title: "Health data",
-                        subtitle: metricSummarySubtitle
-                    )
+                VStack(spacing: 8) {
+                    SectionHeading(title: "Health data")
+                        .padding(.bottom, 4)
                     NavigationLink(value: HomeRoute.metrics) {
                         metricSummaryCard
                     }
                     .buttonStyle(.plain)
+                    SectionFooter(
+                        text: metricSummarySubtitle,
+                        isAccessibilityHidden: true
+                    )
                 }
 
                 privacyNote
@@ -92,38 +88,15 @@ struct StatusView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            StatusBadge(
-                title: heroPresentation.badge,
-                tone: heroPresentation.tone
-            )
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text(heroPresentation.title)
-                    .font(.title2.weight(.semibold))
-                Text(heroPresentation.message)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-
-            if
-                let progress = model.syncProgress,
-                progress.totalDays > 0
-            {
-                SyncDayProgressView(progress: progress)
-            }
-
+        StatusHero(
+            badge: heroPresentation.badge,
+            tone: heroPresentation.tone,
+            title: heroPresentation.title,
+            message: heroPresentation.message,
+            needsAttention: heroPresentation.needsAttention,
+            progress: model.syncProgress
+        ) {
             heroAction
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(22)
-        .background(
-            HealthMuleStyle.surface,
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(HealthMuleStyle.hairline, lineWidth: 1)
         }
     }
 
@@ -135,11 +108,7 @@ struct StatusView: View {
         case .setup(let title):
             NavigationLink(value: HomeRoute.setup) {
                 Label(title, systemImage: "arrow.right")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HealthMuleStyle.tint)
-            .controlSize(.large)
             .accessibilityIdentifier("open-setup-action")
         case .sync:
             Button {
@@ -147,15 +116,15 @@ struct StatusView: View {
                     await model.reconcile(trigger: .manual)
                 }
             } label: {
-                Label(
-                    model.operationState.isWorking(.sync) ? "Syncing" : "Sync now",
-                    systemImage: "arrow.triangle.2.circlepath"
-                )
-                .frame(maxWidth: .infinity)
+                // The spinning glyph carries "in progress" so the label does
+                // not have to restate a badge that already says Syncing.
+                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeating,
+                        isActive: model.operationState.isWorking(.sync)
+                    )
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HealthMuleStyle.tint)
-            .controlSize(.large)
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
         case .retry:
@@ -170,9 +139,6 @@ struct StatusView: View {
                 )
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HealthMuleStyle.tint)
-            .controlSize(.large)
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-retry-action")
         }
@@ -228,57 +194,7 @@ struct StatusView: View {
                     .accessibilityHidden(true)
             }
 
-            if dynamicTypeSize > .large {
-                VStack(spacing: 14) {
-                    summaryValue(
-                        "Last sync",
-                        value: lastSyncValue
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Divider()
-                    summaryValue(
-                        "Latest day",
-                        value: model.syncSummary.latestExportedDate ?? "None"
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Divider()
-                    summaryValue(
-                        "Pending",
-                        value: model.syncSummary.pendingUploadCount.formatted()
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                HStack(alignment: .top, spacing: 0) {
-                    summaryValue(
-                        "Last sync",
-                        value: compactLastSyncValue,
-                        accessibilityValue: lastSyncValue,
-                        staysOnOneLine: true
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.trailing, 10)
-                    Divider()
-                    summaryValue(
-                        "Latest day",
-                        value: compactLatestDayValue,
-                        accessibilityValue:
-                            model.syncSummary.latestExportedDate ?? "None",
-                        staysOnOneLine: true
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    Divider()
-                    summaryValue(
-                        "Pending",
-                        value: model.syncSummary.pendingUploadCount.formatted(),
-                        staysOnOneLine: true
-                    )
-                    .frame(width: 48, alignment: .leading)
-                    .padding(.leading, 10)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            SyncFactsRow(summary: model.syncSummary)
         }
         .healthMuleCard(padding: 16)
         .contentShape(Rectangle())
@@ -290,7 +206,7 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 Text(metricSummaryTitle)
-                .font(.title2.weight(.semibold))
+                .font(HealthMuleStyle.Text.heroTitle)
                 .monospacedDigit()
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -421,54 +337,6 @@ struct StatusView: View {
         }
     }
 
-    private var lastSyncValue: String {
-        model.syncSummary.lastSuccessfulSyncAt?
-            .formatted(date: .abbreviated, time: .shortened) ?? "Never"
-    }
-
-    private var compactLastSyncValue: String {
-        guard let lastSync = model.syncSummary.lastSuccessfulSyncAt else {
-            return "Never"
-        }
-
-        let calendar = Calendar.current
-        let date: String
-        if calendar.component(.year, from: lastSync)
-            == calendar.component(.year, from: .now)
-        {
-            date = lastSync.formatted(
-                .dateTime.month(.abbreviated).day()
-            )
-        } else {
-            date = lastSync.formatted(
-                .dateTime.month(.abbreviated).day().year()
-            )
-        }
-        let time = lastSync.formatted(date: .omitted, time: .shortened)
-        return "\(date) · \(time)"
-    }
-
-    private var compactLatestDayValue: String {
-        guard let rawValue = model.syncSummary.latestExportedDate else {
-            return "None"
-        }
-        guard let date = BackfillDateCodec.date(from: rawValue) else {
-            return rawValue
-        }
-
-        let calendar = Calendar.current
-        if calendar.component(.year, from: date)
-            == calendar.component(.year, from: .now)
-        {
-            return date.formatted(
-                .dateTime.month(.abbreviated).day()
-            )
-        }
-        return date.formatted(
-            .dateTime.month(.abbreviated).day().year()
-        )
-    }
-
     private var healthConnectionDetail: String {
         switch model.healthAuthorizationState {
         case .unavailable:
@@ -487,7 +355,7 @@ struct StatusView: View {
             if readableMetricCount > 0 {
                 return "\(readableMetricCount) types currently expose samples."
             }
-            return "Request complete. Apple cannot distinguish denied access from no matching data."
+            return "Apple cannot distinguish denied access from no matching data."
         }
     }
 
@@ -805,6 +673,10 @@ private struct HeroPresentation {
     let title: String
     let message: String
     let action: Action
+
+    var needsAttention: Bool {
+        tone == .warning || tone == .danger
+    }
 }
 
 private struct ConnectionCard: View {
@@ -832,19 +704,21 @@ private struct ConnectionCard: View {
 
     private var standardLayout: some View {
         HStack(alignment: .center, spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline) {
+            connectionIcon
+            VStack(alignment: .leading, spacing: 4) {
+                // iOS states a row's value as trailing text rather than a
+                // badge; the capsule is reserved for the hero, where the state
+                // is the headline.
+                LabeledContent {
+                    Text(badge)
+                        .font(.subheadline)
+                        .foregroundStyle(statusForeground)
+                        .multilineTextAlignment(.trailing)
+                } label: {
                     connectionTitle
-                    Spacer()
-                    StatusBadge(title: badge, tone: tone)
                 }
                 Text(detail)
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
             }
@@ -856,22 +730,33 @@ private struct ConnectionCard: View {
     }
 
     private var accessibilityLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 10) {
+            connectionIcon
             connectionTitle
-            StatusBadge(title: badge, tone: tone)
-            Text(detail)
+            Text(badge)
                 .font(.subheadline)
+                .foregroundStyle(statusForeground)
+            Text(detail)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
         }
     }
 
+    private var connectionIcon: some View {
+        Image(systemName: systemImage)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .frame(width: 24)
+            .accessibilityHidden(true)
+    }
+
     private var connectionTitle: some View {
         Text(title)
-            .font(.headline)
+            .font(.subheadline.weight(.semibold))
+    }
+
+    private var statusForeground: Color {
+        tone == .danger ? tone.color : .secondary
     }
 }

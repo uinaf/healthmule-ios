@@ -2052,8 +2052,9 @@ final class AppModel {
                 syncProgressState.begin(epoch: operationEpoch)
                 syncProgressState.publish(
                     SyncProgress(
-                        completedDays: 12,
-                        totalDays: 30,
+                        phase: .staging,
+                        completedUnits: 12,
+                        totalUnits: 30,
                         currentDate: try? LocalDate(
                             rawValue: "2026-07-12"
                         )

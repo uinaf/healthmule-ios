@@ -5,6 +5,20 @@ enum HealthMuleStyle {
     static let pagePadding: CGFloat = 20
     static let cardRadius: CGFloat = 20
 
+    /// One canonical scale so screens cannot drift apart. Card titles and body
+    /// copy sit a step below the system defaults, which read oversized in a
+    /// dense status app.
+    enum Text {
+        static let heroTitle = Font.title3.weight(.semibold)
+        static let heroMessage = Font.callout
+        static let sectionTitle = Font.headline
+        static let sectionSubtitle = Font.footnote
+        static let cardTitle = Font.subheadline.weight(.semibold)
+        static let cardBody = Font.footnote
+        static let factLabel = Font.caption2.weight(.medium)
+        static let factValue = Font.subheadline.weight(.semibold)
+    }
+
     static var canvas: Color {
         Color(uiColor: .systemBackground)
     }
@@ -22,7 +36,7 @@ enum HealthMuleStyle {
     }
 }
 
-enum StatusTone {
+enum StatusTone: Equatable {
     case neutral
     case accent
     case success
@@ -65,19 +79,165 @@ struct StatusBadge: View {
 
 struct SectionHeading: View {
     let title: String
-    var subtitle: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.title3.weight(.semibold))
-            if let subtitle {
-                Text(subtitle)
-                    .font(.subheadline)
+        Text(title)
+            .font(HealthMuleStyle.Text.sectionTitle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Explanatory copy for the group above it. iOS puts this below its section,
+/// not above it as a subtitle — a heading answers "what is this", a footer
+/// answers "what does it mean".
+struct SectionFooter: View {
+    let text: String
+    /// Set when the section's own element already announces this string, so
+    /// VoiceOver does not read it twice.
+    var isAccessibilityHidden = false
+
+    var body: some View {
+        Text(text)
+            .font(HealthMuleStyle.Text.sectionSubtitle)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .accessibilityHidden(isAccessibilityHidden)
+    }
+}
+
+/// The primary status surface on Home and Sync.
+///
+/// When nothing is asked of the reader the status is a single row: the badge
+/// already names the state, so a headline restating it earns no space. States
+/// that need a decision keep the explanatory headline and a prominent action.
+struct StatusHero<Action: View>: View {
+    let badge: String
+    let tone: StatusTone
+    let title: String
+    let message: String
+    let needsAttention: Bool
+    var progress: SyncProgress?
+    @ViewBuilder var action: () -> Action
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: needsAttention ? 18 : 14) {
+            if needsAttention {
+                StatusBadge(title: badge, tone: tone)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(HealthMuleStyle.Text.heroTitle)
+                    Text(message)
+                        .font(HealthMuleStyle.Text.heroMessage)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    StatusBadge(title: badge, tone: tone)
+                    Spacer(minLength: 8)
+                    action()
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                Text(message)
+                    .font(HealthMuleStyle.Text.cardBody)
                     .foregroundStyle(.secondary)
+            }
+
+            if let progress, progress.totalUnits > 0 {
+                SyncDayProgressView(progress: progress)
+            }
+
+            if needsAttention {
+                action()
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                    .tint(HealthMuleStyle.tint)
+                    .controlSize(.large)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .healthMuleCard(padding: needsAttention ? 20 : 16)
+    }
+}
+
+/// The queue facts shown on both Home and Sync. One component so the two
+/// screens cannot disagree about their order, labels, or type.
+struct SyncFactsRow: View {
+    let summary: SyncSummary
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize > .large {
+            VStack(spacing: 14) {
+                fact(.lastSync, compact: false)
+                Divider()
+                fact(.latestDay, compact: false)
+                Divider()
+                fact(.pending, compact: false)
+            }
+        } else {
+            HStack(alignment: .top, spacing: 0) {
+                fact(.lastSync, compact: true)
+                    .padding(.trailing, 10)
+                Divider()
+                fact(.latestDay, compact: true)
+                    .padding(.horizontal, 10)
+                Divider()
+                fact(.pending, compact: true)
+                    .padding(.leading, 10)
+            }
+        }
+    }
+
+    private enum Fact {
+        case lastSync
+        case latestDay
+        case pending
+
+        var label: String {
+            switch self {
+            case .lastSync: "Last sync"
+            case .latestDay: "Latest day"
+            case .pending: "Pending"
+            }
+        }
+    }
+
+    private func fact(_ fact: Fact, compact: Bool) -> some View {
+        let full: String
+        let shown: String
+        switch fact {
+        case .lastSync:
+            full = summary.lastSyncText
+            shown = compact ? summary.compactLastSyncText : full
+        case .latestDay:
+            full = summary.latestExportedDayText
+            shown = compact ? summary.compactLatestDayText : full
+        case .pending:
+            full = summary.pendingUploadCount.formatted()
+            shown = full
+        }
+
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(fact.label)
+                .font(HealthMuleStyle.Text.factLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(shown)
+                .font(HealthMuleStyle.Text.factValue)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.default, value: shown)
+                .lineLimit(compact ? 1 : nil)
+                .minimumScaleFactor(compact ? 0.82 : 1)
+                .allowsTightening(compact)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(fact.label)
+        .accessibilityValue(full)
     }
 }
 
