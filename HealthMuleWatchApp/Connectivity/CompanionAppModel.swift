@@ -69,52 +69,44 @@ final class CompanionAppModel: NSObject {
         requestBaselineSnapshot = snapshot
         receivedPostRequestSnapshot = false
         deliveryState = .sending
+        // WatchConnectivity invokes these on its own operation queue. Both must
+        // stay @Sendable: a closure literal written inside this @MainActor type
+        // is otherwise inferred main-actor isolated, and the compiler emits a
+        // runtime isolation assertion that traps the moment the phone replies.
+        let requestID = request.id
         session.sendMessage(
             message,
-            replyHandler: { [weak self] reply in
+            replyHandler: { @Sendable [weak self] reply in
                 let accepted = CompanionPayloadCodec.isAccepted(reply)
-                Task { @MainActor [weak self] in
-                    guard
-                        let self,
-                        outstandingRequestID == request.id
-                    else {
-                        return
-                    }
-                    outstandingRequestID = nil
-                    if accepted {
-                        deliveryState = receivedPostRequestSnapshot
-                            ? .idle
-                            : .accepted
-                        if deliveryState == .accepted {
-                            acceptedRequestID = request.id
-                            resetAcceptedStateIfNeeded(for: request.id)
-                        }
-                    } else {
-                        deliveryState = .failed
-                    }
-                    if deliveryState != .accepted {
-                        acceptedRequestID = nil
-                        requestBaselineSnapshot = nil
-                        receivedPostRequestSnapshot = false
-                    }
+                Task { @MainActor in
+                    self?.completeRequest(requestID, accepted: accepted)
                 }
             },
-            errorHandler: { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard
-                        let self,
-                        outstandingRequestID == request.id
-                    else {
-                        return
-                    }
-                    outstandingRequestID = nil
-                    acceptedRequestID = nil
-                    deliveryState = .failed
-                    requestBaselineSnapshot = nil
-                    receivedPostRequestSnapshot = false
+            errorHandler: { @Sendable [weak self] _ in
+                Task { @MainActor in
+                    self?.completeRequest(requestID, accepted: false)
                 }
             }
         )
+    }
+
+    private func completeRequest(_ requestID: UUID, accepted: Bool) {
+        guard outstandingRequestID == requestID else { return }
+        outstandingRequestID = nil
+        if accepted {
+            deliveryState = receivedPostRequestSnapshot ? .idle : .accepted
+            if deliveryState == .accepted {
+                acceptedRequestID = requestID
+                resetAcceptedStateIfNeeded(for: requestID)
+            }
+        } else {
+            deliveryState = .failed
+        }
+        if deliveryState != .accepted {
+            acceptedRequestID = nil
+            requestBaselineSnapshot = nil
+            receivedPostRequestSnapshot = false
+        }
     }
 
     private func resetAcceptedStateIfNeeded(for requestID: UUID) {
