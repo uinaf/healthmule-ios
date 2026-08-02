@@ -92,6 +92,9 @@ struct SectionHeading: View {
 /// answers "what does it mean".
 struct SectionFooter: View {
     let text: String
+    /// Set when the section's own element already announces this string, so
+    /// VoiceOver does not read it twice.
+    var isAccessibilityHidden = false
 
     var body: some View {
         Text(text)
@@ -99,6 +102,7 @@ struct SectionFooter: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
+            .accessibilityHidden(isAccessibilityHidden)
     }
 }
 

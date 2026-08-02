@@ -63,6 +63,10 @@ final class AppConfigurationTests: XCTestCase {
             uploading.presentationText,
             "Uploading 4 of 30 files"
         )
+        XCTAssertEqual(
+            uploading.accessibilityValue,
+            "Uploading 4 of 30 files"
+        )
     }
 
     func testBackgroundDeliveryCallbackMapping() {

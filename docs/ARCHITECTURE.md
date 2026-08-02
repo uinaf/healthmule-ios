@@ -436,10 +436,11 @@ iOS app and the embedded Watch app on every pull request.
 runs locally or through the manual `Full Verify` workflow, never on a pull
 request.
 
-`make test`, `make smoke`, and `make run` require `xcode-select` to point at a
-full Xcode and fail early with that instruction otherwise. They also need the
-target Simulator already booted; a cold device loses a launch race and reports
-`SBMainWorkspace ... Busy` for every UI test.
+`make test`, `make smoke`, `make run`, and `make verify-full` (which runs the
+test task) require `xcode-select` to point at a full Xcode and fail early with
+that instruction otherwise. They also need the target Simulator already booted;
+a cold device loses a launch race and reports `SBMainWorkspace ... Busy` for
+every UI test.
 
 No gate proves HealthKit authorization, observer delivery, Google OAuth, Drive
 uploads, or background relaunch behavior; those belong to the

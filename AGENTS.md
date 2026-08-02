@@ -17,8 +17,10 @@
 - Everything that compiles the app or the Watch app needs a full Xcode with the
   iOS and watchOS SDKs.
 - Always call the `scripts/` wrappers instead of bare `swift`, `xcodebuild`, or
-  `xcrun`. They locate `/Applications/Xcode*.app` themselves, so the gates work
-  even when `xcode-select` points at CommandLineTools.
+  `xcrun`. They locate `/Applications/Xcode*.app` themselves, so `make verify`
+  and `make build` work even when `xcode-select` points at CommandLineTools.
+  `make test`, `make smoke`, and `make run` cannot be compensated for that way —
+  see below.
 - `xcrun simctl` and any tool that resolves Xcode through `xcode-select` — the
   Claude Code iOS Simulator MCP included — fail until an operator runs
   `sudo xcode-select -s /Applications/Xcode.app`. Use `./scripts/xcrun.sh`

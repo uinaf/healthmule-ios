@@ -33,7 +33,10 @@ struct StatusView: View {
                         metricSummaryCard
                     }
                     .buttonStyle(.plain)
-                    SectionFooter(text: metricSummarySubtitle)
+                    SectionFooter(
+                        text: metricSummarySubtitle,
+                        isAccessibilityHidden: true
+                    )
                 }
 
                 privacyNote

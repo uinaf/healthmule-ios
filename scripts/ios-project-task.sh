@@ -22,9 +22,20 @@ case "${task}" in
     # selection the way they do for plain builds.
     if ! /usr/bin/xcrun --find simctl >/dev/null 2>&1; then
       selected="$(/usr/bin/xcode-select -p 2>/dev/null || echo unknown)"
+      suggested=""
+      for xcode_app in /Applications/Xcode.app /Applications/Xcode-*.app; do
+        if [[ -x "${xcode_app}/Contents/Developer/usr/bin/xcodebuild" ]]; then
+          suggested="${xcode_app}"
+          break
+        fi
+      done
       echo "error: make ${task} needs xcode-select to point at a full Xcode." >&2
       echo "       Currently selected: ${selected}" >&2
-      echo "       Fix it with: sudo xcode-select -s /Applications/Xcode.app" >&2
+      if [[ -n "${suggested}" ]]; then
+        echo "       Fix it with: sudo xcode-select -s ${suggested}" >&2
+      else
+        echo "       No full Xcode found under /Applications; install one first." >&2
+      fi
       echo "       'make verify' and 'make build' work without this." >&2
       exit 78
     fi

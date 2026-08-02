@@ -7,7 +7,7 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat db7dd06..HEAD -- HealthMuleShared/CompanionSyncContract.swift HealthMuleWatchApp/Connectivity/CompanionAppModel.swift HealthMuleApp/Watch HealthMuleApp/App/AppModel.swift`
+> `git diff --stat db7dd06..HEAD -- HealthMuleShared/CompanionSyncContract.swift HealthMuleWatchApp/Connectivity/CompanionAppModel.swift HealthMuleApp/Watch HealthMuleApp/App/AppModel.swift Tests/HealthMuleCoreTests/CompanionSyncContractTests.swift HealthMuleTests/CompanionSnapshotFactoryTests.swift`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -267,8 +267,13 @@ ALL must hold:
 - [ ] `make verify` exits 0
 - [ ] `make build` exits 0 (app and embedded Watch app compile)
 - [ ] `make verify-full` exits 0 with no failures
-- [ ] `grep -n "snapshot != self.snapshot" HealthMuleWatchApp/Connectivity/CompanionAppModel.swift`
-      returns no matches
+- [ ] Neither whole-value comparison survives in `apply(_:)`:
+      `grep -n "snapshot != self.snapshot" HealthMuleWatchApp/Connectivity/CompanionAppModel.swift`
+      and `grep -n "snapshot != requestBaselineSnapshot" HealthMuleWatchApp/Connectivity/CompanionAppModel.swift`
+      both return no matches
+- [ ] Both call sites compare projections:
+      `grep -c "\.semantics" HealthMuleWatchApp/Connectivity/CompanionAppModel.swift`
+      returns at least 4 (two comparisons, each with two operands)
 - [ ] `grep -c "semantics" HealthMuleShared/CompanionSyncContract.swift` returns at least 2
 - [ ] The four new tests above exist and pass
 - [ ] No files outside the in-scope list are modified (`git status`)

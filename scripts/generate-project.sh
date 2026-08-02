@@ -19,7 +19,10 @@ pinned_root="${HEALTHMULE_XCODEGEN_ROOT:-.artifacts/toolchain/xcodegen-${pinned_
 pinned_binary="${pinned_root}/xcodegen/bin/xcodegen"
 
 if [[ ! -x "${pinned_binary}" ]]; then
-  rm -rf "${pinned_root}"
+  # Only ever delete the directory this script installs, never the root itself:
+  # HEALTHMULE_XCODEGEN_ROOT is operator-supplied and may be a shared cache.
+  rm -rf "${pinned_root:?}/xcodegen"
+  mkdir -p "${pinned_root}"
   ./scripts/install-xcodegen.sh "${pinned_root}" >/dev/null
 fi
 

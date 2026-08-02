@@ -195,6 +195,18 @@ enum DriveFailureCode: String {
 }
 ```
 
+`DiagnosticsRecorder` additionally owns two raw values that are *classification
+buckets*, not produced codes: `drive_remote` and `drive_transport`. Leave those
+on `DiagnosticSyncFailureCode`; they name diagnostic categories, and moving them
+into the producer vocabulary would imply the destination emits them, which it
+never does.
+
+Pin the dynamic forms exactly, since these are the strings the matcher depends
+on: a retryable remote failure is `drive_<status>_<reason ?? "retryable">`, a
+non-retryable one is `drive_<status>_<reason ?? "error">`, and transport is
+`transport_<code.rawValue>`. The `nil`-reason fallbacks differ between the two
+remote branches — preserve that difference exactly.
+
 The two dynamic forms (`transport_<code>` and `drive_<status>_<reason>`) are not
 enum cases; expose them as static factory functions so the format string exists
 once.

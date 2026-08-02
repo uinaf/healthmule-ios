@@ -164,8 +164,14 @@ booted** (plan 001).
 
 ### Step 1: Add a protected file-backed storage adapter
 
-Create a small type with the same read/write shape the store needs today —
-"load `Data?` for a key" and "write `Data` for a key" — backed by one JSON file
+Create a small type with the read/write shape the store needs. **Do not model
+load as `Data?`** — an optional cannot distinguish "no file yet" (migrate) from
+an I/O, permission, or decode failure (do not migrate, do not delete the
+defaults key). Use a throwing load returning `Data?` where `nil` means
+*verified absent*, and let every other failure throw. Writes must throw too:
+`UserDefaults.set` cannot fail, protected file writes can. Write durably
+**before** updating the in-memory `states` cache, so a termination between the
+two cannot leave the cache claiming IDs that were never persisted — backed by one JSON file
 per account namespace under Application Support, written atomically with
 `.completeFileProtectionUntilFirstUserAuthentication` and marked
 `isExcludedFromBackup`. Reuse the account-namespace hashing already in
@@ -248,8 +254,11 @@ ALL must hold:
       unchanged
 - [ ] `grep -n "UserDefaults" HealthMuleApp/Google/DriveMetadataStore.swift`
       shows defaults used **only** by the one-time migration read/removal
-- [ ] The written metadata file has a protection class and
-      `isExcludedFromBackup` set (assert in a test, not by inspection)
+- [ ] A test writes through the **file-backed** adapter into a temporary
+      directory and asserts both attributes on the resulting file:
+      `URLResourceValues.isExcludedFromBackup == true` and a
+      `.completeFileProtectionUntilFirstUserAuthentication` protection key. The
+      in-memory adapter used by the other tests cannot prove this.
 - [ ] `DriveMetadataStore`'s public method signatures are unchanged
       (`git diff` shows no call-site changes outside `AppModel.live()`)
 - [ ] No file under `Sources/HealthMuleCore/` is modified
