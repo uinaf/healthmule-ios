@@ -24,7 +24,7 @@ The device does not need to participate in the CI build or upload. Apple's
 [development provisioning profile guide](https://developer.apple.com/help/account/provisioning-profiles/create-a-development-provisioning-profile/)
 documents the device requirement.
 
-Configure the `testflight` GitHub Environment with this secret:
+Configure the `beta` GitHub Environment with this secret:
 
 - `HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY`: the complete contents of the downloaded
   `.p8` file
@@ -59,7 +59,7 @@ Store submission remain explicit App Store Connect steps.
 ## Security and operational boundary
 
 - The upload job has read-only repository permissions and uses the dedicated
-  `testflight` Environment.
+  `beta` Environment.
 - The private key is injected only after the full verification gate passes.
 - No certificate or provisioning profile is copied from a developer Mac; Xcode
   automatic signing manages them with the API key.

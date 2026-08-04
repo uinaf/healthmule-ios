@@ -335,7 +335,7 @@ grep -Fq 'cancel-in-progress: false' "${testflight_workflow}" ||
   fail "An in-progress TestFlight upload must never be cancelled by another dispatch."
 awk '
   $0 == "    environment:" { in_environment = 1; next }
-  in_environment && $0 == "      name: testflight" { found = 1; next }
+  in_environment && $0 == "      name: beta" { found = 1; next }
   in_environment && $0 !~ /^      / { in_environment = 0 }
   END { exit(found ? 0 : 1) }
 ' "${testflight_workflow}" ||
