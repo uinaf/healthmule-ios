@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: beta
+  group: testflight
   cancel-in-progress: false
 
 jobs:
