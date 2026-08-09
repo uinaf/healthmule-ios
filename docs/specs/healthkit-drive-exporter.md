@@ -1,8 +1,8 @@
 # HealthMule — Apple Health to Google Drive
 
-Status: implementation-ready v1 specification
+Status: implemented v1 contract; physical-device acceptance pending
 Target: native iPhone app with a lightweight Apple Watch companion
-Suggested stack: Swift 6, SwiftUI, HealthKit, Watch Connectivity, Google Drive API v3
+Runtime: Swift 6, SwiftUI, HealthKit, Watch Connectivity, Google Drive API v3
 Minimum deployment targets: iOS 26 and watchOS 26
 
 ## Problem
@@ -215,31 +215,43 @@ progress. It must resume after interruption without duplicating records.
 - Use `BGAppRefreshTask` as a fallback reconciliation trigger.
 - Use a background `URLSession` for pending Drive uploads.
 - Background timing is best-effort; the UI must never promise an exact schedule.
+- Record bounded, privacy-safe receipts for automatic reconciliation
+  opportunities and background scheduling outcomes. Receipts prove only what
+  the app attempted or observed; they must not imply cadence or future runs.
 - Opening the app always triggers a reconciliation and retry pass.
 
 ### R9 — User interface
 
-The app has four small screens:
+The app keeps **Home** and **Settings** as permanent tabs and exposes four
+product surfaces without giving one-time workflows permanent tab weight:
 
-1. **Setup**
+1. **Setup** — a Home drill-in
    - HealthKit authorization state
    - Google connection state
    - Drive folder name and open-in-Drive action
    - Backfill range
-2. **Status**
+2. **Status** — the Home summary and detail rows
    - Last successful sync
    - Latest exported date
    - Pending upload count
    - Per-metric permission/last-sample status
-3. **Sync**
+   - Latest automatic activity and its relative time
+3. **Sync** — a Home repair and activity drill-in
    - Sync Now
    - Retry Failed Uploads
    - Rebuild Last 3 Days
+   - Automatic/background receipts and schedule-request outcomes
 4. **Settings**
    - Metric toggles within the approved allowlist
    - Export diagnostics
    - Disconnect Google
    - Reset local sync state
+
+Initial loading must reserve the final layout and must not flash a persisted
+failure before bootstrap restores current state. Automatic outcomes remain in
+the activity surfaces instead of replacing the app shell with transient error
+or success banners. Completed setup steps may collapse; incomplete steps remain
+expanded and actionable.
 
 Resetting local state must not delete Drive data without a separate destructive
 confirmation.
@@ -261,8 +273,12 @@ Provide a paired watchOS companion that:
 
 - displays only sanitized readiness, sync activity, last-success time, and
   pending/failure counts;
-- sends Sync Now when the iPhone is reachable and disables the action
-  otherwise;
+- combines snapshot freshness, activation, reachability, queue state, and
+  request delivery so stale or unreachable data never claims Up to Date;
+- shows a waiting or retry state before the first valid snapshot;
+- sends Sync Now only when the iPhone is reachable, acknowledges accepted
+  requests promptly, and clears obsolete delivery failures after a later valid
+  snapshot;
 - never stores or receives OAuth tokens, Google account details, Drive IDs,
   exported records, raw health metadata, or health values.
 
@@ -272,44 +288,11 @@ path and must not create a second sync engine.
 
 ## Architecture
 
-Suggested modules:
-
-```text
-App/
-├── UI/
-├── HealthKitClient/
-├── Aggregation/
-├── ExportSchema/
-├── DriveClient/
-├── SyncEngine/
-├── Persistence/
-└── Diagnostics/
-```
-
-Key interfaces:
-
-```swift
-protocol HealthDataReading {
-    func authorize() async throws
-    func dailyRecord(for date: Date, calendar: Calendar) async throws
-        -> DailyHealthRecord
-    func changedDates() async throws -> Set<Date>
-}
-
-protocol ExportDestination {
-    func upsert(record: DailyHealthRecord) async throws
-    func update(manifest: ExportManifest) async throws
-}
-
-actor SyncEngine {
-    func initialBackfill(from startDate: Date) async
-    func reconcile(trigger: SyncTrigger) async
-    func retryPendingUploads() async
-}
-```
-
-Use dependency injection so aggregation and sync logic can be tested without
-HealthKit or Google.
+[Architecture and privacy boundaries](../ARCHITECTURE.md) owns the current
+module and runtime map. The product contract requires deterministic,
+Foundation-only aggregation and sync logic, platform adapters for HealthKit,
+Google Drive, and Watch Connectivity, and dependency injection that keeps core
+tests independent of HealthKit and Google.
 
 ## Drive upload rules
 
@@ -357,10 +340,15 @@ HealthKit instances, but expected output must be exact JSON.
 - AC8: All aggregation fixtures pass in unit tests without an iOS device.
 - AC9: HealthKit authorization, observer delivery, and a real Drive upload pass
   an on-device integration test.
-- AC10: `xcodebuild test` succeeds from a clean checkout with documented setup.
-- AC11: A paired Watch can display sanitized phone status and request a sync
-  while the iPhone is reachable without receiving health or credential
+- AC10: `make verify-full` succeeds from a clean checkout with the documented
+  Xcode and booted-Simulator setup.
+- AC11: A paired Watch truthfully distinguishes missing, stale, unreachable,
+  and current phone state; displays only sanitized status; and can request a
+  sync while the iPhone is reachable without receiving health or credential
   payloads.
+- AC12: The deterministic Simulator harness covers startup loading, active
+  sync, visible failure, blocked uploads, automatic activity, setup, settings,
+  dark mode, and accessibility text without real health or credential data.
 
 ## Constraints
 
@@ -387,18 +375,6 @@ HealthKit instances, but expected output must be exact JSON.
 - A hosted backend, multi-user accounts, or public sharing.
 - Perfectly timed background synchronization.
 - A standalone Watch-to-Drive exporter or Watch-side Google authorization.
-
-## Implementation order
-
-1. Define Codable schema, fixtures, and aggregation tests.
-2. Implement HealthKit authorization and foreground daily queries.
-3. Implement local staging, anchors, and the three-day reconciliation engine.
-4. Add Google OAuth, Drive folder creation, and idempotent upserts.
-5. Add onboarding, status UI, manual sync, and diagnostics.
-6. Add observer queries, background delivery, app refresh, and background
-   uploads.
-7. Add the Watch status and sync-request companion over Watch Connectivity.
-8. Run physical-device conformance tests and reconcile code/spec differences.
 
 ## Upstream references
 
