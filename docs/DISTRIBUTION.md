@@ -48,12 +48,12 @@ Dispatch the workflow from the GitHub Actions page with branch `main`, or run:
 
 ```sh
 gh workflow run testflight.yml --ref main
-gh run watch <run-id> --exit-status
+gh run watch 123456789 --exit-status
 ```
 
 The dispatch command prints the created run URL when GitHub returns it; use the
-numeric ID from that URL. If it does not, locate the run with
-`gh run list --workflow testflight.yml --branch main --event workflow_dispatch`.
+numeric ID from that URL in place of `123456789`. If it does not, locate the run
+with `gh run list --workflow testflight.yml --branch main --event workflow_dispatch`.
 
 After the workflow succeeds, open
 [App Store Connect](https://appstoreconnect.apple.com/apps), wait for processing,
