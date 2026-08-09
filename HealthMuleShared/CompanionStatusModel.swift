@@ -261,6 +261,10 @@ public struct CompanionRequestLifecycle: Equatable, Sendable {
     public mutating func receive(
         snapshot: CompanionSyncSnapshot
     ) {
+        if state == .failed {
+            reset(to: .idle)
+            return
+        }
         guard requestID != nil else { return }
         let changed = baseline.map { snapshot.semantics != $0 } ?? true
         guard changed else { return }

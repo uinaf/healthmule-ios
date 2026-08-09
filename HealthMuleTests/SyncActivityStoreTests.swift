@@ -41,18 +41,27 @@ final class SyncActivityStoreTests: XCTestCase {
     func testStoreKeepsOnlyTwentyNewestReceipts() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = SyncActivityStore(
-            directoryURL: directory,
-            now: { Date(timeIntervalSince1970: 1_787_000_000) }
+        let timestamp = Date(timeIntervalSince1970: 1_787_000_000)
+        var ids = (0 ..< 20).map { _ in UUID() }
+        let preservedID = try XCTUnwrap(
+            UUID(uuidString: "00000000-0000-0000-0000-000000000000")
         )
+        ids.append(preservedID)
 
-        for _ in 0 ..< 21 {
+        for generatedID in ids {
+            let store = SyncActivityStore(
+                directoryURL: directory,
+                now: { timestamp },
+                makeID: { generatedID }
+            )
             let id = try await store.begin(trigger: .foreground)
             try await store.finish(id: id, outcome: .succeeded)
         }
 
+        let store = SyncActivityStore(directoryURL: directory)
         let snapshot = try await store.snapshot()
         XCTAssertEqual(snapshot.receipts.count, 20)
+        XCTAssertTrue(snapshot.receipts.contains { $0.id == preservedID })
     }
 
     func testRunningReceiptRecoversAsInterrupted() async throws {

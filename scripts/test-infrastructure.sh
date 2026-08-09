@@ -224,6 +224,11 @@ grep -Fq "testAgentHarnessCapturesCriticalStates" scripts/ios-project-task.sh ||
   fail "The agent harness must run the critical-state UI scenario."
 grep -Fq "xcresulttool export attachments" scripts/ios-project-task.sh ||
   fail "The agent harness must export durable screenshot attachments."
+if grep -Fq "/usr/bin/xcrun" scripts/ios-project-task.sh; then
+  fail "The locked task runner must not bypass repository Xcode wrappers."
+fi
+grep -Fq 'selected}/usr/bin/simctl' scripts/ios-project-task.sh ||
+  fail "Simulator tasks must validate the xcode-select toolchain directly."
 
 compatible_ids=$'11111111-1111-1111-1111-111111111111\n22222222-2222-2222-2222-222222222222'
 selected="$(

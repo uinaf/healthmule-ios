@@ -233,6 +233,9 @@ final class CompanionStatusModelTests: XCTestCase {
         lifecycle.receiveReply(requestID: requestID, accepted: false)
         XCTAssertEqual(lifecycle.state, .failed)
         XCTAssertNil(lifecycle.requestID)
+
+        lifecycle.receive(snapshot: snapshot(pending: 1))
+        XCTAssertEqual(lifecycle.state, .idle)
     }
 
     func testAcceptedFallbackExpiresOnlyMatchingRequest() {

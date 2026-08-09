@@ -20,8 +20,8 @@ case "${task}" in
     # xcodebuild spawns its Simulator helpers through xcode-select rather than
     # DEVELOPER_DIR, so the wrappers cannot compensate for a CommandLineTools
     # selection the way they do for plain builds.
-    if ! /usr/bin/xcrun --find simctl >/dev/null 2>&1; then
-      selected="$(/usr/bin/xcode-select -p 2>/dev/null || echo unknown)"
+    selected="$(/usr/bin/xcode-select -p 2>/dev/null || echo unknown)"
+    if [[ ! -x "${selected}/usr/bin/simctl" ]]; then
       suggested=""
       for xcode_app in /Applications/Xcode.app /Applications/Xcode-*.app; do
         if [[ -x "${xcode_app}/Contents/Developer/usr/bin/xcodebuild" ]]; then
@@ -105,18 +105,29 @@ case "${task}" in
     test_status=$?
     set -e
 
-    if [[ -d "${result_bundle}" ]]; then
-      ./scripts/xcrun.sh xcresulttool get test-results summary \
+    postprocess_status=0
+    if [[ ! -d "${result_bundle}" ]]; then
+      postprocess_status=1
+    elif ! mkdir -p "${attachments_directory}"; then
+      postprocess_status=1
+    else
+      if ! ./scripts/xcrun.sh xcresulttool get test-results summary \
         --path "${result_bundle}" \
-        --compact >"${run_directory}/summary.json"
-      mkdir -p "${attachments_directory}"
-      ./scripts/xcrun.sh xcresulttool export attachments \
+        --compact >"${run_directory}/summary.json"; then
+        postprocess_status=1
+      fi
+      if ! ./scripts/xcrun.sh xcresulttool export attachments \
         --path "${result_bundle}" \
-        --output-path "${attachments_directory}"
+        --output-path "${attachments_directory}"; then
+        postprocess_status=1
+      fi
     fi
 
     printf 'HealthMule harness artifacts: %s\n' "$(cd "${run_directory}" && pwd)"
-    exit "${test_status}"
+    if (( test_status != 0 )); then
+      exit "${test_status}"
+    fi
+    exit "${postprocess_status}"
     ;;
   run)
     exec ./scripts/run-simulator.sh

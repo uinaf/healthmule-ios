@@ -164,7 +164,9 @@ struct CompanionStatusView: View {
             .buttonStyle(.borderedProminent)
             .disabled(!status.canRequestSync)
             .accessibilityLabel(
-                status.syncActionBlock == .syncInProgress
+                status.deliveryNote == .sending
+                    ? "Sending sync request"
+                    : status.syncActionBlock == .syncInProgress
                     ? "Syncing"
                     : "Sync"
             )

@@ -4,7 +4,6 @@ import SwiftUI
 @main
 struct HealthMuleApp: App {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model = AppModel.live()
 
     var body: some Scene {
@@ -15,14 +14,13 @@ struct HealthMuleApp: App {
                         ? .dark
                         : nil
                 )
-                .environment(
-                    \.dynamicTypeSize,
-                    ProcessInfo.processInfo.arguments.contains(
+                .transformEnvironment(\.dynamicTypeSize) { size in
+                    if ProcessInfo.processInfo.arguments.contains(
                         "--ui-accessibility-text"
-                    )
-                        ? .accessibility3
-                        : dynamicTypeSize
-                )
+                    ) {
+                        size = .accessibility3
+                    }
+                }
                 .task {
                     await model.bootstrap()
                 }

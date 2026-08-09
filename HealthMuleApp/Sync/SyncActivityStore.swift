@@ -197,7 +197,10 @@ actor SyncActivityStore {
             trigger: trigger
         )
         candidate.receipts.append(receipt)
-        candidate.receipts = Self.newestReceipts(candidate.receipts)
+        candidate.receipts = Self.newestReceipts(
+            candidate.receipts,
+            preserving: receipt.id
+        )
         try persist(candidate)
         state = candidate
         return receipt.id
@@ -222,7 +225,10 @@ actor SyncActivityStore {
             reason: reason,
             counts: counts
         )
-        candidate.receipts = Self.newestReceipts(candidate.receipts)
+        candidate.receipts = Self.newestReceipts(
+            candidate.receipts,
+            preserving: id
+        )
         try persist(candidate)
         state = candidate
     }
@@ -315,16 +321,31 @@ actor SyncActivityStore {
     }
 
     private static func newestReceipts(
-        _ receipts: [SyncActivityReceipt]
+        _ receipts: [SyncActivityReceipt],
+        preserving preservedID: UUID? = nil
     ) -> [SyncActivityReceipt] {
-        Array(
-            receipts.sorted {
-                if $0.startedAt == $1.startedAt {
-                    return $0.id.uuidString > $1.id.uuidString
-                }
-                return $0.startedAt > $1.startedAt
-            }.prefix(maximumReceiptCount)
-        )
+        let sorted = receipts.sorted(by: receiptIsNewer)
+        var newest = Array(sorted.prefix(maximumReceiptCount))
+        guard
+            let preservedID,
+            !newest.contains(where: { $0.id == preservedID }),
+            let preserved = sorted.first(where: { $0.id == preservedID })
+        else {
+            return newest
+        }
+        newest.removeLast()
+        newest.append(preserved)
+        return newest.sorted(by: receiptIsNewer)
+    }
+
+    private static func receiptIsNewer(
+        _ left: SyncActivityReceipt,
+        _ right: SyncActivityReceipt
+    ) -> Bool {
+        if left.startedAt == right.startedAt {
+            return left.id.uuidString > right.id.uuidString
+        }
+        return left.startedAt > right.startedAt
     }
 
     private static func isValid(_ receipt: SyncActivityReceipt) -> Bool {
