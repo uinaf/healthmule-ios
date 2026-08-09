@@ -8,18 +8,8 @@ struct StatusView: View {
         ScrollView {
             VStack(spacing: 28) {
                 hero
-                OperationBanner(state: model.operationState)
                 backgroundDeliveryAdvisory
-
-                if shouldShowSummary {
-                    VStack(spacing: 12) {
-                        SectionHeading(title: "Sync summary")
-                        NavigationLink(value: HomeRoute.sync) {
-                            summaryCard
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                syncSummarySection
 
                 VStack(spacing: 12) {
                     SectionHeading(title: "Connections")
@@ -59,6 +49,23 @@ struct StatusView: View {
     }
 
     @ViewBuilder
+    private var syncSummarySection: some View {
+        if model.initialLoadPhase == .loading || shouldShowSummary {
+            VStack(spacing: 12) {
+                SectionHeading(title: "Sync summary")
+                if model.initialLoadPhase == .loading {
+                    summaryLoadingCard
+                } else {
+                    NavigationLink(value: HomeRoute.sync) {
+                        summaryCard
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var backgroundDeliveryAdvisory: some View {
         if let advisory = model.backgroundDeliveryAdvisory {
             VStack(alignment: .leading, spacing: 12) {
@@ -93,7 +100,6 @@ struct StatusView: View {
             tone: heroPresentation.tone,
             title: heroPresentation.title,
             message: heroPresentation.message,
-            needsAttention: heroPresentation.needsAttention,
             progress: model.syncProgress
         ) {
             heroAction
@@ -200,6 +206,57 @@ struct StatusView: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens sync details.")
+    }
+
+    private var summaryLoadingCard: some View {
+        VStack(spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Sync details")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+            }
+
+            if dynamicTypeSize > .large {
+                VStack(spacing: 14) {
+                    summaryLoadingFact("Last sync")
+                    Divider()
+                    summaryLoadingFact("Latest day")
+                    Divider()
+                    summaryLoadingFact("Pending")
+                }
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    summaryLoadingFact("Last sync")
+                        .padding(.trailing, 10)
+                    Divider()
+                    summaryLoadingFact("Latest day")
+                        .padding(.horizontal, 10)
+                    Divider()
+                    summaryLoadingFact("Pending")
+                        .padding(.leading, 10)
+                }
+            }
+        }
+        .healthMuleCard(padding: 16)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading sync summary")
+        .accessibilityIdentifier("sync-summary-loading")
+    }
+
+    private func summaryLoadingFact(_ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(HealthMuleStyle.Text.factLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text("Loading")
+                .font(HealthMuleStyle.Text.factValue)
+                .redacted(reason: .placeholder)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var metricSummaryCard: some View {
@@ -463,6 +520,15 @@ struct StatusView: View {
     }
 
     private var heroPresentation: HeroPresentation {
+        if model.initialLoadPhase == .loading {
+            return HeroPresentation(
+                badge: "Loading",
+                tone: .neutral,
+                title: "Loading your sync status",
+                message: "HealthMule is restoring saved connections and sync history.",
+                action: .none
+            )
+        }
         switch model.syncReadiness {
         case .localStorageUnavailable:
             return connectionHero(
@@ -569,7 +635,7 @@ struct StatusView: View {
                 action: .sync
             )
         }
-        if model.operationState.isFailure(.sync) {
+        if model.presentedOperationState.isFailure(.sync) {
             if model.syncSummary.permanentFailureCount > 0 {
                 return permanentFailureHero
             }
@@ -674,9 +740,6 @@ private struct HeroPresentation {
     let message: String
     let action: Action
 
-    var needsAttention: Bool {
-        tone == .warning || tone == .danger
-    }
 }
 
 private struct ConnectionCard: View {

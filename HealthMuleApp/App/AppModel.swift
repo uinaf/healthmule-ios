@@ -17,10 +17,12 @@ private enum AppModelStorageError: LocalizedError {
 @Observable
 final class AppModel {
     var selectedTab: AppTab = .home
+    private(set) var initialLoadPhase: InitialLoadPhase = .loading
     private var syncProgressState = SyncProgressState()
     var syncProgress: SyncProgress? {
         syncProgressState.progress
     }
+    private(set) var operationOrigin: OperationOrigin = .userInitiated
     var operationState: OperationState = .idle {
         didSet {
             if case .working = operationState {
@@ -31,6 +33,9 @@ final class AppModel {
             }
             publishCompanionStatus()
         }
+    }
+    var presentedOperationState: OperationState {
+        operationState.presented(for: operationOrigin)
     }
     var googleConnection: GoogleConnectionState {
         didSet {
@@ -265,10 +270,23 @@ final class AppModel {
         watchConnectivity?.publishCurrentStatus()
     }
 
+    private func setOperationState(
+        _ state: OperationState,
+        origin: OperationOrigin
+    ) {
+        operationOrigin = origin
+        operationState = state
+    }
+
     func bootstrap() async {
         guard !isUITesting else {
             loadUITestState()
             isBootstrapped = true
+            if !ProcessInfo.processInfo.arguments.contains(
+                "--ui-initial-loading"
+            ) {
+                finishInitialLoad()
+            }
             return
         }
         if isBootstrapped {
@@ -290,7 +308,9 @@ final class AppModel {
             && googleConnection.isAuthorized
         var credentialRestoreEpoch: UInt64?
         if googleConnection.isAuthorized {
-            let isDriveReady = await refreshDriveFolder()
+            let isDriveReady = await refreshDriveFolder(
+                operationOrigin: .automatic
+            )
             if restoredGoogleCredentials, isDriveReady {
                 credentialRestoreEpoch = googleTransitionEpoch
             }
@@ -316,12 +336,18 @@ final class AppModel {
         BackgroundRefreshCoordinator.schedule()
         await diagnostics.record(.bootstrapFinished)
         isBootstrapped = true
+        finishInitialLoad()
         bootstrapInProgress = false
         let waiters = bootstrapWaiters
         bootstrapWaiters.removeAll()
         for waiter in waiters {
             waiter.resume()
         }
+    }
+
+    private func finishInitialLoad() {
+        guard initialLoadPhase == .loading else { return }
+        initialLoadPhase = .loaded
     }
 
     func applicationDidBecomeActive() async {
@@ -353,7 +379,9 @@ final class AppModel {
             googleConnection.isAuthorized,
             !operationState.isWorking
         {
-            let isDriveReady = await refreshDriveFolder()
+            let isDriveReady = await refreshDriveFolder(
+                operationOrigin: .automatic
+            )
             if restoredGoogleCredentials, isDriveReady {
                 credentialRestoreEpoch = googleTransitionEpoch
             }
@@ -384,9 +412,12 @@ final class AppModel {
     }
 
     func requestHealthAuthorization() async {
-        operationState = .working(
-            .healthAuthorization,
-            "Requesting Apple Health access"
+        setOperationState(
+            .working(
+                .healthAuthorization,
+                "Requesting Apple Health access"
+            ),
+            origin: .userInitiated
         )
         let expectedOperationEpoch = operationEpoch
         do {
@@ -427,7 +458,7 @@ final class AppModel {
             .healthAuthorization,
             "Checking Apple Health"
         )
-        operationState = checkingState
+        setOperationState(checkingState, origin: .userInitiated)
         let expectedOperationEpoch = operationEpoch
         await refreshHealthStatuses()
         await registerHealthObservers()
@@ -460,7 +491,7 @@ final class AppModel {
             .googleConnection,
             "Connecting Google"
         )
-        operationState = connectingState
+        setOperationState(connectingState, origin: .userInitiated)
         let expectedOperationEpoch = operationEpoch
         var expectedEpoch = beginGoogleTransition()
         if let syncCoordinator {
@@ -598,7 +629,7 @@ final class AppModel {
             .googleConnection,
             "Disconnecting Google"
         )
-        operationState = disconnectingState
+        setOperationState(disconnectingState, origin: .userInitiated)
         let expectedOperationEpoch = operationEpoch
         let expectedEpoch = beginGoogleTransition()
         let expectedActivation = activeDriveActivation
@@ -683,27 +714,36 @@ final class AppModel {
         guard !operationState.isWorking else { return }
         guard healthAuthorizationState.allowsQueries else {
             if trigger == .manual {
-                operationState = .failed(
-                    .sync,
-                    "Complete the Apple Health request in Setup first."
+                setOperationState(
+                    .failed(
+                        .sync,
+                        "Complete the Apple Health request in Setup first."
+                    ),
+                    origin: trigger.operationOrigin
                 )
             }
             return
         }
         guard googleConnection.isDriveReady else {
             if trigger == .manual {
-                operationState = .failed(
-                    .sync,
-                    "Finish connecting Google Drive in Setup first."
+                setOperationState(
+                    .failed(
+                        .sync,
+                        "Finish connecting Google Drive in Setup first."
+                    ),
+                    origin: trigger.operationOrigin
                 )
             }
             return
         }
         guard let syncCoordinator else {
-            operationState = .failed(
-                .sync,
-                syncInitializationError
-                    ?? "Local protected sync storage could not be prepared."
+            setOperationState(
+                .failed(
+                    .sync,
+                    syncInitializationError
+                        ?? "Local protected sync storage could not be prepared."
+                ),
+                origin: trigger.operationOrigin
             )
             return
         }
@@ -712,7 +752,7 @@ final class AppModel {
             .sync,
             trigger == .rebuild ? "Rebuilding the last three days" : "Syncing"
         )
-        operationState = syncingState
+        setOperationState(syncingState, origin: trigger.operationOrigin)
         let expectedOperationEpoch = operationEpoch
         syncProgressState.begin(epoch: expectedOperationEpoch)
         let expectedGoogleEpoch = googleTransitionEpoch
@@ -876,7 +916,7 @@ final class AppModel {
             .googleConnection,
             "Restoring Google connection"
         )
-        operationState = restoringState
+        setOperationState(restoringState, origin: .userInitiated)
         let expectedOperationEpoch = operationEpoch
         if let syncCoordinator {
             await syncCoordinator.waitUntilIdle()
@@ -897,7 +937,10 @@ final class AppModel {
         if googleConnection.isAuthorized {
             let restoredEpoch = googleTransitionEpoch
             guard
-                await refreshDriveFolder(expectedEpoch: restoredEpoch),
+                await refreshDriveFolder(
+                    expectedEpoch: restoredEpoch,
+                    operationOrigin: .userInitiated
+                ),
                 googleConnection.isDriveReady,
                 operationEpoch == expectedOperationEpoch,
                 operationState == restoringState
@@ -1017,7 +1060,7 @@ final class AppModel {
             .diagnostics,
             "Preparing diagnostics"
         )
-        operationState = preparingState
+        setOperationState(preparingState, origin: .userInitiated)
         let expectedOperationEpoch = operationEpoch
         do {
             diagnosticsURL = try await diagnostics.export()
@@ -1046,9 +1089,12 @@ final class AppModel {
     }
 
     func resetLocalState() async {
-        operationState = .working(
-            .localReset,
-            "Resetting local sync state"
+        setOperationState(
+            .working(
+                .localReset,
+                "Resetting local sync state"
+            ),
+            origin: .userInitiated
         )
         do {
             let candidate = if let syncCoordinator {
@@ -1352,7 +1398,7 @@ final class AppModel {
                 .sync,
                 "Resuming pending uploads"
             )
-            operationState = state
+            setOperationState(state, origin: .automatic)
             progressState = state
             progressEpoch = operationEpoch
         } else {
@@ -1416,7 +1462,8 @@ final class AppModel {
 
     @discardableResult
     private func refreshDriveFolder(
-        expectedEpoch: UInt64? = nil
+        expectedEpoch: UInt64? = nil,
+        operationOrigin: OperationOrigin
     ) async -> Bool {
         let folderEpoch = expectedEpoch ?? googleTransitionEpoch
         let folderOperationEpoch = operationEpoch
@@ -1458,9 +1505,12 @@ final class AppModel {
             if operationEpoch == folderOperationEpoch,
                !operationState.isWorking
             {
-                operationState = .failed(
-                    .googleConnection,
-                    error.localizedDescription
+                setOperationState(
+                    .failed(
+                        .googleConnection,
+                        error.localizedDescription
+                    ),
+                    origin: operationOrigin
                 )
             }
             return false
@@ -1667,7 +1717,7 @@ final class AppModel {
         else {
             return
         }
-        operationState = completionState
+        setOperationState(completionState, origin: .automatic)
     }
 
     static func syncCompletionState(
@@ -2038,6 +2088,16 @@ final class AppModel {
                 retryableUploadCount: 0,
                 permanentFailureCount: 1
             )
+        } else if arguments.contains("--ui-synced") {
+            syncSummary = SyncSummary(
+                lastSuccessfulSyncAt: Date(
+                    timeIntervalSince1970: 1_753_300_000
+                ),
+                latestExportedDate: "2026-07-23",
+                pendingUploadCount: 0,
+                retryableUploadCount: 0,
+                permanentFailureCount: 0
+            )
         } else {
             syncSummary = .empty
         }
@@ -2047,7 +2107,10 @@ final class AppModel {
         )
         enabledMetrics = Set(HealthMetric.allCases)
         if arguments.contains("--ui-operation-working") {
-            operationState = .working(.sync, "Syncing")
+            setOperationState(
+                .working(.sync, "Syncing"),
+                origin: .automatic
+            )
             if arguments.contains("--ui-sync-progress") {
                 syncProgressState.begin(epoch: operationEpoch)
                 syncProgressState.publish(
@@ -2062,13 +2125,26 @@ final class AppModel {
                     epoch: operationEpoch
                 )
             }
+        } else if arguments.contains("--ui-operation-failed-automatic") {
+            setOperationState(
+                .failed(.sync, "Automatic sync failed."),
+                origin: .automatic
+            )
+        } else if arguments.contains("--ui-operation-failed-user") {
+            setOperationState(
+                .failed(.sync, "Manual sync failed."),
+                origin: .userInitiated
+            )
         } else if arguments.contains("--ui-permanent-failure") {
-            operationState = .failed(
-                .sync,
-                "Google Drive rejected one upload."
+            setOperationState(
+                .failed(
+                    .sync,
+                    "Google Drive rejected one upload."
+                ),
+                origin: .automatic
             )
         } else {
-            operationState = .idle
+            setOperationState(.idle, origin: .automatic)
         }
     }
 }

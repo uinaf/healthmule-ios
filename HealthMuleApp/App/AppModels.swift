@@ -6,6 +6,11 @@ enum AppTab: Hashable {
     case settings
 }
 
+enum InitialLoadPhase: Equatable, Sendable {
+    case loading
+    case loaded
+}
+
 enum SyncTrigger: String, Sendable {
     case appLaunch
     case foreground
@@ -17,6 +22,21 @@ enum SyncTrigger: String, Sendable {
     case backgroundRefresh
     case healthObserver
     case watchCompanion
+
+    var operationOrigin: OperationOrigin {
+        switch self {
+        case .manual, .retry, .rebuild, .watchCompanion:
+            .userInitiated
+        case
+            .appLaunch,
+            .foreground,
+            .metricSelection,
+            .historySelection,
+            .backgroundRefresh,
+            .healthObserver:
+            .automatic
+        }
+    }
 }
 
 struct SyncProgress: Equatable, Sendable {
@@ -149,6 +169,11 @@ enum OperationKind: Equatable {
     case localReset
 }
 
+enum OperationOrigin: Equatable, Sendable {
+    case userInitiated
+    case automatic
+}
+
 enum OperationState: Equatable {
     case idle
     case working(OperationKind, String)
@@ -182,6 +207,13 @@ enum OperationState: Equatable {
             return operationKind == kind
         }
         return false
+    }
+
+    func presented(for origin: OperationOrigin) -> OperationState {
+        if origin == .automatic, !isWorking {
+            return .idle
+        }
+        return self
     }
 }
 

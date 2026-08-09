@@ -133,16 +133,105 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkingStateShowsOperationBanner() throws {
+    func testWorkingStateUsesHeroAndDisablesSyncAction() throws {
         let app = launch(
             additionalArguments: ["--ui-ready", "--ui-operation-working"]
         )
 
         XCTAssertTrue(
-            element("operation-status", in: app).waitForExistence(timeout: 10)
+            element("status-hero-title", in: app)
+                .waitForExistence(timeout: 10)
         )
-        XCTAssertTrue(app.staticTexts["Syncing"].exists)
+        XCTAssertTrue(app.staticTexts["Syncing your latest changes"].exists)
+        XCTAssertFalse(element("operation-status", in: app).exists)
         XCTAssertFalse(element("home-sync-action", in: app).isEnabled)
+    }
+
+    @MainActor
+    func testInitialLoadingShowsNoPersistedSyncFacts() throws {
+        let app = launch(additionalArguments: ["--ui-initial-loading"])
+
+        XCTAssertTrue(
+            element("sync-summary-loading", in: app)
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Loading your sync status"].exists)
+        XCTAssertFalse(app.staticTexts["Never"].exists)
+        XCTAssertFalse(app.staticTexts["None"].exists)
+        XCTAssertFalse(app.staticTexts["0"].exists)
+    }
+
+    @MainActor
+    func testAutomaticFailureDoesNotAppearOnHomeOrSync() throws {
+        let arguments = ["--ui-ready", "--ui-operation-failed-automatic"]
+        let homeApp = launch(additionalArguments: arguments)
+
+        XCTAssertTrue(
+            homeApp.staticTexts["Ready for the first sync"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(homeApp.staticTexts["Sync needs another look"].exists)
+        XCTAssertFalse(element("operation-status", in: homeApp).exists)
+        homeApp.terminate()
+
+        let syncApp = launch(
+            additionalArguments: arguments + ["--ui-show-sync"]
+        )
+
+        XCTAssertTrue(
+            syncApp.staticTexts["Ready for the first sync"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(syncApp.staticTexts["Sync needs another look"].exists)
+        XCTAssertFalse(element("operation-status", in: syncApp).exists)
+    }
+
+    @MainActor
+    func testUserFailureRemainsVisibleOnHomeAndSync() throws {
+        let arguments = ["--ui-ready", "--ui-operation-failed-user"]
+        let homeApp = launch(additionalArguments: arguments)
+
+        XCTAssertTrue(
+            homeApp.staticTexts["Sync needs another look"]
+                .waitForExistence(timeout: 10)
+        )
+        homeApp.terminate()
+
+        let syncApp = launch(
+            additionalArguments: arguments + ["--ui-show-sync"]
+        )
+
+        XCTAssertTrue(
+            syncApp.staticTexts["Sync needs another look"]
+                .waitForExistence(timeout: 10)
+        )
+    }
+
+    @MainActor
+    func testHeroAccessibilityChildOrderIsStableAcrossTones() throws {
+        let fixtures: [([String], String)] = [
+            (
+                ["--ui-health-review", "--ui-google-connected"],
+                "Apple Health access needs review"
+            ),
+            (
+                ["--ui-ready", "--ui-permanent-failure"],
+                "An upload was rejected"
+            ),
+            (
+                ["--ui-ready", "--ui-synced"],
+                "Everything is in sync"
+            ),
+        ]
+
+        for (arguments, title) in fixtures {
+            let app = launch(additionalArguments: arguments)
+            XCTAssertTrue(
+                app.staticTexts[title].waitForExistence(timeout: 10)
+            )
+            assertHeroAccessibilityChildOrder(in: app)
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -270,5 +359,24 @@ final class HealthMuleUITests: XCTestCase {
         in app: XCUIApplication
     ) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    @MainActor
+    private func assertHeroAccessibilityChildOrder(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let identifiers = [
+            "status-hero-badge",
+            "status-hero-title",
+            "status-hero-message",
+        ]
+        let actual = app.descendants(matching: .any)
+            .allElementsBoundByIndex
+            .map(\.identifier)
+            .filter(identifiers.contains)
+
+        XCTAssertEqual(actual, identifiers, file: file, line: line)
     }
 }

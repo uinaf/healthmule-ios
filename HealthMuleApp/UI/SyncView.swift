@@ -7,7 +7,6 @@ struct SyncView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                OperationBanner(state: model.operationState)
                 syncHero
                 queueCard
 
@@ -74,7 +73,6 @@ struct SyncView: View {
             tone: syncPresentation.tone,
             title: syncPresentation.title,
             message: syncPresentation.message,
-            needsAttention: syncPresentation.needsAttention,
             progress: model.syncProgress
         ) {
             syncHeroAction
@@ -213,7 +211,7 @@ struct SyncView: View {
                 message: "Drive reported a non-retryable error. The local copy is safe; export diagnostics before resetting local sync state."
             )
         }
-        if model.operationState.isFailure(.sync) {
+        if model.presentedOperationState.isFailure(.sync) {
             return SyncPresentation(
                 badge: "Needs attention",
                 tone: .danger,
@@ -323,10 +321,6 @@ private struct SyncPresentation {
     let tone: StatusTone
     let title: String
     let message: String
-
-    var needsAttention: Bool {
-        tone == .warning || tone == .danger
-    }
 
     static func connection(
         badge: String,

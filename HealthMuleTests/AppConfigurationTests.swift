@@ -5,6 +5,42 @@ import XCTest
 @testable import HealthMule
 
 final class AppConfigurationTests: XCTestCase {
+    func testSyncTriggersClassifyOperationOrigin() {
+        for trigger in [
+            SyncTrigger.manual,
+            .retry,
+            .rebuild,
+            .watchCompanion,
+        ] {
+            XCTAssertEqual(trigger.operationOrigin, .userInitiated)
+        }
+        for trigger in [
+            SyncTrigger.appLaunch,
+            .foreground,
+            .metricSelection,
+            .historySelection,
+            .backgroundRefresh,
+            .healthObserver,
+        ] {
+            XCTAssertEqual(trigger.operationOrigin, .automatic)
+        }
+    }
+
+    func testPresentedOperationStateSuppressesOnlyAutomaticResults() {
+        let working = OperationState.working(.sync, "Syncing")
+        let results = [
+            OperationState.warning(.sync, "Uploads remain pending."),
+            .succeeded(.sync, "Everything is up to date."),
+            .failed(.sync, "Upload failed."),
+        ]
+
+        XCTAssertEqual(working.presented(for: .automatic), working)
+        for result in results {
+            XCTAssertEqual(result.presented(for: .automatic), .idle)
+            XCTAssertEqual(result.presented(for: .userInitiated), result)
+        }
+    }
+
     func testSyncProgressStateRejectsStaleAndFinishedCallbacks() throws {
         var state = SyncProgressState()
         let firstProgress = SyncProgress(

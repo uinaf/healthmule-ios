@@ -106,58 +106,38 @@ struct SectionFooter: View {
     }
 }
 
-/// The primary status surface on Home and Sync.
-///
-/// When nothing is asked of the reader the status is a single row: the badge
-/// already names the state, so a headline restating it earns no space. States
-/// that need a decision keep the explanatory headline and a prominent action.
 struct StatusHero<Action: View>: View {
     let badge: String
     let tone: StatusTone
     let title: String
     let message: String
-    let needsAttention: Bool
     var progress: SyncProgress?
     @ViewBuilder var action: () -> Action
 
     var body: some View {
-        VStack(alignment: .leading, spacing: needsAttention ? 18 : 14) {
-            if needsAttention {
-                StatusBadge(title: badge, tone: tone)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(HealthMuleStyle.Text.heroTitle)
-                    Text(message)
-                        .font(HealthMuleStyle.Text.heroMessage)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                HStack(alignment: .center, spacing: 12) {
-                    StatusBadge(title: badge, tone: tone)
-                    Spacer(minLength: 8)
-                    action()
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                }
-                Text(message)
-                    .font(HealthMuleStyle.Text.cardBody)
-                    .foregroundStyle(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            StatusBadge(title: badge, tone: tone)
+                .accessibilityIdentifier("status-hero-badge")
+            Text(title)
+                .font(HealthMuleStyle.Text.heroTitle)
+                .accessibilityIdentifier("status-hero-title")
+            Text(message)
+                .font(HealthMuleStyle.Text.heroMessage)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("status-hero-message")
 
             if let progress, progress.totalUnits > 0 {
                 SyncDayProgressView(progress: progress)
             }
 
-            if needsAttention {
-                action()
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.borderedProminent)
-                    .tint(HealthMuleStyle.tint)
-                    .controlSize(.large)
-            }
+            action()
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent)
+                .tint(HealthMuleStyle.tint)
+                .controlSize(.large)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .healthMuleCard(padding: needsAttention ? 20 : 16)
+        .healthMuleCard(padding: 20)
     }
 }
 
