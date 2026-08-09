@@ -137,12 +137,12 @@ final class CompanionAppModel: NSObject {
     }
 
     private func apply(_ snapshot: CompanionSyncSnapshot) {
-        let changed = snapshot != self.snapshot
+        let changed = snapshot.semantics != self.snapshot?.semantics
         self.snapshot = snapshot
         if
             changed,
             requestBaselineSnapshot != nil,
-            snapshot != requestBaselineSnapshot
+            snapshot.semantics != requestBaselineSnapshot?.semantics
         {
             receivedPostRequestSnapshot = true
             if deliveryState == .accepted {

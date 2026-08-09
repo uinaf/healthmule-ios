@@ -23,6 +23,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     private let session: WCSession?
     private let snapshotProvider: SnapshotProvider
     private let syncRequestHandler: SyncRequestHandler
+    private var lastPublishedSemantics: CompanionSyncSnapshot.Semantics?
 
     init(
         snapshotProvider: @escaping SnapshotProvider,
@@ -36,6 +37,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     }
 
     func activate() {
+        lastPublishedSemantics = nil
         guard let session else { return }
         session.delegate = self
         session.activate()
@@ -46,13 +48,17 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
             let session,
             session.activationState == .activated,
             let snapshot = snapshotProvider(),
+            snapshot.semantics != lastPublishedSemantics,
             let message = try? CompanionPayloadCodec.message(
                 snapshot: snapshot
             )
         else {
             return
         }
-        try? session.updateApplicationContext(message)
+        do {
+            try session.updateApplicationContext(message)
+            lastPublishedSemantics = snapshot.semantics
+        } catch {}
     }
 
     private func handleSyncRequest() async {
@@ -81,6 +87,7 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor [weak self] in
+            self?.lastPublishedSemantics = nil
             self?.publishCurrentStatus()
         }
     }
