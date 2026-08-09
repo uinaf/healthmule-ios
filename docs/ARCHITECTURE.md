@@ -88,7 +88,9 @@ retryable, and blocked counts remain independent facts even when the status is
 stale or the phone is unreachable. `CompanionRequestLifecycle` deterministically
 settles reply-before-snapshot and snapshot-before-reply ordering; a semantic
 snapshot change completes an accepted request, while the Watch adapter retains
-the 10-second accepted-state fallback.
+the 10-second accepted-state fallback. The next valid snapshot also clears a
+stale request-delivery failure so the companion does not remain in an obsolete
+error state.
 
 `DriveAPIClient` uses an in-process session for metadata operations and a
 dedicated background `URLSession` for multipart uploads. Upload bodies are
@@ -392,7 +394,9 @@ Background work is eventual and system-controlled:
   they do not prove background cadence or future execution.
 - Scheduling inspects public pending task requests. If the refresh identifier
   is already pending, the app records that it kept the request; otherwise it
-  submits a new request without first cancelling the existing schedule.
+  submits a new request without first cancelling the existing schedule. A
+  background-task invocation schedules exactly once so a useful `submitted`
+  receipt cannot be overwritten by a redundant follow-up attempt.
 
 - HealthKit observers are the primary change signal.
 - A reachable Watch request is acknowledged promptly, then the iPhone performs
@@ -462,13 +466,14 @@ therefore pairs it with a macOS job running `make build`, which type checks the
 iOS app and the embedded Watch app on every pull request.
 
 `make verify-full` adds the iOS app and UI tests on an available Simulator. It
-runs locally or through the manual `Full Verify` workflow, never on a pull
-request.
+runs locally or through the manual `Full Verify` and `Upload TestFlight`
+workflows, never on a pull request.
 
-`make test`, `make smoke`, `make run`, and `make verify-full` (which runs the
-test task) require `xcode-select` to point at a full Xcode and fail early with
-that instruction otherwise. They also need the target Simulator already booted;
-a cold device loses a launch race and reports `SBMainWorkspace ... Busy` for
+`make test`, `make smoke`, `make harness`, `make run`, and `make verify-full`
+(which runs the test task) require `xcode-select` to point at a full Xcode and
+fail early with that instruction otherwise. `make harness` boots its selected
+Simulator. The other test tasks need the target Simulator already booted; a
+cold device loses a launch race and reports `SBMainWorkspace ... Busy` for
 every UI test.
 
 No gate proves HealthKit authorization, observer delivery, Google OAuth, Drive

@@ -44,6 +44,7 @@ Choose additional proof based on the change:
 | `make build` | Unsigned iOS build with the embedded Watch app |
 | `make test` | App unit tests and Simulator UI tests |
 | `make smoke` | App-shell launch smoke test |
+| `make harness` | Twelve deterministic UI states with screenshots and an xcresult summary |
 | `make verify-full` | Complete local iOS and Simulator gate |
 
 Run `make clean` to remove build products managed by these commands. HealthKit,
