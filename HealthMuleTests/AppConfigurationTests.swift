@@ -30,6 +30,21 @@ final class AppConfigurationTests: XCTestCase {
                 afterBootstrap: nil
             )
         )
+        XCTAssertFalse(
+            AppModel.backgroundRefreshRequiresScheduling(
+                afterBootstrap: .backgroundRefresh
+            )
+        )
+        XCTAssertFalse(
+            AppModel.backgroundRefreshRequiresScheduling(
+                afterBootstrap: .appLaunch
+            )
+        )
+        XCTAssertTrue(
+            AppModel.backgroundRefreshRequiresScheduling(
+                afterBootstrap: nil
+            )
+        )
     }
 
     @MainActor

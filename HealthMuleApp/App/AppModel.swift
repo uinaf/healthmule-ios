@@ -459,6 +459,11 @@ final class AppModel {
         ) {
             await reconcile(trigger: .backgroundRefresh)
         }
+        if Self.backgroundRefreshRequiresScheduling(
+            afterBootstrap: bootstrapTrigger
+        ) {
+            await scheduleBackgroundRefresh()
+        }
     }
 
     static func preferredBootstrapTrigger(
@@ -475,6 +480,12 @@ final class AppModel {
         afterBootstrap trigger: SyncTrigger?
     ) -> Bool {
         trigger != .backgroundRefresh
+    }
+
+    static func backgroundRefreshRequiresScheduling(
+        afterBootstrap trigger: SyncTrigger?
+    ) -> Bool {
+        trigger == nil
     }
 
     func scheduleBackgroundRefresh() async {

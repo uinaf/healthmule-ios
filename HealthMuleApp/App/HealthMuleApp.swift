@@ -38,7 +38,6 @@ struct HealthMuleApp: App {
         }
         .backgroundTask(.appRefresh(BackgroundRefreshCoordinator.identifier)) {
             await model.performBackgroundRefresh()
-            await model.scheduleBackgroundRefresh()
         }
         .backgroundTask(
             .urlSession(BackgroundDriveUploadTransport.sessionIdentifier)
