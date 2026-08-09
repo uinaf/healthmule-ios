@@ -154,7 +154,7 @@ struct SyncView: View {
         systemImage: String,
         receipt: SyncActivityReceipt?
     ) -> some View {
-        let status = receipt.map { outcomeLabel($0.outcome) }
+        let status = receipt.map { $0.outcome.statusLabel }
             ?? "Never observed"
         let context = receipt?.trigger.activityLabel
         let timestamp = receipt.map {
@@ -169,7 +169,7 @@ struct SyncView: View {
             context: context,
             timestamp: timestamp,
             systemImage: systemImage,
-            tone: receipt.map { outcomeTone($0.outcome) } ?? .neutral,
+            tone: receipt.map { $0.outcome.statusTone } ?? .neutral,
             accessibilityValue: activityText(receipt)
         )
     }
@@ -204,38 +204,8 @@ struct SyncView: View {
         guard let receipt else { return "Never observed" }
         let timestamp = receipt.finishedAt ?? receipt.startedAt
         return "\(receipt.trigger.activityLabel) · "
-            + "\(outcomeLabel(receipt.outcome)) · "
+            + "\(receipt.outcome.statusLabel) · "
             + timestamp.formatted(date: .abbreviated, time: .shortened)
-    }
-
-    private func outcomeLabel(_ outcome: SyncActivityOutcome) -> String {
-        switch outcome {
-        case .running:
-            "Running"
-        case .succeeded:
-            "Succeeded"
-        case .pending:
-            "Pending"
-        case .skipped:
-            "Skipped"
-        case .failed:
-            "Failed"
-        case .interrupted:
-            "Interrupted"
-        }
-    }
-
-    private func outcomeTone(_ outcome: SyncActivityOutcome) -> StatusTone {
-        switch outcome {
-        case .running, .pending:
-            .accent
-        case .succeeded:
-            .success
-        case .skipped, .interrupted:
-            .warning
-        case .failed:
-            .danger
-        }
     }
 
     private func scheduleTone(

@@ -65,6 +65,38 @@ enum StatusTone: Equatable {
     }
 }
 
+extension SyncActivityOutcome {
+    var statusLabel: String {
+        switch self {
+        case .running:
+            "Running"
+        case .succeeded:
+            "Succeeded"
+        case .pending:
+            "Pending"
+        case .skipped:
+            "Skipped"
+        case .failed:
+            "Failed"
+        case .interrupted:
+            "Interrupted"
+        }
+    }
+
+    var statusTone: StatusTone {
+        switch self {
+        case .running, .pending:
+            .accent
+        case .succeeded:
+            .success
+        case .skipped, .interrupted:
+            .warning
+        case .failed:
+            .danger
+        }
+    }
+}
+
 struct StatusGlyph: View {
     let systemImage: String
     var tone: StatusTone = .neutral
@@ -204,6 +236,7 @@ struct StatusHero<Action: View>: View {
     let title: String
     let message: String
     var progress: SyncProgress?
+    var showsActionPlaceholder = false
     @ViewBuilder var action: () -> Action
 
     var body: some View {
@@ -222,11 +255,18 @@ struct StatusHero<Action: View>: View {
                 SyncDayProgressView(progress: progress)
             }
 
-            action()
-                .frame(maxWidth: .infinity)
-                .buttonStyle(.borderedProminent)
-                .tint(HealthMuleStyle.tint)
-                .controlSize(.large)
+            if showsActionPlaceholder {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(HealthMuleStyle.inset)
+                    .frame(height: 52)
+                    .accessibilityHidden(true)
+            } else {
+                action()
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                    .tint(HealthMuleStyle.tint)
+                    .controlSize(.large)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .healthMuleCard(padding: 20)

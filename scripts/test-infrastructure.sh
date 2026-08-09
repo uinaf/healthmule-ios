@@ -262,6 +262,9 @@ open_line="$(grep -nF "/usr/bin/open -a Simulator --args -CurrentDeviceUDID" scr
 launch_line="$(grep -nF 'simctl launch "${simulator_id}"' scripts/run-simulator.sh | cut -d: -f1)"
 [[ -n "${open_line}" && -n "${launch_line}" && "${open_line}" -lt "${launch_line}" ]] ||
   fail "make run must open the selected Simulator before launching the app."
+if grep -Fq -- "-sdk iphonesimulator" scripts/run-simulator.sh; then
+  fail "make run must let Xcode select the Watch companion SDK from the destination."
+fi
 
 for workflow in .github/workflows/*.yml; do
   if grep -Fq "brew install xcodegen" "${workflow}"; then

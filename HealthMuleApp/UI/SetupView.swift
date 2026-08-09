@@ -7,6 +7,8 @@ struct SetupView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
+    @State private var isHealthDetailsExpanded = false
+    @State private var isGoogleDetailsExpanded = false
 
     var body: some View {
         ScrollView {
@@ -74,63 +76,88 @@ struct SetupView: View {
         }
     }
 
+    @ViewBuilder
     private var healthCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SetupStepHeader(
-                number: 1,
-                title: "Apple Health",
-                badge: healthBadge,
-                tone: healthTone
-            )
-
-            Text(
-                "Request read-only access to the fitness types you want included. Apple does not tell apps which read permissions were approved."
-            )
-            .font(HealthMuleStyle.Text.cardBody)
-            .foregroundStyle(.secondary)
-
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(HealthMetric.allCases) { metric in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(metric.title)
-                                    .font(.subheadline.weight(.medium))
-                                Spacer()
-                                if !model.enabledMetrics.contains(metric) {
-                                    Text("Not included")
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            Text(metric.explanation)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 10)
-
-                        if metric != HealthMetric.allCases.last {
-                            Divider()
-                        }
+        Group {
+            if isHealthStepComplete {
+                DisclosureGroup(
+                    isExpanded: $isHealthDetailsExpanded
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        healthStepContent
                     }
+                    .padding(.top, 18)
+                } label: {
+                    healthStepHeader
                 }
-                .padding(.top, 8)
-            } label: {
-                Text(
-                    "\(model.enabledMetrics.count) of \(HealthMetric.allCases.count) read-only data types included"
-                )
-                    .font(.subheadline.weight(.medium))
-            }
-
-            healthAuthorizationButton
-
-            if !model.isHealthKitAvailable {
-                Text("Apple Health authorization requires a supported iPhone.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 18) {
+                    healthStepHeader
+                    healthStepContent
+                }
             }
         }
         .healthMuleCard()
+        .accessibilityIdentifier("health-setup-step")
+    }
+
+    private var healthStepHeader: some View {
+        SetupStepHeader(
+            number: 1,
+            title: "Apple Health",
+            badge: healthBadge,
+            tone: healthTone
+        )
+    }
+
+    @ViewBuilder
+    private var healthStepContent: some View {
+        Text(
+            "Request read-only access to the fitness types you want included. Apple does not tell apps which read permissions were approved."
+        )
+        .font(HealthMuleStyle.Text.cardBody)
+        .foregroundStyle(.secondary)
+
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(HealthMetric.allCases) { metric in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(metric.title)
+                                .font(.subheadline.weight(.medium))
+                            Spacer()
+                            if !model.enabledMetrics.contains(metric) {
+                                Text("Not included")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(metric.explanation)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 10)
+
+                    if metric != HealthMetric.allCases.last {
+                        Divider()
+                    }
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Text(
+                "\(model.enabledMetrics.count) of \(HealthMetric.allCases.count) read-only data types included"
+            )
+                .font(.subheadline.weight(.medium))
+        }
+
+        healthAuthorizationButton
+
+        if !model.isHealthKitAvailable {
+            Text("Apple Health authorization requires a supported iPhone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder
@@ -269,25 +296,49 @@ struct SetupView: View {
         .accessibilityIdentifier("backfill-range-picker")
     }
 
+    @ViewBuilder
     private var googleCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SetupStepHeader(
-                number: 3,
-                title: "Google Drive",
-                badge: googleBadge,
-                tone: googleTone
-            )
-
-            Text(
-                "HealthMule can access only the Drive files it creates or that you explicitly open with it."
-            )
-            .font(HealthMuleStyle.Text.cardBody)
-            .foregroundStyle(.secondary)
-
-            googleStateContent
+        Group {
+            if isGoogleStepComplete {
+                DisclosureGroup(
+                    isExpanded: $isGoogleDetailsExpanded
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        googleStepContent
+                    }
+                    .padding(.top, 18)
+                } label: {
+                    googleStepHeader
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 18) {
+                    googleStepHeader
+                    googleStepContent
+                }
+            }
         }
         .healthMuleCard()
         .accessibilityIdentifier("google-state")
+    }
+
+    private var googleStepHeader: some View {
+        SetupStepHeader(
+            number: 3,
+            title: "Google Drive",
+            badge: googleBadge,
+            tone: googleTone
+        )
+    }
+
+    @ViewBuilder
+    private var googleStepContent: some View {
+        Text(
+            "HealthMule can access only the Drive files it creates or that you explicitly open with it."
+        )
+        .font(HealthMuleStyle.Text.cardBody)
+        .foregroundStyle(.secondary)
+
+        googleStateContent
     }
 
     @ViewBuilder
@@ -400,6 +451,14 @@ struct SetupView: View {
         case .custom:
             "Custom"
         }
+    }
+
+    private var isHealthStepComplete: Bool {
+        model.healthAuthorizationState == .requestCompleted
+    }
+
+    private var isGoogleStepComplete: Bool {
+        model.googleConnection.isDriveReady
     }
 
     private var googleBadge: String {

@@ -4,11 +4,25 @@ import SwiftUI
 @main
 struct HealthMuleApp: App {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model = AppModel.live()
 
     var body: some Scene {
         WindowGroup {
             AppRootView(model: model)
+                .preferredColorScheme(
+                    ProcessInfo.processInfo.arguments.contains("--ui-dark-mode")
+                        ? .dark
+                        : nil
+                )
+                .environment(
+                    \.dynamicTypeSize,
+                    ProcessInfo.processInfo.arguments.contains(
+                        "--ui-accessibility-text"
+                    )
+                        ? .accessibility3
+                        : dynamicTypeSize
+                )
                 .task {
                     await model.bootstrap()
                 }

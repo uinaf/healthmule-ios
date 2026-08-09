@@ -166,6 +166,31 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testLoadedHomeKeepsEmptySyncSummaryVisible() throws {
+        let app = launch()
+
+        XCTAssertTrue(
+            app.staticTexts["Sync summary"].waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Never"].exists)
+        XCTAssertTrue(app.staticTexts["None"].exists)
+        XCTAssertTrue(app.staticTexts["0"].exists)
+        XCTAssertTrue(app.staticTexts["No automatic run observed"].exists)
+    }
+
+    @MainActor
+    func testHomeSurfacesLatestAutomaticActivity() throws {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-activity-success"]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic sync"].waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Succeeded"].exists)
+    }
+
+    @MainActor
     func testAutomaticFailureDoesNotAppearOnHomeOrSync() throws {
         let arguments = ["--ui-ready", "--ui-operation-failed-automatic"]
         let homeApp = launch(additionalArguments: arguments)
@@ -297,6 +322,34 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(element("sync-screen", in: app).waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Review suggested"].exists)
         XCTAssertTrue(element("sync-now-action", in: app).isEnabled)
+    }
+
+    @MainActor
+    func testCompletedSetupStepsStartCollapsedAndCanExpand() throws {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-setup"]
+        )
+
+        let healthStep = element("health-setup-step", in: app)
+        XCTAssertTrue(healthStep.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Open App Settings"].exists)
+
+        healthStep.tap()
+        XCTAssertTrue(
+            app.buttons["Open App Settings"].waitForExistence(timeout: 5)
+        )
+
+        let googleStep = element("google-state", in: app)
+        for _ in 0..<3 where !googleStep.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(googleStep.isHittable)
+        XCTAssertFalse(app.buttons["Open in Google Drive"].exists)
+
+        googleStep.tap()
+        XCTAssertTrue(
+            app.buttons["Open in Google Drive"].waitForExistence(timeout: 5)
+        )
     }
 
     @MainActor
@@ -531,6 +584,14 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(element("setup-screen", in: app).waitForExistence(timeout: 10))
         XCTAssertTrue(element("google-state", in: app).exists)
         capture("06-setup", from: app)
+
+        let googleStep = element("google-state", in: app)
+        for _ in 0..<3 where !googleStep.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(googleStep.isHittable)
+        googleStep.tap()
+
         let openDrive = app.buttons["Open in Google Drive"]
         for _ in 0..<3 where !openDrive.isHittable {
             app.swipeUp()
@@ -559,6 +620,29 @@ final class HealthMuleUITests: XCTestCase {
         }
         XCTAssertTrue(diagnostics.isHittable)
         capture("10-settings-actions", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-activity-success",
+                "--ui-dark-mode",
+            ]
+        )
+        XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Automatic sync"].exists)
+        capture("11-home-dark", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-accessibility-text",
+            ]
+        )
+        XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Ready for the first sync"].exists)
+        capture("12-home-accessibility-text", from: app)
     }
 
     @MainActor

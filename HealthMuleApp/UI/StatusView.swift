@@ -50,17 +50,15 @@ struct StatusView: View {
 
     @ViewBuilder
     private var syncSummarySection: some View {
-        if model.initialLoadPhase == .loading || shouldShowSummary {
-            VStack(spacing: 12) {
-                SectionHeading(title: "Sync summary")
-                if model.initialLoadPhase == .loading {
-                    summaryLoadingCard
-                } else {
-                    NavigationLink(value: HomeRoute.sync) {
-                        summaryCard
-                    }
-                    .buttonStyle(.plain)
+        VStack(spacing: 12) {
+            SectionHeading(title: "Sync summary")
+            if model.initialLoadPhase == .loading {
+                summaryLoadingCard
+            } else {
+                NavigationLink(value: HomeRoute.sync) {
+                    summaryCard
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -100,7 +98,8 @@ struct StatusView: View {
             tone: heroPresentation.tone,
             title: heroPresentation.title,
             message: heroPresentation.message,
-            progress: model.syncProgress
+            progress: model.syncProgress,
+            showsActionPlaceholder: model.initialLoadPhase == .loading
         ) {
             heroAction
         }
@@ -203,6 +202,10 @@ struct StatusView: View {
             }
 
             SyncFactsRow(summary: model.syncSummary)
+
+            Divider()
+
+            automaticActivityGlance
         }
         .healthMuleCard(padding: 16)
         .contentShape(Rectangle())
@@ -241,11 +244,97 @@ struct StatusView: View {
                         .padding(.leading, 10)
                 }
             }
+
+            Divider()
+
+            automaticActivityLoadingGlance
         }
         .healthMuleCard(padding: 16)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading sync summary")
         .accessibilityIdentifier("sync-summary-loading")
+    }
+
+    private var automaticActivityGlance: some View {
+        let receipt = model.syncActivitySummary.latestAutomatic
+        let tone = receipt.map { $0.outcome.statusTone }
+            ?? .neutral
+
+        return HStack(spacing: 10) {
+            StatusGlyph(
+                systemImage: "clock.arrow.circlepath",
+                tone: tone,
+                size: 34
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Automatic sync")
+                    .font(.subheadline.weight(.semibold))
+
+                if let receipt {
+                    HStack(spacing: 0) {
+                        Text(receipt.outcome.statusLabel)
+                        Text(" · ")
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            Text(
+                                automaticActivityTimestamp(
+                                    receipt,
+                                    relativeTo: context.date
+                                )
+                            )
+                        }
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("No automatic run observed")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 4)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home-automatic-activity")
+    }
+
+    private var automaticActivityLoadingGlance: some View {
+        HStack(spacing: 10) {
+            StatusGlyph(
+                systemImage: "clock.arrow.circlepath",
+                tone: .neutral,
+                size: 34
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Automatic sync")
+                    .font(.subheadline.weight(.semibold))
+                Text("Loading activity")
+                    .font(.footnote)
+                    .redacted(reason: .placeholder)
+            }
+
+            Spacer(minLength: 4)
+        }
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+
+    private func automaticActivityTimestamp(
+        _ receipt: SyncActivityReceipt,
+        relativeTo date: Date
+    ) -> String {
+        let timestamp = receipt.finishedAt ?? receipt.startedAt
+        if abs(timestamp.timeIntervalSince(date)) < 60 {
+            return "just now"
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(
+            for: timestamp,
+            relativeTo: date
+        )
     }
 
     private func summaryLoadingFact(_ label: String) -> some View {
@@ -283,17 +372,6 @@ struct StatusView: View {
             text: "Only normalized daily records go to your own Drive. Health values and OAuth tokens never enter diagnostics.",
             systemImage: "lock.shield.fill"
         )
-    }
-
-    private var isReady: Bool {
-        model.syncReadiness.canSync
-    }
-
-    private var shouldShowSummary: Bool {
-        isReady
-            || model.syncSummary.lastSuccessfulSyncAt != nil
-            || model.syncSummary.latestExportedDate != nil
-            || model.syncSummary.pendingUploadCount > 0
     }
 
     private var readableMetricCount: Int {
