@@ -451,6 +451,77 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testAgentHarnessCapturesCriticalStates() throws {
+        var app = launch(additionalArguments: ["--ui-initial-loading"])
+        XCTAssertTrue(
+            element("sync-summary-loading", in: app)
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Loading your sync status"].exists)
+        capture("01-startup-loading", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-operation-working",
+                "--ui-sync-progress",
+            ]
+        )
+        XCTAssertTrue(
+            app.staticTexts["Syncing your latest changes"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertEqual(
+            element("sync-day-progress", in: app).value as? String,
+            "Processing 12 of 30 days"
+        )
+        capture("02-sync-in-progress", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: ["--ui-ready", "--ui-operation-failed-user"]
+        )
+        XCTAssertTrue(
+            app.staticTexts["Sync needs another look"]
+                .waitForExistence(timeout: 10)
+        )
+        capture("03-user-visible-failure", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-success",
+            ]
+        )
+        let automaticActivity = app.staticTexts["Automatic activity"]
+        XCTAssertTrue(automaticActivity.waitForExistence(timeout: 10))
+        for _ in 0..<4 where !automaticActivity.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(automaticActivity.isHittable)
+        XCTAssertTrue(
+            value(of: "automatic-activity-background", in: app)
+                .contains("Background refresh · Succeeded")
+        )
+        capture("04-background-activity-receipts", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-permanent-failure",
+            ]
+        )
+        XCTAssertTrue(app.staticTexts["Upload blocked"].waitForExistence(timeout: 10))
+        XCTAssertFalse(element("retry-uploads-action", in: app).isEnabled)
+        capture("05-blocked-upload", from: app)
+    }
+
+    @MainActor
     private func launch(
         additionalArguments: [String] = []
     ) -> XCUIApplication {
@@ -458,6 +529,17 @@ final class HealthMuleUITests: XCTestCase {
         app.launchArguments = ["--ui-testing"] + additionalArguments
         app.launch()
         return app
+    }
+
+    @MainActor
+    private func capture(
+        _ name: String,
+        from app: XCUIApplication
+    ) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor

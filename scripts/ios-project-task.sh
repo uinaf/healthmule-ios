@@ -8,15 +8,15 @@ fi
 
 task="${1:-}"
 case "${task}" in
-  project | build | test | smoke | run | clean) ;;
+  project | build | test | smoke | harness | run | clean) ;;
   *)
-    echo "usage: $0 {project|build|test|smoke|run|clean}" >&2
+    echo "usage: $0 {project|build|test|smoke|harness|run|clean}" >&2
     exit 64
     ;;
 esac
 
 case "${task}" in
-  test | smoke | run)
+  test | smoke | harness | run)
     # xcodebuild spawns its Simulator helpers through xcode-select rather than
     # DEVELOPER_DIR, so the wrappers cannot compensate for a CommandLineTools
     # selection the way they do for plain builds.
@@ -76,6 +76,47 @@ case "${task}" in
       CODE_SIGNING_ALLOWED=YES \
       CODE_SIGNING_REQUIRED=NO \
       CODE_SIGN_IDENTITY=-
+    ;;
+  harness)
+    destination="$(./scripts/simulator-destination.sh)"
+    simulator_id="${destination##*=}"
+    output_root="${HEALTHMULE_HARNESS_OUTPUT:-.artifacts/agent-harness}"
+    run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    run_directory="${output_root}/run-${run_id}"
+    result_bundle="${run_directory}/HealthMuleHarness.xcresult"
+    attachments_directory="${run_directory}/attachments"
+
+    mkdir -p "${run_directory}"
+    ./scripts/xcrun.sh simctl boot "${simulator_id}" >/dev/null 2>&1 || true
+    ./scripts/xcrun.sh simctl bootstatus "${simulator_id}" -b
+
+    set +e
+    ./scripts/xcodebuild.sh test \
+      -quiet \
+      -project HealthMule.xcodeproj \
+      -scheme HealthMule \
+      "-only-testing:HealthMuleUITests/HealthMuleUITests/testAgentHarnessCapturesCriticalStates" \
+      -destination "${destination}" \
+      -derivedDataPath .artifacts/DerivedData \
+      -resultBundlePath "${result_bundle}" \
+      CODE_SIGNING_ALLOWED=YES \
+      CODE_SIGNING_REQUIRED=NO \
+      CODE_SIGN_IDENTITY=-
+    test_status=$?
+    set -e
+
+    if [[ -d "${result_bundle}" ]]; then
+      ./scripts/xcrun.sh xcresulttool get test-results summary \
+        --path "${result_bundle}" \
+        --compact >"${run_directory}/summary.json"
+      mkdir -p "${attachments_directory}"
+      ./scripts/xcrun.sh xcresulttool export attachments \
+        --path "${result_bundle}" \
+        --output-path "${attachments_directory}"
+    fi
+
+    printf 'HealthMule harness artifacts: %s\n' "$(cd "${run_directory}" && pwd)"
+    exit "${test_status}"
     ;;
   run)
     exec ./scripts/run-simulator.sh

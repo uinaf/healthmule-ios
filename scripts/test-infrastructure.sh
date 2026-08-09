@@ -6,7 +6,7 @@ fail() {
   exit 1
 }
 
-for task in project build test smoke run; do
+for task in project build test smoke harness run; do
   expected="./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh ${task}"
   actual="$(make --no-print-directory --dry-run "${task}")"
   [[ "${actual}" == "${expected}" ]] ||
@@ -220,6 +220,10 @@ grep -Fq "./scripts/generate-project.sh" scripts/ios-project-task.sh ||
   fail "The locked task runner must generate the project."
 grep -Fq 'destination="$(./scripts/simulator-destination.sh)"' scripts/ios-project-task.sh ||
   fail "The locked task runner must resolve test destinations."
+grep -Fq "testAgentHarnessCapturesCriticalStates" scripts/ios-project-task.sh ||
+  fail "The agent harness must run the critical-state UI scenario."
+grep -Fq "xcresulttool export attachments" scripts/ios-project-task.sh ||
+  fail "The agent harness must export durable screenshot attachments."
 
 compatible_ids=$'11111111-1111-1111-1111-111111111111\n22222222-2222-2222-2222-222222222222'
 selected="$(

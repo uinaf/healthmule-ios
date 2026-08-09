@@ -6,6 +6,14 @@ background Watch Connectivity delivery. Simulator checks remain useful for both
 app shells and deterministic contracts, but they do not prove those delivery
 boundaries.
 
+`make harness` is the unattended Simulator lane for agents and CI-capable Macs.
+It boots its selected iPhone Simulator, launches the app through critical
+loading, sync, failure, and automatic-activity fixtures, asserts their visible
+contracts, and exports screenshots with an xcresult summary under
+`.artifacts/agent-harness`. These fixtures contain no personal health data or
+Google credentials. They complement, but never replace, the physical-device
+checks in this document.
+
 ## Current readiness
 
 | Surface | Status |

@@ -11,10 +11,10 @@ and Drive uploads. The Watch companion displays sanitized sync status and can
 request a sync while the phone is reachable. HealthMule has no developer
 backend, analytics, ads, or telemetry.
 
-The complete sync path is implemented and covered by deterministic core tests
-and Simulator checks. The Watch companion has no automated coverage yet.
-HealthKit background delivery, real Drive uploads, and process-interruption
-recovery require acceptance testing with a signed build on physical devices; see
+The complete sync path is implemented and covered by deterministic core tests,
+Watch presentation-contract tests, and Simulator checks. HealthKit background
+delivery, real Drive uploads, and process-interruption recovery require
+acceptance testing with a signed build on physical devices; see
 [Physical-device testing](docs/DEVICE_TESTING.md).
 
 ## Quick start
@@ -43,6 +43,19 @@ Set `SIMULATOR_UDID` to target a specific available simulator:
 ```sh
 SIMULATOR_UDID=<simulator-udid> make run
 ```
+
+Run the unattended agent harness to boot a compatible iPhone Simulator,
+exercise the critical loading, sync, failure, and automatic-activity states,
+and retain screenshots plus a machine-readable test summary:
+
+```sh
+make harness
+```
+
+Each run writes a new directory under `.artifacts/agent-harness`. Set
+`HEALTHMULE_HARNESS_OUTPUT` to place those artifacts elsewhere. The harness
+uses deterministic development fixtures; it does not claim real HealthKit
+background delivery or real Drive upload proof.
 
 The default build intentionally has no Google credentials. The UI and automated
 tests work in that state. Follow [Google OAuth setup](docs/GOOGLE_OAUTH.md) when
