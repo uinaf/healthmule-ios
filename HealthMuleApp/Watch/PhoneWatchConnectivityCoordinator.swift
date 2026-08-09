@@ -23,7 +23,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     private let session: WCSession?
     private let snapshotProvider: SnapshotProvider
     private let syncRequestHandler: SyncRequestHandler
-    private var lastPublishedSemantics: CompanionSyncSnapshot.Semantics?
+    private var publicationState = CompanionSnapshotPublicationState()
 
     init(
         snapshotProvider: @escaping SnapshotProvider,
@@ -37,7 +37,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     }
 
     func activate() {
-        lastPublishedSemantics = nil
+        publicationState.invalidate()
         guard let session else { return }
         session.delegate = self
         session.activate()
@@ -48,7 +48,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
             let session,
             session.activationState == .activated,
             let snapshot = snapshotProvider(),
-            snapshot.semantics != lastPublishedSemantics,
+            publicationState.needsPublication(of: snapshot),
             let message = try? CompanionPayloadCodec.message(
                 snapshot: snapshot
             )
@@ -57,7 +57,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
         }
         do {
             try session.updateApplicationContext(message)
-            lastPublishedSemantics = snapshot.semantics
+            publicationState.didPublish(snapshot)
         } catch {}
     }
 
@@ -82,12 +82,15 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        session.activate()
+        Task { @MainActor [weak self] in
+            self?.publicationState.invalidate()
+            self?.session?.activate()
+        }
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor [weak self] in
-            self?.lastPublishedSemantics = nil
+            self?.publicationState.invalidate()
             self?.publishCurrentStatus()
         }
     }

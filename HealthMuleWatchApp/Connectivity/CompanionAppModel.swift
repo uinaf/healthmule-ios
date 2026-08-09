@@ -6,23 +6,12 @@ import Observation
 @MainActor
 @Observable
 final class CompanionAppModel: NSObject {
-    enum DeliveryState: Equatable {
-        case idle
-        case sending
-        case accepted
-        case failed
-    }
-
     private(set) var snapshot: CompanionSyncSnapshot?
-    private(set) var deliveryState: DeliveryState = .idle
     private(set) var isReachable = false
+    private(set) var activationState: CompanionActivationState = .inactive
+    private var requestLifecycle = CompanionRequestLifecycle()
 
     private let session: WCSession?
-    private var outstandingRequestID: UUID?
-    private var acceptedRequestID: UUID?
-    private var requestBaselineSnapshot: CompanionSyncSnapshot?
-    private var receivedPostRequestSnapshot = false
-    private var isActivated = false
 
     init(
         session: WCSession? = WCSession.isSupported() ? .default : nil
@@ -33,21 +22,28 @@ final class CompanionAppModel: NSObject {
     }
 
     var canRequestSync: Bool {
-        snapshot?.canRequestSync == true
-            && snapshot?.activity != .syncing
-            && outstandingRequestID == nil
-            && deliveryState != .accepted
-            && isActivated
-            && isReachable
+        status(at: .now).canRequestSync
+    }
+
+    func status(at now: Date) -> CompanionStatusModel {
+        CompanionStatusModel(
+            snapshot: snapshot,
+            activation: activationState,
+            isReachable: isReachable,
+            requestState: requestLifecycle.state,
+            now: now
+        )
     }
 
     func activate() {
         guard let session else {
-            deliveryState = .failed
+            activationState = .failed
             return
         }
         receiveSnapshot(from: session.receivedApplicationContext)
-        isActivated = session.activationState == .activated
+        activationState = session.activationState == .activated
+            ? .activated
+            : .inactive
         isReachable = session.isReachable
         session.activate()
     }
@@ -55,20 +51,22 @@ final class CompanionAppModel: NSObject {
     func requestSync() {
         guard canRequestSync, let session else { return }
         let request = CompanionSyncRequest()
+        requestLifecycle.start(
+            requestID: request.id,
+            baseline: snapshot
+        )
         guard
             let message = try? CompanionPayloadCodec.message(
                 syncRequest: request
             )
         else {
-            deliveryState = .failed
+            requestLifecycle.receiveReply(
+                requestID: request.id,
+                accepted: false
+            )
             return
         }
 
-        outstandingRequestID = request.id
-        acceptedRequestID = nil
-        requestBaselineSnapshot = snapshot
-        receivedPostRequestSnapshot = false
-        deliveryState = .sending
         // WatchConnectivity invokes these on its own operation queue. Both must
         // stay @Sendable: a closure literal written inside this @MainActor type
         // is otherwise inferred main-actor isolated, and the compiler emits a
@@ -91,21 +89,12 @@ final class CompanionAppModel: NSObject {
     }
 
     private func completeRequest(_ requestID: UUID, accepted: Bool) {
-        guard outstandingRequestID == requestID else { return }
-        outstandingRequestID = nil
-        if accepted {
-            deliveryState = receivedPostRequestSnapshot ? .idle : .accepted
-            if deliveryState == .accepted {
-                acceptedRequestID = requestID
-                resetAcceptedStateIfNeeded(for: requestID)
-            }
-        } else {
-            deliveryState = .failed
-        }
-        if deliveryState != .accepted {
-            acceptedRequestID = nil
-            requestBaselineSnapshot = nil
-            receivedPostRequestSnapshot = false
+        requestLifecycle.receiveReply(
+            requestID: requestID,
+            accepted: accepted
+        )
+        if requestLifecycle.state == .accepted {
+            resetAcceptedStateIfNeeded(for: requestID)
         }
     }
 
@@ -115,15 +104,12 @@ final class CompanionAppModel: NSObject {
             guard
                 !Task.isCancelled,
                 let self,
-                acceptedRequestID == requestID,
-                deliveryState == .accepted
+                requestLifecycle.requestID == requestID,
+                requestLifecycle.state == .accepted
             else {
                 return
             }
-            acceptedRequestID = nil
-            deliveryState = .idle
-            requestBaselineSnapshot = nil
-            receivedPostRequestSnapshot = false
+            requestLifecycle.acceptedStateExpired(requestID: requestID)
         }
     }
 
@@ -137,39 +123,30 @@ final class CompanionAppModel: NSObject {
     }
 
     private func apply(_ snapshot: CompanionSyncSnapshot) {
-        let changed = snapshot.semantics != self.snapshot?.semantics
         self.snapshot = snapshot
-        if
-            changed,
-            requestBaselineSnapshot != nil,
-            snapshot.semantics != requestBaselineSnapshot?.semantics
-        {
-            receivedPostRequestSnapshot = true
-            if deliveryState == .accepted {
-                acceptedRequestID = nil
-                deliveryState = .idle
-                requestBaselineSnapshot = nil
-                receivedPostRequestSnapshot = false
-            }
-        }
+        requestLifecycle.receive(snapshot: snapshot)
     }
 }
 
 extension CompanionAppModel: WCSessionDelegate {
     nonisolated func session(
         _ session: WCSession,
-        activationDidCompleteWith activationState: WCSessionActivationState,
+        activationDidCompleteWith receivedActivationState:
+            WCSessionActivationState,
         error: (any Error)?
     ) {
-        let isActivated = activationState == .activated && error == nil
+        let isActivated =
+            receivedActivationState == .activated && error == nil
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.isActivated = isActivated
             isReachable = isActivated && self.session?.isReachable == true
-            if isActivated, let context = self.session?.receivedApplicationContext {
-                receiveSnapshot(from: context)
-            } else if !isActivated {
-                deliveryState = .failed
+            if isActivated {
+                self.activationState = .activated
+                if let context = self.session?.receivedApplicationContext {
+                    receiveSnapshot(from: context)
+                }
+            } else {
+                self.activationState = .failed
             }
         }
     }

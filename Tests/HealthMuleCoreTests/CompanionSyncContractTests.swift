@@ -62,6 +62,33 @@ final class CompanionSyncContractTests: XCTestCase {
         )
     }
 
+    func testSnapshotJSONContainsOnlyApprovedWireKeys() throws {
+        let message = try CompanionPayloadCodec.message(
+            snapshot: makeSnapshot()
+        )
+        let data = try XCTUnwrap(
+            message[CompanionPayloadCodec.snapshotKey] as? Data
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            Set(object.keys),
+            [
+                "activity",
+                "canRequestSync",
+                "generatedAt",
+                "lastSuccessfulSyncAt",
+                "pendingUploadCount",
+                "permanentFailureCount",
+                "readiness",
+                "retryableUploadCount",
+                "schemaVersion",
+            ]
+        )
+    }
+
     func testSyncRequestRoundTripsAndAcknowledgementIsExplicit() throws {
         let id = try XCTUnwrap(
             UUID(uuidString: "47E21773-0499-412D-8D30-4E62A767C552")

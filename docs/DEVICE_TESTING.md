@@ -109,13 +109,23 @@ configured OAuth client and integration Drive account.
 
 ## Apple Watch companion acceptance
 
+- [ ] On a first Watch launch before any snapshot arrives, confirm the headline
+  says Waiting for iPhone and Retry iPhone is available. It must not say Ready
+  or spin indefinitely.
 - [ ] Launch the Watch app and confirm it shows only readiness, sync activity,
   last-success time, and queue counts. No health values, account details, Drive
   IDs, or error strings may cross the companion message.
+- [ ] Create pending, retryable, and blocked work on the iPhone and confirm the
+  Watch shows each nonzero count as an independent row while preserving Last
+  confirmed when one exists.
 - [ ] With the iPhone reachable, tap Sync and confirm the Watch reports that
   the request was accepted before the iPhone completes reconciliation.
 - [ ] Disable reachability and confirm Sync is unavailable rather than
-  claiming that work was queued or completed.
+  claiming that work was queued or completed. The headline must say Phone
+  Unavailable and must not say Up to Date.
+- [ ] Leave a previously synced snapshot without a phone update for more than
+  30 minutes and confirm the Watch labels it out of date while retaining its
+  last confirmed time and counts. It must not say Up to Date.
 - [ ] Restore reachability, request another sync, and confirm the iPhone's
   existing reconciliation path publishes a fresh status snapshot.
 - [ ] Leave the Watch app, allow background delivery, and confirm the latest
