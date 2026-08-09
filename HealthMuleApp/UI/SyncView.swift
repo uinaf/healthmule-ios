@@ -118,43 +118,89 @@ struct SyncView: View {
     }
 
     private var automaticActivityCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Automatic activity")
-                .font(HealthMuleStyle.Text.cardTitle)
+        VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Automatic activity")
+                    .font(HealthMuleStyle.Text.cardTitle)
 
-            ValueRow(
-                title: "Last automatic",
-                value: activityText(
-                    model.syncActivitySummary.latestAutomatic
+                activityRow(
+                    title: "Last automatic sync",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    receipt: model.syncActivitySummary.latestAutomatic
                 )
-            )
-            .accessibilityIdentifier("automatic-activity-latest")
+                .accessibilityIdentifier("automatic-activity-latest")
 
-            Divider()
+                Divider()
+                    .padding(.leading, 44)
 
-            ValueRow(
-                title: "Last background refresh",
-                value: activityText(
-                    model.syncActivitySummary.latestBackgroundRefresh
+                activityRow(
+                    title: "Last background refresh",
+                    systemImage: "clock.arrow.circlepath",
+                    receipt: model.syncActivitySummary.latestBackgroundRefresh
                 )
-            )
-            .accessibilityIdentifier("automatic-activity-background")
+                .accessibilityIdentifier("automatic-activity-background")
 
-            Divider()
+                Divider()
+                    .padding(.leading, 44)
 
-            ValueRow(
-                title: "Schedule request",
-                value: scheduleText(model.syncActivitySummary.schedule)
-            )
-            .accessibilityIdentifier("automatic-activity-schedule")
+                scheduleRow(model.syncActivitySummary.schedule)
+                    .accessibilityIdentifier("automatic-activity-schedule")
+            }
+            .healthMuleCard(padding: 16)
 
-            Text(
-                "Receipts show attempts and outcomes. They do not prove iOS background cadence."
+            SectionFooter(
+                text: "Receipts show attempts and outcomes. They do not prove iOS background cadence."
             )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
         }
-        .healthMuleCard(padding: 16)
+    }
+
+    private func activityRow(
+        title: String,
+        systemImage: String,
+        receipt: SyncActivityReceipt?
+    ) -> some View {
+        let status = receipt.map { outcomeLabel($0.outcome) }
+            ?? "Never observed"
+        let context = receipt?.trigger.activityLabel
+        let timestamp = receipt.map {
+            ($0.finishedAt ?? $0.startedAt).formatted(
+                date: .abbreviated,
+                time: .shortened
+            )
+        }
+        return ActivityStatusRow(
+            title: title,
+            status: status,
+            context: context,
+            timestamp: timestamp,
+            systemImage: systemImage,
+            accessibilityValue: activityText(receipt)
+        )
+    }
+
+    private func scheduleRow(
+        _ receipt: BackgroundRefreshScheduleReceipt?
+    ) -> some View {
+        let status: String
+        let timestamp: String?
+        if let receipt {
+            status = scheduleResultLabel(receipt.result)
+            timestamp = receipt.attemptedAt.formatted(
+                date: .abbreviated,
+                time: .shortened
+            )
+        } else {
+            status = "Never requested"
+            timestamp = nil
+        }
+        return ActivityStatusRow(
+            title: "Schedule request",
+            status: status,
+            context: nil,
+            timestamp: timestamp,
+            systemImage: "calendar.badge.clock",
+            accessibilityValue: scheduleText(receipt)
+        )
     }
 
     private func activityText(_ receipt: SyncActivityReceipt?) -> String {
@@ -186,7 +232,17 @@ struct SyncView: View {
         _ receipt: BackgroundRefreshScheduleReceipt?
     ) -> String {
         guard let receipt else { return "Never requested" }
-        let result = switch receipt.result {
+        return scheduleResultLabel(receipt.result) + " · "
+            + receipt.attemptedAt.formatted(
+                date: .abbreviated,
+                time: .shortened
+            )
+    }
+
+    private func scheduleResultLabel(
+        _ result: BackgroundRefreshScheduleResult
+    ) -> String {
+        switch result {
         case .submitted:
             "Submitted"
         case .existingRequestKept:
@@ -194,11 +250,6 @@ struct SyncView: View {
         case .failed(let reason):
             "Failed (\(scheduleFailureLabel(reason)))"
         }
-        return result + " · "
-            + receipt.attemptedAt.formatted(
-                date: .abbreviated,
-                time: .shortened
-            )
     }
 
     private func scheduleFailureLabel(
@@ -391,6 +442,46 @@ struct SyncView: View {
         }
     }
 
+}
+
+private struct ActivityStatusRow: View {
+    let title: String
+    let status: String
+    let context: String?
+    let timestamp: String?
+    let systemImage: String
+    let accessibilityValue: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.07), in: Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+
+                Text(context.map { "\(status) · \($0)" } ?? status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                if let timestamp {
+                    Text(timestamp)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(accessibilityValue)
+    }
 }
 
 struct SyncDayProgressView: View {
