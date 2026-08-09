@@ -4,6 +4,8 @@ enum HealthMuleStyle {
     static let contentWidth: CGFloat = 720
     static let pagePadding: CGFloat = 20
     static let cardRadius: CGFloat = 20
+    static let sectionSpacing: CGFloat = 24
+    static let rowIconSize: CGFloat = 36
 
     /// One canonical scale so screens cannot drift apart. Card titles and body
     /// copy sit a step below the system defaults, which read oversized in a
@@ -34,6 +36,10 @@ enum HealthMuleStyle {
     static var hairline: Color {
         Color.primary.opacity(0.07)
     }
+
+    static var inset: Color {
+        Color.primary.opacity(0.055)
+    }
 }
 
 enum StatusTone: Equatable {
@@ -47,11 +53,97 @@ enum StatusTone: Equatable {
         switch self {
         case .neutral:
             .secondary
-        case .accent, .success, .warning:
+        case .accent:
             .primary
+        case .success:
+            .green
+        case .warning:
+            .orange
         case .danger:
             .red
         }
+    }
+}
+
+struct StatusGlyph: View {
+    let systemImage: String
+    var tone: StatusTone = .neutral
+    var size = HealthMuleStyle.rowIconSize
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(tone.color)
+            .frame(width: size, height: size)
+            .background(tone.color.opacity(0.1), in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+struct IconStatusRow: View {
+    let title: String
+    let status: String
+    var detail: String?
+    let systemImage: String
+    var tone: StatusTone = .neutral
+    var showsChevron = false
+    var accessibilityLabel: String?
+    var accessibilityValue: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            StatusGlyph(systemImage: systemImage, tone: tone)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(HealthMuleStyle.Text.cardTitle)
+
+                Text(status)
+                    .font(HealthMuleStyle.Text.cardBody)
+                    .foregroundStyle(.secondary)
+
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 10)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel ?? title)
+        .accessibilityValue(accessibilityValue ?? [status, detail]
+            .compactMap { $0 }
+            .joined(separator: ". "))
+    }
+}
+
+struct HealthMuleNote: View {
+    let text: String
+    var systemImage = "info.circle"
+    var tone: StatusTone = .neutral
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tone.color)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(HealthMuleStyle.Text.sectionSubtitle)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 

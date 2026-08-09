@@ -10,7 +10,7 @@ struct SetupView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: HealthMuleStyle.sectionSpacing) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Three small steps")
                         .font(HealthMuleStyle.Text.heroTitle)
@@ -27,17 +27,10 @@ struct SetupView: View {
                 historyCard
                 googleCard
 
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "lock.shield.fill")
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    Text(
-                        "There is no developer backend, analytics, advertising, or write access to Apple Health."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                HealthMuleNote(
+                    text: "There is no developer backend, analytics, advertising, or write access to Apple Health.",
+                    systemImage: "lock.shield.fill"
+                )
             }
             .frame(maxWidth: HealthMuleStyle.contentWidth)
             .padding(.horizontal, HealthMuleStyle.pagePadding)
@@ -93,7 +86,7 @@ struct SetupView: View {
             Text(
                 "Request read-only access to the fitness types you want included. Apple does not tell apps which read permissions were approved."
             )
-            .font(.subheadline)
+            .font(HealthMuleStyle.Text.cardBody)
             .foregroundStyle(.secondary)
 
             DisclosureGroup {
@@ -225,7 +218,7 @@ struct SetupView: View {
             Text(
                 "Choose the first local calendar day to export. The boundary stays fixed after selection."
             )
-            .font(.subheadline)
+            .font(HealthMuleStyle.Text.cardBody)
             .foregroundStyle(.secondary)
 
             if dynamicTypeSize.isAccessibilitySize {
@@ -288,7 +281,7 @@ struct SetupView: View {
             Text(
                 "HealthMule can access only the Drive files it creates or that you explicitly open with it."
             )
-            .font(.subheadline)
+            .font(HealthMuleStyle.Text.cardBody)
             .foregroundStyle(.secondary)
 
             googleStateContent
@@ -471,7 +464,9 @@ struct SetupView: View {
     private var healthTone: StatusTone {
         switch model.healthAuthorizationState {
         case .requestCompleted:
-            .success
+            model.metricStatuses.readableMetricCount > 0
+                ? .success
+                : .neutral
         case .checking:
             .accent
         case .reviewRequired, .statusUnavailable:
@@ -512,10 +507,12 @@ private struct SetupStepHeader: View {
     }
 
     private var stepTitle: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Text(number.formatted())
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
+                .frame(width: 30, height: 30)
+                .background(HealthMuleStyle.inset, in: Circle())
             Text(title)
                 .font(.headline)
         }

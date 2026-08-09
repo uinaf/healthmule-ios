@@ -5,13 +5,14 @@ struct ValueRow: View {
     let value: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-            Spacer(minLength: 16)
-            Text(value)
+                .font(HealthMuleStyle.Text.factLabel)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.trailing)
+            Text(value)
+                .font(HealthMuleStyle.Text.factValue)
                 .monospacedDigit()
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)

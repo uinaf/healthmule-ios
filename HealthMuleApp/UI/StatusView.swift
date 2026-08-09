@@ -6,7 +6,7 @@ struct StatusView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 28) {
+            VStack(spacing: HealthMuleStyle.sectionSpacing) {
                 hero
                 backgroundDeliveryAdvisory
                 syncSummarySection
@@ -114,6 +114,7 @@ struct StatusView: View {
         case .setup(let title):
             NavigationLink(value: HomeRoute.setup) {
                 Label(title, systemImage: "arrow.right")
+                    .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("open-setup-action")
         case .sync:
@@ -130,6 +131,7 @@ struct StatusView: View {
                         options: .repeating,
                         isActive: model.operationState.isWorking(.sync)
                     )
+                    .frame(maxWidth: .infinity)
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
@@ -260,66 +262,27 @@ struct StatusView: View {
     }
 
     private var metricSummaryCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(metricSummaryTitle)
-                .font(HealthMuleStyle.Text.heroTitle)
-                .monospacedDigit()
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-            }
-
-            Text(metricSummaryDetail)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .healthMuleCard()
+        IconStatusRow(
+            title: metricSummaryTitle,
+            status: metricSummaryDetail,
+            detail: nil,
+            systemImage: "waveform.path.ecg",
+            tone: metricSummaryTone,
+            showsChevron: true,
+            accessibilityLabel: "Health data",
+            accessibilityValue: metricSummarySubtitle
+        )
+        .healthMuleCard(padding: 16)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Health data")
-        .accessibilityValue(metricSummarySubtitle)
+        .accessibilityIdentifier("health-data-summary")
         .accessibilityHint("Opens per-metric status.")
     }
 
     private var privacyNote: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "lock.shield.fill")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text(
-                "Only normalized daily records go to your own Drive. Health values and OAuth tokens never enter diagnostics."
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func summaryValue(
-        _ label: String,
-        value: String,
-        accessibilityValue: String? = nil,
-        staysOnOneLine: Bool = false
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .lineLimit(staysOnOneLine ? 1 : nil)
-                .minimumScaleFactor(staysOnOneLine ? 0.82 : 1)
-                .allowsTightening(staysOnOneLine)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(accessibilityValue ?? value)
+        HealthMuleNote(
+            text: "Only normalized daily records go to your own Drive. Health values and OAuth tokens never enter diagnostics.",
+            systemImage: "lock.shield.fill"
+        )
     }
 
     private var isReady: Bool {
@@ -394,6 +357,17 @@ struct StatusView: View {
         }
     }
 
+    private var metricSummaryTone: StatusTone {
+        switch model.healthAuthorizationState {
+        case .checking:
+            .accent
+        case .requestCompleted:
+            readableMetricCount > 0 ? .success : .neutral
+        case .unavailable, .statusUnavailable, .notRequested, .reviewRequired:
+            .warning
+        }
+    }
+
     private var healthConnectionDetail: String {
         switch model.healthAuthorizationState {
         case .unavailable:
@@ -436,7 +410,7 @@ struct StatusView: View {
     private var healthConnectionTone: StatusTone {
         switch model.healthAuthorizationState {
         case .requestCompleted:
-            .success
+            readableMetricCount > 0 ? .success : .neutral
         case .checking:
             .accent
         case .reviewRequired, .statusUnavailable:
@@ -807,11 +781,7 @@ private struct ConnectionCard: View {
     }
 
     private var connectionIcon: some View {
-        Image(systemName: systemImage)
-            .font(.headline)
-            .foregroundStyle(.primary)
-            .frame(width: 24)
-            .accessibilityHidden(true)
+        StatusGlyph(systemImage: systemImage, tone: tone)
     }
 
     private var connectionTitle: some View {

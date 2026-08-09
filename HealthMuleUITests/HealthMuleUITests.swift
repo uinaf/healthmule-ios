@@ -113,6 +113,10 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["3 types have visible data"].exists)
         XCTAssertTrue(app.staticTexts["Finishing setup"].exists)
         XCTAssertFalse(app.staticTexts["Connected"].exists)
+
+        let healthDataSummary = element("health-data-summary", in: app)
+        XCTAssertTrue(healthDataSummary.exists)
+        XCTAssertEqual(healthDataSummary.label, "Health data")
     }
 
     @MainActor
@@ -519,6 +523,42 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Upload blocked"].waitForExistence(timeout: 10))
         XCTAssertFalse(element("retry-uploads-action", in: app).isEnabled)
         capture("05-blocked-upload", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-setup"]
+        )
+        XCTAssertTrue(element("setup-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(element("google-state", in: app).exists)
+        capture("06-setup", from: app)
+        let openDrive = app.buttons["Open in Google Drive"]
+        for _ in 0..<3 where !openDrive.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(openDrive.isHittable)
+        capture("07-setup-drive", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-metrics"]
+        )
+        XCTAssertTrue(element("metrics-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Included metrics"].exists)
+        capture("08-health-data", from: app)
+        app.terminate()
+
+        app = launch(additionalArguments: ["--ui-ready"])
+        XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Export preferences"].exists)
+        capture("09-settings", from: app)
+        let diagnostics = app.buttons["Prepare Diagnostics"]
+        for _ in 0..<3 where !diagnostics.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(diagnostics.isHittable)
+        capture("10-settings-actions", from: app)
     }
 
     @MainActor

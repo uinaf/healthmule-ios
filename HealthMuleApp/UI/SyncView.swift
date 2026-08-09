@@ -6,7 +6,7 @@ struct SyncView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: HealthMuleStyle.sectionSpacing) {
                 syncHero
                 queueCard
                 automaticActivityCard
@@ -43,17 +43,10 @@ struct SyncView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "clock.badge.questionmark")
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    Text(
-                        "Opening the app reconciles automatically. iOS controls background timing."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                HealthMuleNote(
+                    text: "Opening the app reconciles automatically. iOS controls background timing.",
+                    systemImage: "clock.badge.questionmark"
+                )
             }
             .frame(maxWidth: HealthMuleStyle.contentWidth)
             .padding(.horizontal, HealthMuleStyle.pagePadding)
@@ -96,12 +89,14 @@ struct SyncView: View {
                         options: .repeating,
                         isActive: model.operationState.isWorking(.sync)
                     )
+                    .frame(maxWidth: .infinity)
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("sync-now-action")
         } else if let setupActionLabel {
             NavigationLink(value: HomeRoute.setup) {
                 Label(setupActionLabel, systemImage: "arrow.right")
+                    .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("sync-setup-action")
         }
@@ -174,6 +169,7 @@ struct SyncView: View {
             context: context,
             timestamp: timestamp,
             systemImage: systemImage,
+            tone: receipt.map { outcomeTone($0.outcome) } ?? .neutral,
             accessibilityValue: activityText(receipt)
         )
     }
@@ -199,6 +195,7 @@ struct SyncView: View {
             context: nil,
             timestamp: timestamp,
             systemImage: "calendar.badge.clock",
+            tone: receipt.map { scheduleTone($0.result) } ?? .neutral,
             accessibilityValue: scheduleText(receipt)
         )
     }
@@ -225,6 +222,30 @@ struct SyncView: View {
             "Failed"
         case .interrupted:
             "Interrupted"
+        }
+    }
+
+    private func outcomeTone(_ outcome: SyncActivityOutcome) -> StatusTone {
+        switch outcome {
+        case .running, .pending:
+            .accent
+        case .succeeded:
+            .success
+        case .skipped, .interrupted:
+            .warning
+        case .failed:
+            .danger
+        }
+    }
+
+    private func scheduleTone(
+        _ result: BackgroundRefreshScheduleResult
+    ) -> StatusTone {
+        switch result {
+        case .submitted, .existingRequestKept:
+            .success
+        case .failed:
+            .danger
         }
     }
 
@@ -450,37 +471,18 @@ private struct ActivityStatusRow: View {
     let context: String?
     let timestamp: String?
     let systemImage: String
+    let tone: StatusTone
     let accessibilityValue: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
-                .background(Color.primary.opacity(0.07), in: Circle())
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-
-                Text(context.map { "\(status) · \($0)" } ?? status)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                if let timestamp {
-                    Text(timestamp)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
-        .accessibilityValue(accessibilityValue)
+        IconStatusRow(
+            title: title,
+            status: context.map { "\(status) · \($0)" } ?? status,
+            detail: timestamp,
+            systemImage: systemImage,
+            tone: tone,
+            accessibilityValue: accessibilityValue
+        )
     }
 }
 

@@ -18,10 +18,12 @@ struct CompanionStatusView: View {
 
     private func content(_ status: CompanionStatusModel) -> some View {
         ScrollView {
-            VStack(spacing: 12) {
-                statusHeader(status)
-                connectionRow(status)
-                facts(status)
+            VStack(spacing: 10) {
+                statusCard(status)
+
+                if hasFacts(status) {
+                    facts(status)
+                }
 
                 if status.showsSyncAction {
                     syncAction(status)
@@ -38,20 +40,32 @@ struct CompanionStatusView: View {
         }
     }
 
-    private func statusHeader(_ status: CompanionStatusModel) -> some View {
+    private func statusCard(_ status: CompanionStatusModel) -> some View {
         let presentation = headlinePresentation(status.headline)
-        return VStack(spacing: 6) {
+        return VStack(spacing: 8) {
             Image(systemName: presentation.systemImage)
-                .font(.system(size: 30, weight: .semibold))
+                .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(presentation.color)
                 .symbolRenderingMode(.hierarchical)
+                .frame(width: 48, height: 48)
+                .background(
+                    presentation.color.opacity(0.12),
+                    in: Circle()
+                )
                 .accessibilityHidden(true)
 
             Text(presentation.title)
                 .font(.headline)
                 .multilineTextAlignment(.center)
+
+            connectionRow(status)
         }
         .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(
+            Color.secondary.opacity(0.1),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
         .multilineTextAlignment(.center)
     }
 
@@ -60,9 +74,9 @@ struct CompanionStatusView: View {
             connectionText(status),
             systemImage: connectionImage(status.connection)
         )
-        .font(.caption)
+        .font(.caption2)
         .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.center)
         .accessibilityIdentifier("watch-connection-status")
     }
 
@@ -99,6 +113,19 @@ struct CompanionStatusView: View {
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
+        .padding(10)
+        .background(
+            Color.secondary.opacity(0.1),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+    }
+
+    private func hasFacts(_ status: CompanionStatusModel) -> Bool {
+        status.lastSuccessfulSyncAt != nil
+            || status.pendingUploadCount > 0
+            || status.retryableUploadCount > 0
+            || status.permanentFailureCount > 0
+            || status.updatedAt != nil
     }
 
     private func datedFactRow(title: String, date: Date) -> some View {
@@ -169,6 +196,9 @@ struct CompanionStatusView: View {
             .font(.caption2)
             .foregroundStyle(note == .failed ? .red : .secondary)
             .multilineTextAlignment(.center)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.secondary.opacity(0.1), in: Capsule())
             .accessibilityIdentifier("watch-delivery-note")
     }
 
@@ -180,7 +210,7 @@ struct CompanionStatusView: View {
             StatusPresentation(
                 title: "Waiting for iPhone",
                 systemImage: "iphone.and.arrow.forward",
-                color: .primary
+                color: .secondary
             )
         case .syncing:
             StatusPresentation(
@@ -192,13 +222,13 @@ struct CompanionStatusView: View {
             StatusPresentation(
                 title: "Needs Attention",
                 systemImage: "exclamationmark.triangle.fill",
-                color: .primary
+                color: .orange
             )
         case .finishSetup:
             StatusPresentation(
                 title: "Finish Setup",
                 systemImage: "iphone.badge.exclamationmark",
-                color: .primary
+                color: .orange
             )
         case .phoneUnavailable:
             StatusPresentation(
@@ -216,7 +246,7 @@ struct CompanionStatusView: View {
             StatusPresentation(
                 title: "Up to Date",
                 systemImage: "checkmark.circle.fill",
-                color: .primary
+                color: .green
             )
         }
     }
