@@ -13,7 +13,6 @@ derived_data=".artifacts/DerivedData"
   -quiet \
   -project HealthMule.xcodeproj \
   -scheme HealthMule \
-  -sdk iphonesimulator \
   -destination "${destination}" \
   -derivedDataPath "${derived_data}" \
   CODE_SIGNING_ALLOWED=YES \

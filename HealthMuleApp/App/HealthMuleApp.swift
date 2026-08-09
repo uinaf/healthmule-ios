@@ -9,6 +9,18 @@ struct HealthMuleApp: App {
     var body: some Scene {
         WindowGroup {
             AppRootView(model: model)
+                .preferredColorScheme(
+                    ProcessInfo.processInfo.arguments.contains("--ui-dark-mode")
+                        ? .dark
+                        : nil
+                )
+                .transformEnvironment(\.dynamicTypeSize) { size in
+                    if ProcessInfo.processInfo.arguments.contains(
+                        "--ui-accessibility-text"
+                    ) {
+                        size = .accessibility3
+                    }
+                }
                 .task {
                     await model.bootstrap()
                 }
@@ -23,7 +35,6 @@ struct HealthMuleApp: App {
                 }
         }
         .backgroundTask(.appRefresh(BackgroundRefreshCoordinator.identifier)) {
-            defer { BackgroundRefreshCoordinator.schedule() }
             await model.performBackgroundRefresh()
         }
         .backgroundTask(

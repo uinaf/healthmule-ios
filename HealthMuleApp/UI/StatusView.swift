@@ -6,20 +6,10 @@ struct StatusView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 28) {
+            VStack(spacing: HealthMuleStyle.sectionSpacing) {
                 hero
-                OperationBanner(state: model.operationState)
                 backgroundDeliveryAdvisory
-
-                if shouldShowSummary {
-                    VStack(spacing: 12) {
-                        SectionHeading(title: "Sync summary")
-                        NavigationLink(value: HomeRoute.sync) {
-                            summaryCard
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                syncSummarySection
 
                 VStack(spacing: 12) {
                     SectionHeading(title: "Connections")
@@ -59,6 +49,21 @@ struct StatusView: View {
     }
 
     @ViewBuilder
+    private var syncSummarySection: some View {
+        VStack(spacing: 12) {
+            SectionHeading(title: "Sync summary")
+            if model.initialLoadPhase == .loading {
+                summaryLoadingCard
+            } else {
+                NavigationLink(value: HomeRoute.sync) {
+                    summaryCard
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var backgroundDeliveryAdvisory: some View {
         if let advisory = model.backgroundDeliveryAdvisory {
             VStack(alignment: .leading, spacing: 12) {
@@ -93,8 +98,8 @@ struct StatusView: View {
             tone: heroPresentation.tone,
             title: heroPresentation.title,
             message: heroPresentation.message,
-            needsAttention: heroPresentation.needsAttention,
-            progress: model.syncProgress
+            progress: model.syncProgress,
+            showsActionPlaceholder: model.initialLoadPhase == .loading
         ) {
             heroAction
         }
@@ -108,6 +113,7 @@ struct StatusView: View {
         case .setup(let title):
             NavigationLink(value: HomeRoute.setup) {
                 Label(title, systemImage: "arrow.right")
+                    .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("open-setup-action")
         case .sync:
@@ -124,6 +130,7 @@ struct StatusView: View {
                         options: .repeating,
                         isActive: model.operationState.isWorking(.sync)
                     )
+                    .frame(maxWidth: .infinity)
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
@@ -195,6 +202,10 @@ struct StatusView: View {
             }
 
             SyncFactsRow(summary: model.syncSummary)
+
+            Divider()
+
+            automaticActivityGlance
         }
         .healthMuleCard(padding: 16)
         .contentShape(Rectangle())
@@ -202,78 +213,165 @@ struct StatusView: View {
         .accessibilityHint("Opens sync details.")
     }
 
-    private var metricSummaryCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private var summaryLoadingCard: some View {
+        VStack(spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text(metricSummaryTitle)
-                .font(HealthMuleStyle.Text.heroTitle)
-                .monospacedDigit()
+                Text("Sync details")
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                ProgressView()
+                    .controlSize(.small)
                     .accessibilityHidden(true)
             }
 
-            Text(metricSummaryDetail)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            if dynamicTypeSize > .large {
+                VStack(spacing: 14) {
+                    summaryLoadingFact("Last sync")
+                    Divider()
+                    summaryLoadingFact("Latest day")
+                    Divider()
+                    summaryLoadingFact("Pending")
+                }
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    summaryLoadingFact("Last sync")
+                        .padding(.trailing, 10)
+                    Divider()
+                    summaryLoadingFact("Latest day")
+                        .padding(.horizontal, 10)
+                    Divider()
+                    summaryLoadingFact("Pending")
+                        .padding(.leading, 10)
+                }
+            }
+
+            Divider()
+
+            automaticActivityLoadingGlance
         }
-        .healthMuleCard()
-        .contentShape(Rectangle())
+        .healthMuleCard(padding: 16)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading sync summary")
+        .accessibilityIdentifier("sync-summary-loading")
+    }
+
+    private var automaticActivityGlance: some View {
+        let receipt = model.syncActivitySummary.latestAutomatic
+        let tone = receipt.map { $0.outcome.statusTone }
+            ?? .neutral
+
+        return HStack(spacing: 10) {
+            StatusGlyph(
+                systemImage: "clock.arrow.circlepath",
+                tone: tone,
+                size: 34
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Automatic sync")
+                    .font(.subheadline.weight(.semibold))
+
+                if let receipt {
+                    HStack(spacing: 0) {
+                        Text(receipt.outcome.statusLabel)
+                        Text(" · ")
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            Text(
+                                automaticActivityTimestamp(
+                                    receipt,
+                                    relativeTo: context.date
+                                )
+                            )
+                        }
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("No automatic run observed")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 4)
+        }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Health data")
-        .accessibilityValue(metricSummarySubtitle)
+        .accessibilityIdentifier("home-automatic-activity")
+    }
+
+    private var automaticActivityLoadingGlance: some View {
+        HStack(spacing: 10) {
+            StatusGlyph(
+                systemImage: "clock.arrow.circlepath",
+                tone: .neutral,
+                size: 34
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Automatic sync")
+                    .font(.subheadline.weight(.semibold))
+                Text("Loading activity")
+                    .font(.footnote)
+                    .redacted(reason: .placeholder)
+            }
+
+            Spacer(minLength: 4)
+        }
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+
+    private func automaticActivityTimestamp(
+        _ receipt: SyncActivityReceipt,
+        relativeTo date: Date
+    ) -> String {
+        let timestamp = receipt.finishedAt ?? receipt.startedAt
+        if abs(timestamp.timeIntervalSince(date)) < 60 {
+            return "just now"
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(
+            for: timestamp,
+            relativeTo: date
+        )
+    }
+
+    private func summaryLoadingFact(_ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(HealthMuleStyle.Text.factLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text("Loading")
+                .font(HealthMuleStyle.Text.factValue)
+                .redacted(reason: .placeholder)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var metricSummaryCard: some View {
+        IconStatusRow(
+            title: metricSummaryTitle,
+            status: metricSummaryDetail,
+            detail: nil,
+            systemImage: "waveform.path.ecg",
+            tone: metricSummaryTone,
+            showsChevron: true,
+            accessibilityLabel: "Health data",
+            accessibilityValue: metricSummarySubtitle
+        )
+        .healthMuleCard(padding: 16)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("health-data-summary")
         .accessibilityHint("Opens per-metric status.")
     }
 
     private var privacyNote: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "lock.shield.fill")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text(
-                "Only normalized daily records go to your own Drive. Health values and OAuth tokens never enter diagnostics."
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func summaryValue(
-        _ label: String,
-        value: String,
-        accessibilityValue: String? = nil,
-        staysOnOneLine: Bool = false
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .lineLimit(staysOnOneLine ? 1 : nil)
-                .minimumScaleFactor(staysOnOneLine ? 0.82 : 1)
-                .allowsTightening(staysOnOneLine)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(accessibilityValue ?? value)
-    }
-
-    private var isReady: Bool {
-        model.syncReadiness.canSync
-    }
-
-    private var shouldShowSummary: Bool {
-        isReady
-            || model.syncSummary.lastSuccessfulSyncAt != nil
-            || model.syncSummary.latestExportedDate != nil
-            || model.syncSummary.pendingUploadCount > 0
+        HealthMuleNote(
+            text: "Only normalized daily records go to your own Drive. Health values and OAuth tokens never enter diagnostics.",
+            systemImage: "lock.shield.fill"
+        )
     }
 
     private var readableMetricCount: Int {
@@ -337,6 +435,17 @@ struct StatusView: View {
         }
     }
 
+    private var metricSummaryTone: StatusTone {
+        switch model.healthAuthorizationState {
+        case .checking:
+            .accent
+        case .requestCompleted:
+            readableMetricCount > 0 ? .success : .neutral
+        case .unavailable, .statusUnavailable, .notRequested, .reviewRequired:
+            .warning
+        }
+    }
+
     private var healthConnectionDetail: String {
         switch model.healthAuthorizationState {
         case .unavailable:
@@ -379,7 +488,7 @@ struct StatusView: View {
     private var healthConnectionTone: StatusTone {
         switch model.healthAuthorizationState {
         case .requestCompleted:
-            .success
+            readableMetricCount > 0 ? .success : .neutral
         case .checking:
             .accent
         case .reviewRequired, .statusUnavailable:
@@ -463,6 +572,15 @@ struct StatusView: View {
     }
 
     private var heroPresentation: HeroPresentation {
+        if model.initialLoadPhase == .loading {
+            return HeroPresentation(
+                badge: "Loading",
+                tone: .neutral,
+                title: "Loading your sync status",
+                message: "HealthMule is restoring saved connections and sync history.",
+                action: .none
+            )
+        }
         switch model.syncReadiness {
         case .localStorageUnavailable:
             return connectionHero(
@@ -569,7 +687,7 @@ struct StatusView: View {
                 action: .sync
             )
         }
-        if model.operationState.isFailure(.sync) {
+        if model.presentedOperationState.isFailure(.sync) {
             if model.syncSummary.permanentFailureCount > 0 {
                 return permanentFailureHero
             }
@@ -674,9 +792,6 @@ private struct HeroPresentation {
     let message: String
     let action: Action
 
-    var needsAttention: Bool {
-        tone == .warning || tone == .danger
-    }
 }
 
 private struct ConnectionCard: View {
@@ -744,11 +859,7 @@ private struct ConnectionCard: View {
     }
 
     private var connectionIcon: some View {
-        Image(systemName: systemImage)
-            .font(.headline)
-            .foregroundStyle(.primary)
-            .frame(width: 24)
-            .accessibilityHidden(true)
+        StatusGlyph(systemImage: systemImage, tone: tone)
     }
 
     private var connectionTitle: some View {

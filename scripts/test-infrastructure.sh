@@ -6,7 +6,7 @@ fail() {
   exit 1
 }
 
-for task in project build test smoke run; do
+for task in project build test smoke harness run; do
   expected="./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh ${task}"
   actual="$(make --no-print-directory --dry-run "${task}")"
   [[ "${actual}" == "${expected}" ]] ||
@@ -220,6 +220,15 @@ grep -Fq "./scripts/generate-project.sh" scripts/ios-project-task.sh ||
   fail "The locked task runner must generate the project."
 grep -Fq 'destination="$(./scripts/simulator-destination.sh)"' scripts/ios-project-task.sh ||
   fail "The locked task runner must resolve test destinations."
+grep -Fq "testAgentHarnessCapturesCriticalStates" scripts/ios-project-task.sh ||
+  fail "The agent harness must run the critical-state UI scenario."
+grep -Fq "xcresulttool export attachments" scripts/ios-project-task.sh ||
+  fail "The agent harness must export durable screenshot attachments."
+if grep -Fq "/usr/bin/xcrun" scripts/ios-project-task.sh; then
+  fail "The locked task runner must not bypass repository Xcode wrappers."
+fi
+grep -Fq 'selected}/usr/bin/simctl' scripts/ios-project-task.sh ||
+  fail "Simulator tasks must validate the xcode-select toolchain directly."
 
 compatible_ids=$'11111111-1111-1111-1111-111111111111\n22222222-2222-2222-2222-222222222222'
 selected="$(
@@ -258,6 +267,9 @@ open_line="$(grep -nF "/usr/bin/open -a Simulator --args -CurrentDeviceUDID" scr
 launch_line="$(grep -nF 'simctl launch "${simulator_id}"' scripts/run-simulator.sh | cut -d: -f1)"
 [[ -n "${open_line}" && -n "${launch_line}" && "${open_line}" -lt "${launch_line}" ]] ||
   fail "make run must open the selected Simulator before launching the app."
+if grep -Fq -- "-sdk iphonesimulator" scripts/run-simulator.sh; then
+  fail "make run must let Xcode select the Watch companion SDK from the destination."
+fi
 
 for workflow in .github/workflows/*.yml; do
   if grep -Fq "brew install xcodegen" "${workflow}"; then

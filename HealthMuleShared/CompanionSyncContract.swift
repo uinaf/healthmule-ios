@@ -1,6 +1,17 @@
 import Foundation
 
 public struct CompanionSyncSnapshot: Codable, Equatable, Sendable {
+    public struct Semantics: Equatable, Sendable {
+        public let schemaVersion: Int
+        public let readiness: Readiness
+        public let activity: Activity
+        public let canRequestSync: Bool
+        public let lastSuccessfulSyncAt: Date?
+        public let pendingUploadCount: Int
+        public let retryableUploadCount: Int
+        public let permanentFailureCount: Int
+    }
+
     public enum Readiness: String, Codable, Sendable {
         case checking
         case ready
@@ -28,6 +39,19 @@ public struct CompanionSyncSnapshot: Codable, Equatable, Sendable {
     public let retryableUploadCount: Int
     public let permanentFailureCount: Int
 
+    public var semantics: Semantics {
+        Semantics(
+            schemaVersion: schemaVersion,
+            readiness: readiness,
+            activity: activity,
+            canRequestSync: canRequestSync,
+            lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+            pendingUploadCount: pendingUploadCount,
+            retryableUploadCount: retryableUploadCount,
+            permanentFailureCount: permanentFailureCount
+        )
+    }
+
     public init(
         schemaVersion: Int = currentSchemaVersion,
         generatedAt: Date,
@@ -49,7 +73,6 @@ public struct CompanionSyncSnapshot: Codable, Equatable, Sendable {
         self.retryableUploadCount = retryableUploadCount
         self.permanentFailureCount = permanentFailureCount
     }
-
 }
 
 public struct CompanionSyncRequest: Codable, Equatable, Sendable {

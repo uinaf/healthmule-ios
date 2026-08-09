@@ -4,6 +4,24 @@ import XCTest
 @testable import HealthMule
 
 final class CompanionSnapshotFactoryTests: XCTestCase {
+    func testFactorySemanticsIgnoreGenerationTime() {
+        let first = CompanionSnapshotFactory.make(
+            readiness: .ready,
+            operationState: .idle,
+            summary: .empty,
+            now: Date(timeIntervalSince1970: 1_753_300_400)
+        )
+        let second = CompanionSnapshotFactory.make(
+            readiness: .ready,
+            operationState: .idle,
+            summary: .empty,
+            now: Date(timeIntervalSince1970: 1_753_300_500)
+        )
+
+        XCTAssertNotEqual(first.generatedAt, second.generatedAt)
+        XCTAssertEqual(first.semantics, second.semantics)
+    }
+
     func testFactoryPublishesOnlySanitizedSyncStatus() throws {
         let lastSync = Date(timeIntervalSince1970: 1_753_300_300)
         let summary = SyncSummary(

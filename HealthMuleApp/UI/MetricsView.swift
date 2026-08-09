@@ -2,17 +2,31 @@ import SwiftUI
 
 struct MetricsView: View {
     @Bindable var model: AppModel
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: HealthMuleStyle.sectionSpacing) {
                 authorizationNote
 
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(model.metricStatuses) { status in
-                        MetricStatusCard(status: status)
+                VStack(spacing: 8) {
+                    SectionHeading(title: "Included metrics")
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(model.metricStatuses.enumerated()), id: \.element.id) { index, status in
+                            MetricStatusRow(status: status)
+                                .padding(16)
+
+                            if index < model.metricStatuses.count - 1 {
+                                Divider()
+                                    .padding(.leading, 64)
+                            }
+                        }
                     }
+                    .healthMuleCard(padding: 0)
+
+                    SectionFooter(
+                        text: "Readable means HealthKit exposed at least one matching sample to HealthMule."
+                    )
                 }
             }
             .frame(maxWidth: HealthMuleStyle.contentWidth)
@@ -23,82 +37,40 @@ struct MetricsView: View {
         }
         .background(HealthMuleStyle.canvas)
         .navigationTitle("Health data")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .accessibilityIdentifier("metrics-screen")
     }
 
-    private var columns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            return [GridItem(.flexible())]
-        }
-        return [GridItem(.adaptive(minimum: 155), spacing: 12)]
-    }
-
     private var authorizationNote: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 10) {
-                    authorizationNoteIcon
-                    authorizationNoteText
-                }
-            } else {
-                HStack(alignment: .top, spacing: 10) {
-                    authorizationNoteIcon
-                    authorizationNoteText
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var authorizationNoteIcon: some View {
-        Image(systemName: "info.circle")
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-    }
-
-    private var authorizationNoteText: some View {
-        Text(
-            "Apple does not reveal whether read access was denied. “No readable data” can also mean that no matching sample exists."
+        HealthMuleNote(
+            text: "Apple does not reveal whether read access was denied. “No readable data” can also mean that no matching sample exists."
         )
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
     }
 }
 
-private struct MetricStatusCard: View {
+private struct MetricStatusRow: View {
     let status: MetricStatus
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(status.metric.compactTitle)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Circle()
-                    .fill(tone.color)
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(status.state.title)
-                    .font(.headline)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
-        .healthMuleCard(padding: 16)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(status.metric.title)
-        .accessibilityValue("\(status.state.title). \(detail)")
+        IconStatusRow(
+            title: status.metric.title,
+            status: status.state.title,
+            detail: displayDetail,
+            systemImage: status.metric.systemImage,
+            tone: tone,
+            accessibilityValue: "\(status.state.title). \(accessibilityDetail)"
+        )
     }
 
-    private var detail: String {
+    private var displayDetail: String? {
+        if case .readable(let lastSampleAt) = status.state {
+            return "Last sample \(lastSampleAt.formatted(date: .abbreviated, time: .omitted))."
+        }
+        return nil
+    }
+
+    private var accessibilityDetail: String {
         switch status.state {
         case .checking:
             "Checking for a visible sample."
@@ -132,14 +104,26 @@ private struct MetricStatusCard: View {
 }
 
 private extension HealthMetric {
-    var compactTitle: String {
+    var systemImage: String {
         switch self {
+        case .bodyMass:
+            "scalemass.fill"
+        case .stepCount:
+            "figure.walk"
+        case .activeEnergy:
+            "flame.fill"
+        case .restingEnergy:
+            "bolt.heart.fill"
         case .restingHeartRate:
-            "Resting heart"
+            "heart.fill"
         case .hrvSDNN:
-            "HRV"
-        default:
-            title
+            "waveform.path.ecg"
+        case .vo2Max:
+            "lungs.fill"
+        case .sleep:
+            "bed.double.fill"
+        case .workouts:
+            "figure.run"
         }
     }
 }

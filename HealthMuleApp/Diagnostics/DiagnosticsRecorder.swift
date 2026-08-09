@@ -90,6 +90,8 @@ enum DiagnosticInputEvent: Sendable {
     case localReset
     case localStorageRestored
     case localStorageRestoreFailed(DiagnosticErrorCode)
+    case syncActivityStoreFailed(SyncActivityStoreError)
+    case backgroundRefreshSchedule(BackgroundRefreshScheduleResult)
 
     fileprivate var persisted: PersistedDiagnosticInput {
         switch self {
@@ -190,6 +192,51 @@ enum DiagnosticInputEvent: Sendable {
                 event: "local-storage-restore-failed",
                 code: code
             )
+        case .syncActivityStoreFailed(let error):
+            .init(
+                category: "state",
+                event: "sync-activity-store-failed",
+                fields: ["errorCode": Self.activityStoreCode(error)]
+            )
+        case .backgroundRefreshSchedule(let result):
+            .init(
+                category: "background",
+                event: "refresh-schedule",
+                fields: Self.scheduleFields(result)
+            )
+        }
+    }
+
+    private static func activityStoreCode(
+        _ error: SyncActivityStoreError
+    ) -> String {
+        switch error {
+        case .unreadableState:
+            "unreadable_state"
+        case .invalidState:
+            "invalid_state"
+        case .unsupportedSchema:
+            "unsupported_schema"
+        case .receiptNotFound:
+            "receipt_not_found"
+        case .writeFailed:
+            "write_failed"
+        }
+    }
+
+    private static func scheduleFields(
+        _ result: BackgroundRefreshScheduleResult
+    ) -> [String: String] {
+        switch result {
+        case .submitted:
+            ["result": "submitted"]
+        case .existingRequestKept:
+            ["result": "existing_request_kept"]
+        case .failed(let reason):
+            [
+                "result": "failed",
+                "reason": reason.rawValue,
+            ]
         }
     }
 }

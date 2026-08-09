@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := verify
 
-.PHONY: project test-infra check-app-syntax test-core build test smoke run verify verify-full clean
+.PHONY: project test-infra check-app-syntax test-core build test smoke harness run verify verify-full clean
 
 project:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh project
@@ -23,6 +23,9 @@ test:
 
 smoke:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh smoke
+
+harness:
+	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh harness
 
 run:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh run

@@ -6,6 +6,14 @@ background Watch Connectivity delivery. Simulator checks remain useful for both
 app shells and deterministic contracts, but they do not prove those delivery
 boundaries.
 
+`make harness` is the unattended Simulator lane for agents and CI-capable Macs.
+It boots its selected iPhone Simulator, launches the app through critical
+loading, sync, failure, and automatic-activity fixtures, asserts their visible
+contracts, and exports screenshots with an xcresult summary under
+`.artifacts/agent-harness`. These fixtures contain no personal health data or
+Google credentials. They complement, but never replace, the physical-device
+checks in this document.
+
 ## Current readiness
 
 | Surface | Status |
@@ -16,6 +24,7 @@ boundaries.
 | Daily aggregation, initial backfill, and manual sync | Implemented; signed-device and real-Drive proof pending |
 | HealthKit observer changes flowing into staged daily records | Implemented; physical background-delivery proof pending |
 | File-backed background upload and relaunch recovery | Implemented; physical interruption proof pending |
+| Bounded automatic-activity receipts and schedule status | Implemented; physical cadence proof pending |
 | Watch status and reachable sync requests | Implemented; paired-device proof pending |
 
 Implemented rows describe live code paths, not completed platform acceptance.
@@ -108,13 +117,23 @@ configured OAuth client and integration Drive account.
 
 ## Apple Watch companion acceptance
 
+- [ ] On a first Watch launch before any snapshot arrives, confirm the headline
+  says Waiting for iPhone and Retry iPhone is available. It must not say Ready
+  or spin indefinitely.
 - [ ] Launch the Watch app and confirm it shows only readiness, sync activity,
   last-success time, and queue counts. No health values, account details, Drive
   IDs, or error strings may cross the companion message.
+- [ ] Create pending, retryable, and blocked work on the iPhone and confirm the
+  Watch shows each nonzero count as an independent row while preserving Last
+  confirmed when one exists.
 - [ ] With the iPhone reachable, tap Sync and confirm the Watch reports that
   the request was accepted before the iPhone completes reconciliation.
 - [ ] Disable reachability and confirm Sync is unavailable rather than
-  claiming that work was queued or completed.
+  claiming that work was queued or completed. The headline must say Phone
+  Unavailable and must not say Up to Date.
+- [ ] Leave a previously synced snapshot without a phone update for more than
+  30 minutes and confirm the Watch labels it out of date while retaining its
+  last confirmed time and counts. It must not say Up to Date.
 - [ ] Restore reachability, request another sync, and confirm the iPhone's
   existing reconciliation path publishes a fresh status snapshot.
 - [ ] Leave the Watch app, allow background delivery, and confirm the latest
@@ -129,7 +148,11 @@ launch event and reconciles completed or interrupted work through the durable
 queue.
 
 - [ ] With the app backgrounded, add a relevant Health sample and confirm the affected daily record is eventually updated.
-- [ ] Trigger an app-refresh task and confirm it reconciles pending work; do not treat a prompt or exact schedule as guaranteed.
+- [ ] Trigger an app-refresh task and confirm the Sync screen records one
+  Background refresh receipt with its outcome. Confirm the schedule row reports
+  Submitted, Existing request kept, or a closed failure reason. A receipt proves
+  that the app observed an opportunity or requested scheduling; it does not
+  prove prompt, periodic, or future execution.
 - [ ] Interrupt connectivity during an upload and confirm retry preserves the same logical operation without duplicate Drive files.
 - [ ] While an upload is waiting for connectivity, switch accounts or replace
       the managed folder tree. Confirm the app does not report the new
@@ -161,7 +184,11 @@ Development](https://developer.apple.com/documentation/backgroundtasks/starting-
 
 - [ ] Console logs contain no health values, OAuth tokens, Drive file bodies, or raw HealthKit metadata.
 - [ ] Shared diagnostics remain bounded and redact sensitive fields.
-- [ ] Protected outbox, anchor, and saved day-boundary files use data protection and remain excluded from backups.
+- [ ] Protected outbox, anchor, saved day-boundary, and automatic-activity
+  receipt files use data protection and remain excluded from backups.
+- [ ] Automatic-activity receipt JSON remains bounded to 20 entries and contains
+  no health values, record bodies, raw metadata, OAuth tokens, account details,
+  or Drive identifiers.
 - [ ] Disconnecting or resetting local state does not delete existing Drive exports.
 - [ ] Revoking Google access returns the app to a recoverable Reconnect state.
 - [ ] Complete Google sign-in, terminate the app before the pending queue

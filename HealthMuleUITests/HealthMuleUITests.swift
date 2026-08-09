@@ -113,6 +113,10 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["3 types have visible data"].exists)
         XCTAssertTrue(app.staticTexts["Finishing setup"].exists)
         XCTAssertFalse(app.staticTexts["Connected"].exists)
+
+        let healthDataSummary = element("health-data-summary", in: app)
+        XCTAssertTrue(healthDataSummary.exists)
+        XCTAssertEqual(healthDataSummary.label, "Health data")
     }
 
     @MainActor
@@ -133,16 +137,130 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkingStateShowsOperationBanner() throws {
+    func testWorkingStateUsesHeroAndDisablesSyncAction() throws {
         let app = launch(
             additionalArguments: ["--ui-ready", "--ui-operation-working"]
         )
 
         XCTAssertTrue(
-            element("operation-status", in: app).waitForExistence(timeout: 10)
+            element("status-hero-title", in: app)
+                .waitForExistence(timeout: 10)
         )
-        XCTAssertTrue(app.staticTexts["Syncing"].exists)
+        XCTAssertTrue(app.staticTexts["Syncing your latest changes"].exists)
+        XCTAssertFalse(element("operation-status", in: app).exists)
         XCTAssertFalse(element("home-sync-action", in: app).isEnabled)
+    }
+
+    @MainActor
+    func testInitialLoadingShowsNoPersistedSyncFacts() throws {
+        let app = launch(additionalArguments: ["--ui-initial-loading"])
+
+        XCTAssertTrue(
+            element("sync-summary-loading", in: app)
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Loading your sync status"].exists)
+        XCTAssertFalse(app.staticTexts["Never"].exists)
+        XCTAssertFalse(app.staticTexts["None"].exists)
+        XCTAssertFalse(app.staticTexts["0"].exists)
+    }
+
+    @MainActor
+    func testLoadedHomeKeepsEmptySyncSummaryVisible() throws {
+        let app = launch()
+
+        XCTAssertTrue(
+            app.staticTexts["Sync summary"].waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Never"].exists)
+        XCTAssertTrue(app.staticTexts["None"].exists)
+        XCTAssertTrue(app.staticTexts["0"].exists)
+        XCTAssertTrue(app.staticTexts["No automatic run observed"].exists)
+    }
+
+    @MainActor
+    func testHomeSurfacesLatestAutomaticActivity() throws {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-activity-success"]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic sync"].waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Succeeded"].exists)
+    }
+
+    @MainActor
+    func testAutomaticFailureDoesNotAppearOnHomeOrSync() throws {
+        let arguments = ["--ui-ready", "--ui-operation-failed-automatic"]
+        let homeApp = launch(additionalArguments: arguments)
+
+        XCTAssertTrue(
+            homeApp.staticTexts["Ready for the first sync"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(homeApp.staticTexts["Sync needs another look"].exists)
+        XCTAssertFalse(element("operation-status", in: homeApp).exists)
+        homeApp.terminate()
+
+        let syncApp = launch(
+            additionalArguments: arguments + ["--ui-show-sync"]
+        )
+
+        XCTAssertTrue(
+            syncApp.staticTexts["Ready for the first sync"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(syncApp.staticTexts["Sync needs another look"].exists)
+        XCTAssertFalse(element("operation-status", in: syncApp).exists)
+    }
+
+    @MainActor
+    func testUserFailureRemainsVisibleOnHomeAndSync() throws {
+        let arguments = ["--ui-ready", "--ui-operation-failed-user"]
+        let homeApp = launch(additionalArguments: arguments)
+
+        XCTAssertTrue(
+            homeApp.staticTexts["Sync needs another look"]
+                .waitForExistence(timeout: 10)
+        )
+        homeApp.terminate()
+
+        let syncApp = launch(
+            additionalArguments: arguments + ["--ui-show-sync"]
+        )
+
+        XCTAssertTrue(
+            syncApp.staticTexts["Sync needs another look"]
+                .waitForExistence(timeout: 10)
+        )
+    }
+
+    @MainActor
+    func testHeroAccessibilityChildOrderIsStableAcrossTones() throws {
+        let fixtures: [([String], String)] = [
+            (
+                ["--ui-health-review", "--ui-google-connected"],
+                "Apple Health access needs review"
+            ),
+            (
+                ["--ui-ready", "--ui-permanent-failure"],
+                "An upload was rejected"
+            ),
+            (
+                ["--ui-ready", "--ui-synced"],
+                "Everything is in sync"
+            ),
+        ]
+
+        for (arguments, title) in fixtures {
+            let app = launch(additionalArguments: arguments)
+            XCTAssertTrue(
+                app.staticTexts[title].waitForExistence(timeout: 10)
+            )
+            assertHeroAccessibilityChildOrder(in: app)
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -207,6 +325,34 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompletedSetupStepsStartCollapsedAndCanExpand() throws {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-setup"]
+        )
+
+        let healthStep = element("health-setup-step", in: app)
+        XCTAssertTrue(healthStep.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Open App Settings"].exists)
+
+        healthStep.tap()
+        XCTAssertTrue(
+            app.buttons["Open App Settings"].waitForExistence(timeout: 5)
+        )
+
+        let googleStep = element("google-state", in: app)
+        for _ in 0..<3 where !googleStep.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(googleStep.isHittable)
+        XCTAssertFalse(app.buttons["Open in Google Drive"].exists)
+
+        googleStep.tap()
+        XCTAssertTrue(
+            app.buttons["Open in Google Drive"].waitForExistence(timeout: 5)
+        )
+    }
+
+    @MainActor
     func testFailedHealthStatusCheckPreservesPriorSyncability() throws {
         let app = launch(
             additionalArguments: [
@@ -255,6 +401,251 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testAutomaticActivityShowsSuccessAndSeparateBackgroundReceipt() {
+        let app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-success",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-latest",
+                in: app
+            ).contains("App foreground · Succeeded")
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-background",
+                in: app
+            ).contains("Background refresh · Succeeded")
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-schedule",
+                in: app
+            ).contains("Submitted")
+        )
+        XCTAssertTrue(
+            app.staticTexts[
+                "Receipts show attempts and outcomes. They do not prove iOS background cadence."
+            ].exists
+        )
+    }
+
+    @MainActor
+    func testAutomaticActivityShowsPendingOutcome() {
+        let app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-pending",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-latest",
+                in: app
+            ).contains("Pending")
+        )
+    }
+
+    @MainActor
+    func testAutomaticActivityShowsSkippedOutcome() {
+        let app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-skipped",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-latest",
+                in: app
+            ).contains("Skipped")
+        )
+    }
+
+    @MainActor
+    func testAutomaticActivityShowsExplicitNoHistoryState() {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-sync"]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertEqual(
+            value(of: "automatic-activity-latest", in: app),
+            "Never observed"
+        )
+        XCTAssertEqual(
+            value(of: "automatic-activity-background", in: app),
+            "Never observed"
+        )
+        XCTAssertEqual(
+            value(of: "automatic-activity-schedule", in: app),
+            "Never requested"
+        )
+    }
+
+    @MainActor
+    func testAgentHarnessCapturesCriticalStates() throws {
+        var app = launch(additionalArguments: ["--ui-initial-loading"])
+        XCTAssertTrue(
+            element("sync-summary-loading", in: app)
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.staticTexts["Loading your sync status"].exists)
+        capture("01-startup-loading", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-operation-working",
+                "--ui-sync-progress",
+            ]
+        )
+        XCTAssertTrue(
+            app.staticTexts["Syncing your latest changes"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertEqual(
+            element("sync-day-progress", in: app).value as? String,
+            "Processing 12 of 30 days"
+        )
+        capture("02-sync-in-progress", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: ["--ui-ready", "--ui-operation-failed-user"]
+        )
+        XCTAssertTrue(
+            app.staticTexts["Sync needs another look"]
+                .waitForExistence(timeout: 10)
+        )
+        capture("03-user-visible-failure", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-success",
+            ]
+        )
+        let automaticActivity = app.staticTexts["Automatic activity"]
+        XCTAssertTrue(automaticActivity.waitForExistence(timeout: 10))
+        for _ in 0..<4 where !automaticActivity.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(automaticActivity.isHittable)
+        XCTAssertTrue(
+            value(of: "automatic-activity-background", in: app)
+                .contains("Background refresh · Succeeded")
+        )
+        capture("04-background-activity-receipts", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-permanent-failure",
+            ]
+        )
+        XCTAssertTrue(app.staticTexts["Upload blocked"].waitForExistence(timeout: 10))
+        XCTAssertFalse(element("retry-uploads-action", in: app).isEnabled)
+        capture("05-blocked-upload", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-setup"]
+        )
+        XCTAssertTrue(element("setup-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(element("google-state", in: app).exists)
+        capture("06-setup", from: app)
+
+        let googleStep = element("google-state", in: app)
+        for _ in 0..<3 where !googleStep.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(googleStep.isHittable)
+        googleStep.tap()
+
+        let openDrive = app.buttons["Open in Google Drive"]
+        for _ in 0..<3 where !openDrive.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(openDrive.isHittable)
+        capture("07-setup-drive", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-metrics"]
+        )
+        XCTAssertTrue(element("metrics-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Included metrics"].exists)
+        capture("08-health-data", from: app)
+        app.terminate()
+
+        app = launch(additionalArguments: ["--ui-ready"])
+        XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Export preferences"].exists)
+        capture("09-settings", from: app)
+        let diagnostics = app.buttons["Prepare Diagnostics"]
+        for _ in 0..<3 where !diagnostics.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(diagnostics.isHittable)
+        capture("10-settings-actions", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-activity-success",
+                "--ui-dark-mode",
+            ]
+        )
+        XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Automatic sync"].exists)
+        capture("11-home-dark", from: app)
+        app.terminate()
+
+        app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-accessibility-text",
+            ]
+        )
+        XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Ready for the first sync"].exists)
+        capture("12-home-accessibility-text", from: app)
+    }
+
+    @MainActor
     private func launch(
         additionalArguments: [String] = []
     ) -> XCUIApplication {
@@ -265,10 +656,48 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    private func capture(
+        _ name: String,
+        from app: XCUIApplication
+    ) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     private func element(
         _ identifier: String,
         in app: XCUIApplication
     ) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    @MainActor
+    private func value(
+        of identifier: String,
+        in app: XCUIApplication
+    ) -> String {
+        element(identifier, in: app).value as? String ?? ""
+    }
+
+    @MainActor
+    private func assertHeroAccessibilityChildOrder(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let identifiers = [
+            "status-hero-badge",
+            "status-hero-title",
+            "status-hero-message",
+        ]
+        let actual = app.descendants(matching: .any)
+            .allElementsBoundByIndex
+            .map(\.identifier)
+            .filter(identifiers.contains)
+
+        XCTAssertEqual(actual, identifiers, file: file, line: line)
     }
 }

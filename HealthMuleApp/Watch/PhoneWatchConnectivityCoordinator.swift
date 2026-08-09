@@ -23,6 +23,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     private let session: WCSession?
     private let snapshotProvider: SnapshotProvider
     private let syncRequestHandler: SyncRequestHandler
+    private var publicationState = CompanionSnapshotPublicationState()
 
     init(
         snapshotProvider: @escaping SnapshotProvider,
@@ -36,6 +37,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     }
 
     func activate() {
+        publicationState.invalidate()
         guard let session else { return }
         session.delegate = self
         session.activate()
@@ -46,13 +48,17 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
             let session,
             session.activationState == .activated,
             let snapshot = snapshotProvider(),
+            publicationState.needsPublication(of: snapshot),
             let message = try? CompanionPayloadCodec.message(
                 snapshot: snapshot
             )
         else {
             return
         }
-        try? session.updateApplicationContext(message)
+        do {
+            try session.updateApplicationContext(message)
+            publicationState.didPublish(snapshot)
+        } catch {}
     }
 
     private func handleSyncRequest() async {
@@ -76,11 +82,15 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        session.activate()
+        Task { @MainActor [weak self] in
+            self?.publicationState.invalidate()
+            self?.session?.activate()
+        }
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor [weak self] in
+            self?.publicationState.invalidate()
             self?.publishCurrentStatus()
         }
     }

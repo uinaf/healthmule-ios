@@ -3,6 +3,37 @@ import XCTest
 @testable import HealthMuleCompanion
 
 final class CompanionSyncContractTests: XCTestCase {
+    func testSnapshotSemanticsIgnoreGeneratedAt() {
+        let first = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_753_300_100)
+        )
+        let second = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_753_300_200)
+        )
+
+        XCTAssertEqual(first.semantics, second.semantics)
+        XCTAssertNotEqual(first, second)
+    }
+
+    func testSnapshotSemanticsIncludeActivityAndPendingUploadCount() {
+        let snapshot = makeSnapshot()
+        let differentActivity = makeSnapshot(activity: .syncing)
+        let differentPendingCount = makeSnapshot(pendingUploadCount: 3)
+
+        XCTAssertNotEqual(snapshot.semantics, differentActivity.semantics)
+        XCTAssertNotEqual(snapshot.semantics, differentPendingCount.semantics)
+    }
+
+    func testSnapshotSemanticsRoundTripThroughPayloadCodec() throws {
+        let snapshot = makeSnapshot()
+
+        let decoded = try CompanionPayloadCodec.snapshot(
+            from: CompanionPayloadCodec.message(snapshot: snapshot)
+        )
+
+        XCTAssertEqual(decoded.semantics, snapshot.semantics)
+    }
+
     func testSnapshotRoundTripsThroughPropertyListSafeMessage() throws {
         let lastSync = Date(timeIntervalSince1970: 1_753_300_000)
         let snapshot = CompanionSyncSnapshot(
@@ -28,6 +59,33 @@ final class CompanionSyncContractTests: XCTestCase {
         XCTAssertEqual(
             try CompanionPayloadCodec.snapshot(from: message),
             snapshot
+        )
+    }
+
+    func testSnapshotJSONContainsOnlyApprovedWireKeys() throws {
+        let message = try CompanionPayloadCodec.message(
+            snapshot: makeSnapshot()
+        )
+        let data = try XCTUnwrap(
+            message[CompanionPayloadCodec.snapshotKey] as? Data
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            Set(object.keys),
+            [
+                "activity",
+                "canRequestSync",
+                "generatedAt",
+                "lastSuccessfulSyncAt",
+                "pendingUploadCount",
+                "permanentFailureCount",
+                "readiness",
+                "retryableUploadCount",
+                "schemaVersion",
+            ]
         )
     }
 
@@ -99,5 +157,22 @@ final class CompanionSyncContractTests: XCTestCase {
         ) { error in
             XCTAssertEqual(error as? CompanionPayloadError, .invalidCounts)
         }
+    }
+
+    private func makeSnapshot(
+        generatedAt: Date = Date(timeIntervalSince1970: 1_753_300_100),
+        activity: CompanionSyncSnapshot.Activity = .synced,
+        pendingUploadCount: Int = 2
+    ) -> CompanionSyncSnapshot {
+        CompanionSyncSnapshot(
+            generatedAt: generatedAt,
+            readiness: .ready,
+            activity: activity,
+            canRequestSync: true,
+            lastSuccessfulSyncAt: Date(timeIntervalSince1970: 1_753_300_000),
+            pendingUploadCount: pendingUploadCount,
+            retryableUploadCount: 1,
+            permanentFailureCount: 1
+        )
     }
 }

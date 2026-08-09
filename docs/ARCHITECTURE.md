@@ -57,9 +57,9 @@ Solid arrows are implemented runtime paths.
 | Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
 | HealthKit | A dedicated `HealthKitClient` actor keeps queries, sample transformation, aggregation, and anchor/day-boundary persistence off the UI actor. The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
 | Google | GoogleSignIn restores and refreshes credentials, distinguishing a revoked grant, an account change, and a temporary network failure. OAuth authorization and verified Drive readiness are separate states. Every token refresh and Drive request is bound to its expected stable account ID. `DriveArtifactDestination` maps core artifacts and retry classifications onto account-scoped folder discovery and stable-ID multipart upserts. |
-| Watch companion | A watchOS 26 SwiftUI app receives a sanitized versioned status snapshot and sends an idempotent sync request through reachable Watch Connectivity messaging. The action is disabled while the iPhone is unavailable. The iPhone owns the sync state machine and publishes the latest status through application context. |
-| Background refresh | The app registers a SwiftUI `BGAppRefreshTask` handler, bootstraps the same services if launched cold, and submits a best-effort request with a one-hour earliest start. |
-| Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, and redacted sync counts. |
+| Watch companion | A watchOS 26 SwiftUI app receives a sanitized versioned status snapshot and sends an idempotent sync request through reachable Watch Connectivity messaging. A Foundation-only presentation model combines snapshot age, activation, reachability, and request delivery so stale or unreachable state cannot claim Up to Date. The iPhone owns the sync state machine and publishes status through application context. |
+| Background refresh | The app registers a SwiftUI `BGAppRefreshTask` handler, bootstraps the same services if launched cold, and submits a best-effort request with a one-hour earliest start. An existing pending request is kept instead of cancelled and shifted later. |
+| Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, redacted sync counts, and bounded automatic-activity receipts. |
 | Diagnostics | A bounded in-memory recorder emits redacted lifecycle metadata through `OSLog` and a shareable JSON file. |
 
 `AppModel.live()` constructs the daily provider, protected staging root,
@@ -75,7 +75,20 @@ sync activity, timestamps, and queue counts. It never includes health values,
 record bodies, Google account details, Drive IDs, tokens, or diagnostic error
 strings. Watch requests feed the existing reconciliation path with the
 `watchCompanion` trigger; repeated delivery remains safe because reconciliation
-and Drive upserts are idempotent.
+and Drive upserts are idempotent. Semantic snapshot equality excludes
+`generatedAt`, so timestamp-only updates neither republish application context
+nor complete a Watch request acknowledgement. Activation, session deactivation,
+and Watch pairing-state changes invalidate that publication cache so a newly
+activated or reinstalled companion can receive one current full snapshot.
+
+`CompanionStatusModel` treats a snapshot as current for 30 minutes, a
+conservative allowance for eventual application-context delivery. Future
+timestamps have unknown freshness. Last confirmed success and pending,
+retryable, and blocked counts remain independent facts even when the status is
+stale or the phone is unreachable. `CompanionRequestLifecycle` deterministically
+settles reply-before-snapshot and snapshot-before-reply ordering; a semantic
+snapshot change completes an accepted request, while the Watch adapter retains
+the 10-second accepted-state fallback.
 
 `DriveAPIClient` uses an in-process session for metadata operations and a
 dedicated background `URLSession` for multipart uploads. Upload bodies are
@@ -352,6 +365,7 @@ not deleted and may no longer appear in the new manifest.
 | Saved local-day boundaries | Application Support under `HealthMule/day-boundaries.json` | Uses complete-until-first-authentication file protection and is excluded from backups. |
 | Daily records, manifest, and retry state | Application Support under `HealthMule/Staging` through `FileSyncStore` | The staging root uses complete-until-first-authentication protection and is excluded from backups before records are written. |
 | Diagnostics | Bounded memory plus an explicit temporary share file | A closed typed event enum is the export allowlist. Callers cannot supply arbitrary categories, event names, field keys, raw errors, identifiers, metadata, or health values. |
+| Automatic activity receipts | Protected, backup-excluded `Application Support/HealthMule/Activity/sync-activity.json` | At most 20 receipts contain only a generated receipt ID, closed trigger/outcome/reason values, timestamps, and aggregate counts. Schedule attempts use a closed result. No health values, record bodies, metadata, tokens, account data, or Drive identifiers are stored. Corrupt state is reported and never overwritten automatically. |
 
 The no-backup rule is part of the product boundary: Apple’s [App Review
 Guidelines](https://developer.apple.com/app-store/review/guidelines/) prohibit
@@ -367,11 +381,26 @@ declaration for `UserDefaults` remains in place.
 
 Background work is eventual and system-controlled:
 
+- Each automatic reconciliation opportunity writes a bounded receipt before it
+  starts and closes it after the coordinator transaction returns. A receipt
+  left running by process termination becomes `interrupted` on the next load.
+  Receipt writes are outside the durable sync transaction and cannot change
+  its success or failure.
+- The Sync screen reports the latest automatic opportunity, the latest app
+  refresh separately, and the latest schedule-request result. These receipts
+  prove only that the app observed an opportunity or made a scheduling request;
+  they do not prove background cadence or future execution.
+- Scheduling inspects public pending task requests. If the refresh identifier
+  is already pending, the app records that it kept the request; otherwise it
+  submits a new request without first cancelling the existing schedule.
+
 - HealthKit observers are the primary change signal.
 - A reachable Watch request is acknowledged promptly, then the iPhone performs
   reconciliation and republishes status.
 - The Watch action is disabled while the iPhone is unreachable; background
-  status delivery remains eventual through application context.
+  status delivery remains eventual through application context. Missing status
+  shows Waiting for iPhone with a retry action; stale or unreachable status
+  keeps its last confirmed facts without claiming Up to Date.
 - `BGAppRefreshTask` is a fallback reconciliation opportunity.
 - A cold background launch first restores services and credentials through the
   same bootstrap gate used by the foreground app.
@@ -476,7 +505,7 @@ optional local date only; it never carries health values or artifact contents.
   physical device.
 - Prove HealthKit authorization, queries, observer delivery, and reconciliation
   on a signed physical-iPhone build.
-- Cover the Watch companion automatically. `CompanionAppModel` and
-  `PhoneWatchConnectivityCoordinator` have no test target, and
-  `activateWatchConnectivity` is skipped under `--ui-testing`, so the paired
-  request path is only ever exercised by hand.
+- Prove paired-device `WCSession` reachability, request/reply delivery, and
+  background application-context delivery. Snapshot presentation, freshness,
+  privacy, semantic publication, and request ordering are deterministic core
+  tests; the actual paired transport remains a physical-device boundary.

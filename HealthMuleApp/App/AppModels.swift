@@ -6,7 +6,12 @@ enum AppTab: Hashable {
     case settings
 }
 
-enum SyncTrigger: String, Sendable {
+enum InitialLoadPhase: Equatable, Sendable {
+    case loading
+    case loaded
+}
+
+enum SyncTrigger: String, Codable, Equatable, Sendable {
     case appLaunch
     case foreground
     case manual
@@ -17,6 +22,46 @@ enum SyncTrigger: String, Sendable {
     case backgroundRefresh
     case healthObserver
     case watchCompanion
+
+    var operationOrigin: OperationOrigin {
+        switch self {
+        case .manual, .retry, .rebuild, .watchCompanion:
+            .userInitiated
+        case
+            .appLaunch,
+            .foreground,
+            .metricSelection,
+            .historySelection,
+            .backgroundRefresh,
+            .healthObserver:
+            .automatic
+        }
+    }
+
+    var activityLabel: String {
+        switch self {
+        case .appLaunch:
+            "App launch"
+        case .foreground:
+            "App foreground"
+        case .manual:
+            "Manual sync"
+        case .retry:
+            "Retry uploads"
+        case .rebuild:
+            "Rebuild"
+        case .metricSelection:
+            "Metric selection"
+        case .historySelection:
+            "History selection"
+        case .backgroundRefresh:
+            "Background refresh"
+        case .healthObserver:
+            "Health observer"
+        case .watchCompanion:
+            "Watch request"
+        }
+    }
 }
 
 struct SyncProgress: Equatable, Sendable {
@@ -149,6 +194,11 @@ enum OperationKind: Equatable {
     case localReset
 }
 
+enum OperationOrigin: Equatable, Sendable {
+    case userInitiated
+    case automatic
+}
+
 enum OperationState: Equatable {
     case idle
     case working(OperationKind, String)
@@ -182,6 +232,13 @@ enum OperationState: Equatable {
             return operationKind == kind
         }
         return false
+    }
+
+    func presented(for origin: OperationOrigin) -> OperationState {
+        if origin == .automatic, !isWorking {
+            return .idle
+        }
+        return self
     }
 }
 
