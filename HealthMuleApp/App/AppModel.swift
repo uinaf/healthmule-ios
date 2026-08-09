@@ -13,6 +13,11 @@ private enum AppModelStorageError: LocalizedError {
     }
 }
 
+private struct SyncActivityResult: Equatable, Sendable {
+    let outcome: SyncActivityOutcome
+    let reason: SyncActivityReason?
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -53,6 +58,7 @@ final class AppModel {
             publishCompanionStatus()
         }
     }
+    private(set) var syncActivitySummary: SyncActivitySummary = .empty
     var backfillRange: BackfillRange
     var customBackfillStart: Date {
         BackfillDateCodec.date(from: customBackfillStartValue)
@@ -89,6 +95,7 @@ final class AppModel {
     private let driveClient: DriveAPIClient
     private let healthKit: HealthKitClient
     private let diagnostics: DiagnosticsRecorder
+    private let syncActivityStore: SyncActivityStore
     private let stagingRoot: URL
     private var syncCoordinator: LiveSyncCoordinator?
     private var syncInitializationError: String?
@@ -98,6 +105,7 @@ final class AppModel {
     private var operationEpoch: UInt64 = 0
     private var selectionReconciliationQueue = SelectionReconciliationQueue()
     private var observerFlushQueue = ObserverFlushQueue()
+    private var observerStagingFailurePending = false
     private var watchConnectivity: PhoneWatchConnectivityCoordinator?
     private let isUITesting: Bool
     // The calendar date is authoritative; `Date` is only a live UI projection.
@@ -105,7 +113,11 @@ final class AppModel {
     private var selectedBackfillStart: String
     private var isBootstrapped = false
     private var bootstrapInProgress = false
-    private var bootstrapWaiters: [CheckedContinuation<Void, Never>] = []
+    private var bootstrapRequestedTrigger: SyncTrigger?
+    private var bootstrapActiveTrigger: SyncTrigger?
+    private var bootstrapWaiters: [
+        CheckedContinuation<SyncTrigger, Never>
+    ] = []
 
     private init(
         googleConfiguration: GoogleOAuthConfiguration,
@@ -113,6 +125,7 @@ final class AppModel {
         driveClient: DriveAPIClient,
         healthKit: HealthKitClient,
         diagnostics: DiagnosticsRecorder,
+        syncActivityStore: SyncActivityStore,
         stagingRoot: URL,
         syncCoordinator: LiveSyncCoordinator?,
         syncInitializationError: String?,
@@ -123,6 +136,7 @@ final class AppModel {
         self.driveClient = driveClient
         self.healthKit = healthKit
         self.diagnostics = diagnostics
+        self.syncActivityStore = syncActivityStore
         self.stagingRoot = stagingRoot
         self.syncCoordinator = syncCoordinator
         self.syncInitializationError = syncInitializationError
@@ -207,14 +221,23 @@ final class AppModel {
         )
         let healthKit = HealthKitClient()
         let diagnostics = DiagnosticsRecorder()
-        let stagingRoot = FileManager.default.urls(
+        let applicationSupportRoot = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first?
             .appendingPathComponent("HealthMule", isDirectory: true)
-            .appendingPathComponent("Staging", isDirectory: true)
             ?? FileManager.default.temporaryDirectory
-                .appendingPathComponent("HealthMule-Staging", isDirectory: true)
+                .appendingPathComponent("HealthMule", isDirectory: true)
+        let stagingRoot = applicationSupportRoot.appendingPathComponent(
+            "Staging",
+            isDirectory: true
+        )
+        let syncActivityStore = SyncActivityStore(
+            directoryURL: applicationSupportRoot.appendingPathComponent(
+                "Activity",
+                isDirectory: true
+            )
+        )
         let recordProvider = HealthKitDailyRecordProvider(healthKit: healthKit)
         let syncCoordinator: LiveSyncCoordinator?
         let syncInitializationError: String?
@@ -237,6 +260,7 @@ final class AppModel {
             driveClient: driveClient,
             healthKit: healthKit,
             diagnostics: diagnostics,
+            syncActivityStore: syncActivityStore,
             stagingRoot: stagingRoot,
             syncCoordinator: syncCoordinator,
             syncInitializationError: syncInitializationError,
@@ -279,6 +303,13 @@ final class AppModel {
     }
 
     func bootstrap() async {
+        _ = await bootstrap(reconciliationTrigger: .appLaunch)
+    }
+
+    @discardableResult
+    private func bootstrap(
+        reconciliationTrigger requestedTrigger: SyncTrigger
+    ) async -> SyncTrigger? {
         guard !isUITesting else {
             loadUITestState()
             isBootstrapped = true
@@ -287,21 +318,31 @@ final class AppModel {
             ) {
                 finishInitialLoad()
             }
-            return
+            return requestedTrigger
         }
         if isBootstrapped {
-            return
+            return nil
         }
         if bootstrapInProgress {
-            await withCheckedContinuation { continuation in
+            if
+                requestedTrigger == .backgroundRefresh,
+                bootstrapActiveTrigger == nil
+            {
+                bootstrapRequestedTrigger = Self.preferredBootstrapTrigger(
+                    current: bootstrapRequestedTrigger,
+                    requested: requestedTrigger
+                )
+            }
+            return await withCheckedContinuation { continuation in
                 bootstrapWaiters.append(continuation)
             }
-            return
         }
         bootstrapInProgress = true
+        bootstrapRequestedTrigger = requestedTrigger
         await registerHealthObservers()
 
         await diagnostics.record(.bootstrapStarted)
+        await refreshSyncActivitySummary()
         await recoverSyncCoordinatorIfNeeded()
         let restoredGoogleCredentials =
             await restoreGoogleConnection() != nil
@@ -332,17 +373,23 @@ final class AppModel {
             }
         )
 
-        await reconcile(trigger: .appLaunch)
-        BackgroundRefreshCoordinator.schedule()
+        let reconciliationTrigger = bootstrapRequestedTrigger
+            ?? requestedTrigger
+        bootstrapActiveTrigger = reconciliationTrigger
+        await reconcile(trigger: reconciliationTrigger)
+        await scheduleBackgroundRefresh()
         await diagnostics.record(.bootstrapFinished)
         isBootstrapped = true
         finishInitialLoad()
         bootstrapInProgress = false
+        bootstrapRequestedTrigger = nil
+        bootstrapActiveTrigger = nil
         let waiters = bootstrapWaiters
         bootstrapWaiters.removeAll()
         for waiter in waiters {
-            waiter.resume()
+            waiter.resume(returning: reconciliationTrigger)
         }
+        return reconciliationTrigger
     }
 
     private func finishInitialLoad() {
@@ -400,15 +447,47 @@ final class AppModel {
             }
         )
         await reconcile(trigger: .foreground)
-        BackgroundRefreshCoordinator.schedule()
+        await scheduleBackgroundRefresh()
     }
 
     func performBackgroundRefresh() async {
-        let wasBootstrapped = isBootstrapped
-        await bootstrap()
-        if wasBootstrapped {
+        let bootstrapTrigger = await bootstrap(
+            reconciliationTrigger: .backgroundRefresh
+        )
+        if Self.backgroundRefreshRequiresFollowUp(
+            afterBootstrap: bootstrapTrigger
+        ) {
             await reconcile(trigger: .backgroundRefresh)
         }
+    }
+
+    static func preferredBootstrapTrigger(
+        current: SyncTrigger?,
+        requested: SyncTrigger
+    ) -> SyncTrigger {
+        if current == .backgroundRefresh || requested == .backgroundRefresh {
+            return .backgroundRefresh
+        }
+        return current ?? requested
+    }
+
+    static func backgroundRefreshRequiresFollowUp(
+        afterBootstrap trigger: SyncTrigger?
+    ) -> Bool {
+        trigger != .backgroundRefresh
+    }
+
+    func scheduleBackgroundRefresh() async {
+        let result = await BackgroundRefreshCoordinator.schedule()
+        do {
+            try await syncActivityStore.recordSchedule(result)
+            syncActivitySummary = try await syncActivityStore.snapshot()
+        } catch let error as SyncActivityStoreError {
+            await diagnostics.record(.syncActivityStoreFailed(error))
+        } catch {
+            await diagnostics.record(.syncActivityStoreFailed(.writeFailed))
+        }
+        await diagnostics.record(.backgroundRefreshSchedule(result))
     }
 
     func requestHealthAuthorization() async {
@@ -689,6 +768,12 @@ final class AppModel {
     func reconcile(trigger: SyncTrigger) async {
         guard !operationState.isWorking else {
             selectionReconciliationQueue.enqueue(trigger)
+            let activityID = await beginSyncActivity(trigger: trigger)
+            await finishSyncActivity(
+                activityID,
+                outcome: .skipped,
+                reason: .operationInProgress
+            )
             return
         }
 
@@ -711,7 +796,15 @@ final class AppModel {
     }
 
     private func reconcileOnce(trigger: SyncTrigger) async {
-        guard !operationState.isWorking else { return }
+        let activityID = await beginSyncActivity(trigger: trigger)
+        guard !operationState.isWorking else {
+            await finishSyncActivity(
+                activityID,
+                outcome: .skipped,
+                reason: .operationInProgress
+            )
+            return
+        }
         guard healthAuthorizationState.allowsQueries else {
             if trigger == .manual {
                 setOperationState(
@@ -722,6 +815,11 @@ final class AppModel {
                     origin: trigger.operationOrigin
                 )
             }
+            await finishSyncActivity(
+                activityID,
+                outcome: .skipped,
+                reason: .healthNotReady
+            )
             return
         }
         guard googleConnection.isDriveReady else {
@@ -734,6 +832,11 @@ final class AppModel {
                     origin: trigger.operationOrigin
                 )
             }
+            await finishSyncActivity(
+                activityID,
+                outcome: .skipped,
+                reason: .driveNotReady
+            )
             return
         }
         guard let syncCoordinator else {
@@ -744,6 +847,11 @@ final class AppModel {
                         ?? "Local protected sync storage could not be prepared."
                 ),
                 origin: trigger.operationOrigin
+            )
+            await finishSyncActivity(
+                activityID,
+                outcome: .skipped,
+                reason: .localStorageUnavailable
             )
             return
         }
@@ -777,6 +885,12 @@ final class AppModel {
                     )
                 }
             )
+            let activityCounts = SyncActivityCounts(
+                staged: outcome.report.stagedDailyCount,
+                uploaded: outcome.report.uploadedDailyCount,
+                pending: outcome.summary.pendingUploadCount,
+                failed: outcome.report.failures.count
+            )
             guard
                 isGoogleTransitionCurrent(expectedGoogleEpoch),
                 operationEpoch == expectedOperationEpoch,
@@ -785,6 +899,12 @@ final class AppModel {
                 settleStaleOperation(
                     ifCurrent: syncingState,
                     expectedEpoch: expectedOperationEpoch
+                )
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded,
+                    counts: activityCounts
                 )
                 return
             }
@@ -799,6 +919,12 @@ final class AppModel {
                     ifCurrent: syncingState,
                     expectedEpoch: expectedOperationEpoch
                 )
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded,
+                    counts: activityCounts
+                )
                 return
             }
             let duration = startedAt.duration(to: clock.now)
@@ -810,12 +936,24 @@ final class AppModel {
                 operationEpoch == expectedOperationEpoch,
                 operationState == syncingState
             else {
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded,
+                    counts: activityCounts
+                )
                 return
             }
             if requiresReconnect {
                 operationState = .failed(
                     .sync,
                     Self.googleReconnectMessage
+                )
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .failed,
+                    reason: .googleReauthorizationRequired,
+                    counts: activityCounts
                 )
             } else if Self.driveDestinationChanged(in: outcome.report) {
                 _ = await markDriveUnavailableIfNeeded(
@@ -825,11 +963,23 @@ final class AppModel {
                     operationEpoch == expectedOperationEpoch,
                     operationState == syncingState
                 else {
+                    await finishSyncActivity(
+                        activityID,
+                        outcome: .skipped,
+                        reason: .superseded,
+                        counts: activityCounts
+                    )
                     return
                 }
                 operationState = .failed(
                     .sync,
                     "The managed Drive folder changed. Verify it in Setup before retrying; local copies are safe."
+                )
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .failed,
+                    reason: .driveDestinationChanged,
+                    counts: activityCounts
                 )
             } else {
                 guard
@@ -841,11 +991,27 @@ final class AppModel {
                         ifCurrent: syncingState,
                         expectedEpoch: expectedOperationEpoch
                     )
+                    await finishSyncActivity(
+                        activityID,
+                        outcome: .skipped,
+                        reason: .superseded,
+                        counts: activityCounts
+                    )
                     return
                 }
                 operationState = Self.syncCompletionState(
                     report: outcome.report,
                     summary: syncSummary
+                )
+                let activityResult = Self.syncActivityResult(
+                    report: outcome.report,
+                    summary: syncSummary
+                )
+                await finishSyncActivity(
+                    activityID,
+                    outcome: activityResult.outcome,
+                    reason: activityResult.reason,
+                    counts: activityCounts
                 )
             }
             await diagnostics.record(
@@ -869,6 +1035,11 @@ final class AppModel {
                     ifCurrent: syncingState,
                     expectedEpoch: expectedOperationEpoch
                 )
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded
+                )
                 return
             }
             let requiresReconnect = await requireGoogleReconnect(
@@ -881,6 +1052,11 @@ final class AppModel {
                 requiresReconnect
                     || isGoogleTransitionCurrent(expectedGoogleEpoch)
             else {
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded
+                )
                 return
             }
             operationState = .failed(
@@ -890,11 +1066,80 @@ final class AppModel {
             await diagnostics.record(
                 .syncFailed(DiagnosticErrorCode(capturing: error))
             )
+            await finishSyncActivity(
+                activityID,
+                outcome: .failed,
+                reason: requiresReconnect
+                    ? .googleReauthorizationRequired
+                    : .reconcileFailed
+            )
         }
     }
 
     func retryFailedUploads() async {
         await reconcile(trigger: .retry)
+    }
+
+    private func refreshSyncActivitySummary() async {
+        do {
+            syncActivitySummary = try await syncActivityStore.snapshot()
+        } catch let error as SyncActivityStoreError {
+            await diagnostics.record(.syncActivityStoreFailed(error))
+        } catch {
+            await diagnostics.record(.syncActivityStoreFailed(.invalidState))
+        }
+    }
+
+    private func beginSyncActivity(trigger: SyncTrigger) async -> UUID? {
+        do {
+            let id = try await syncActivityStore.begin(trigger: trigger)
+            syncActivitySummary = try await syncActivityStore.snapshot()
+            return id
+        } catch let error as SyncActivityStoreError {
+            await diagnostics.record(.syncActivityStoreFailed(error))
+            return nil
+        } catch {
+            await diagnostics.record(.syncActivityStoreFailed(.writeFailed))
+            return nil
+        }
+    }
+
+    private func finishSyncActivity(
+        _ id: UUID?,
+        outcome: SyncActivityOutcome,
+        reason: SyncActivityReason? = nil,
+        counts: SyncActivityCounts = .zero
+    ) async {
+        guard let id else { return }
+        do {
+            try await syncActivityStore.finish(
+                id: id,
+                outcome: outcome,
+                reason: reason,
+                counts: counts
+            )
+            syncActivitySummary = try await syncActivityStore.snapshot()
+        } catch let error as SyncActivityStoreError {
+            await diagnostics.record(.syncActivityStoreFailed(error))
+        } catch {
+            await diagnostics.record(.syncActivityStoreFailed(.writeFailed))
+        }
+    }
+
+    private static func syncActivityResult(
+        report: SyncReport,
+        summary: SyncSummary
+    ) -> SyncActivityResult {
+        if summary.permanentFailureCount > 0 || !report.failures.isEmpty {
+            return SyncActivityResult(
+                outcome: .failed,
+                reason: .reconcileFailed
+            )
+        }
+        if summary.pendingUploadCount > 0 {
+            return SyncActivityResult(outcome: .pending, reason: nil)
+        }
+        return SyncActivityResult(outcome: .succeeded, reason: nil)
     }
 
     private func publishSyncProgress(
@@ -1614,12 +1859,6 @@ final class AppModel {
             publishSyncSummaryIfChanged(
                 try await syncCoordinator.summary()
             )
-            guard
-                googleConnection.isDriveReady,
-                !operationState.isWorking(.googleConnection)
-            else {
-                return
-            }
             requestObserverFlush()
         } catch {
             await diagnostics.record(
@@ -1627,10 +1866,13 @@ final class AppModel {
                     DiagnosticErrorCode(capturing: error)
                 )
             )
+            requestObserverFlush(stagingFailed: true)
         }
     }
 
-    private func requestObserverFlush() {
+    private func requestObserverFlush(stagingFailed: Bool = false) {
+        observerStagingFailurePending =
+            observerStagingFailurePending || stagingFailed
         guard observerFlushQueue.request() else {
             return
         }
@@ -1647,17 +1889,56 @@ final class AppModel {
     }
 
     private func performObserverFlushPass() async {
-        guard
-            let syncCoordinator,
-            googleConnection.isDriveReady,
-            !operationState.isWorking(.googleConnection)
-        else {
+        let activityID = await beginSyncActivity(trigger: .healthObserver)
+        let hadStagingFailure = observerStagingFailurePending
+        observerStagingFailurePending = false
+        guard let syncCoordinator else {
+            await finishSyncActivity(
+                activityID,
+                outcome: .skipped,
+                reason: .localStorageUnavailable
+            )
+            return
+        }
+        guard googleConnection.isDriveReady else {
+            await finishSyncActivity(
+                activityID,
+                outcome: hadStagingFailure ? .failed : .skipped,
+                reason: hadStagingFailure
+                    ? .observerStagingFailed
+                    : .driveNotReady
+            )
+            return
+        }
+        guard !operationState.isWorking(.googleConnection) else {
+            await finishSyncActivity(
+                activityID,
+                outcome: hadStagingFailure ? .failed : .skipped,
+                reason: hadStagingFailure
+                    ? .observerStagingFailed
+                    : .operationInProgress
+            )
             return
         }
         let expectedGoogleEpoch = googleTransitionEpoch
         do {
             let outcome = try await syncCoordinator.flushPendingUploads()
+            let activityCounts = SyncActivityCounts(
+                staged: outcome.report.stagedDailyCount,
+                uploaded: outcome.report.uploadedDailyCount,
+                pending: outcome.summary.pendingUploadCount,
+                failed: max(
+                    outcome.report.failures.count,
+                    hadStagingFailure ? 1 : 0
+                )
+            )
             guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded,
+                    counts: activityCounts
+                )
                 return
             }
             publishSyncSummaryIfChanged(outcome.summary)
@@ -1667,6 +1948,12 @@ final class AppModel {
             )
             if requiresReconnect {
                 publishObserverSyncCompletionIfAppropriate(outcome)
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .failed,
+                    reason: .googleReauthorizationRequired,
+                    counts: activityCounts
+                )
                 return
             }
             if Self.driveDestinationChanged(in: outcome.report) {
@@ -1676,14 +1963,46 @@ final class AppModel {
                 if markedUnavailable {
                     publishObserverSyncCompletionIfAppropriate(outcome)
                 }
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .failed,
+                    reason: .driveDestinationChanged,
+                    counts: activityCounts
+                )
                 return
             }
             guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded,
+                    counts: activityCounts
+                )
                 return
             }
             publishObserverSyncCompletionIfAppropriate(outcome)
+            let result = hadStagingFailure
+                ? SyncActivityResult(
+                    outcome: .failed,
+                    reason: .observerStagingFailed
+                )
+                : Self.syncActivityResult(
+                    report: outcome.report,
+                    summary: outcome.summary
+                )
+            await finishSyncActivity(
+                activityID,
+                outcome: result.outcome,
+                reason: result.reason,
+                counts: activityCounts
+            )
         } catch {
             guard isGoogleTransitionCurrent(expectedGoogleEpoch) else {
+                await finishSyncActivity(
+                    activityID,
+                    outcome: .skipped,
+                    reason: .superseded
+                )
                 return
             }
             _ = await requireGoogleReconnect(
@@ -1693,6 +2012,17 @@ final class AppModel {
             await diagnostics.record(
                 .observerUploadFailed(
                     DiagnosticErrorCode(capturing: error)
+                )
+            )
+            await finishSyncActivity(
+                activityID,
+                outcome: .failed,
+                reason: .observerUploadFailed,
+                counts: SyncActivityCounts(
+                    staged: 0,
+                    uploaded: 0,
+                    pending: syncSummary.pendingUploadCount,
+                    failed: 1
                 )
             )
         }
@@ -2100,6 +2430,59 @@ final class AppModel {
             )
         } else {
             syncSummary = .empty
+        }
+        let activityTime = Date(timeIntervalSince1970: 1_753_300_000)
+        let backgroundReceipt = SyncActivityReceipt(
+            id: UUID(),
+            startedAt: activityTime.addingTimeInterval(-120),
+            finishedAt: activityTime.addingTimeInterval(-90),
+            trigger: .backgroundRefresh,
+            outcome: arguments.contains("--ui-activity-pending")
+                ? .pending
+                : arguments.contains("--ui-activity-skipped")
+                    ? .skipped
+                    : .succeeded,
+            reason: arguments.contains("--ui-activity-skipped")
+                ? .driveNotReady
+                : nil,
+            counts: arguments.contains("--ui-activity-pending")
+                ? SyncActivityCounts(
+                    staged: 1,
+                    uploaded: 0,
+                    pending: 1,
+                    failed: 0
+                )
+                : .zero
+        )
+        if arguments.contains("--ui-activity-success") {
+            syncActivitySummary = SyncActivitySummary(
+                receipts: [
+                    SyncActivityReceipt(
+                        id: UUID(),
+                        startedAt: activityTime.addingTimeInterval(-30),
+                        finishedAt: activityTime,
+                        trigger: .foreground,
+                        outcome: .succeeded
+                    ),
+                    backgroundReceipt,
+                ],
+                schedule: BackgroundRefreshScheduleReceipt(
+                    attemptedAt: activityTime,
+                    result: .submitted
+                )
+            )
+        } else if arguments.contains("--ui-activity-pending")
+            || arguments.contains("--ui-activity-skipped")
+        {
+            syncActivitySummary = SyncActivitySummary(
+                receipts: [backgroundReceipt],
+                schedule: BackgroundRefreshScheduleReceipt(
+                    attemptedAt: activityTime,
+                    result: .existingRequestKept
+                )
+            )
+        } else {
+            syncActivitySummary = .empty
         }
         backfillRange = .thirtyDays
         customBackfillStartValue = BackfillDateCodec.string(

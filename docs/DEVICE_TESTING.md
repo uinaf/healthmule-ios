@@ -16,6 +16,7 @@ boundaries.
 | Daily aggregation, initial backfill, and manual sync | Implemented; signed-device and real-Drive proof pending |
 | HealthKit observer changes flowing into staged daily records | Implemented; physical background-delivery proof pending |
 | File-backed background upload and relaunch recovery | Implemented; physical interruption proof pending |
+| Bounded automatic-activity receipts and schedule status | Implemented; physical cadence proof pending |
 | Watch status and reachable sync requests | Implemented; paired-device proof pending |
 
 Implemented rows describe live code paths, not completed platform acceptance.
@@ -129,7 +130,11 @@ launch event and reconciles completed or interrupted work through the durable
 queue.
 
 - [ ] With the app backgrounded, add a relevant Health sample and confirm the affected daily record is eventually updated.
-- [ ] Trigger an app-refresh task and confirm it reconciles pending work; do not treat a prompt or exact schedule as guaranteed.
+- [ ] Trigger an app-refresh task and confirm the Sync screen records one
+  Background refresh receipt with its outcome. Confirm the schedule row reports
+  Submitted, Existing request kept, or a closed failure reason. A receipt proves
+  that the app observed an opportunity or requested scheduling; it does not
+  prove prompt, periodic, or future execution.
 - [ ] Interrupt connectivity during an upload and confirm retry preserves the same logical operation without duplicate Drive files.
 - [ ] While an upload is waiting for connectivity, switch accounts or replace
       the managed folder tree. Confirm the app does not report the new
@@ -161,7 +166,11 @@ Development](https://developer.apple.com/documentation/backgroundtasks/starting-
 
 - [ ] Console logs contain no health values, OAuth tokens, Drive file bodies, or raw HealthKit metadata.
 - [ ] Shared diagnostics remain bounded and redact sensitive fields.
-- [ ] Protected outbox, anchor, and saved day-boundary files use data protection and remain excluded from backups.
+- [ ] Protected outbox, anchor, saved day-boundary, and automatic-activity
+  receipt files use data protection and remain excluded from backups.
+- [ ] Automatic-activity receipt JSON remains bounded to 20 entries and contains
+  no health values, record bodies, raw metadata, OAuth tokens, account details,
+  or Drive identifiers.
 - [ ] Disconnecting or resetting local state does not delete existing Drive exports.
 - [ ] Revoking Google access returns the app to a recoverable Reconnect state.
 - [ ] Complete Google sign-in, terminate the app before the pending queue

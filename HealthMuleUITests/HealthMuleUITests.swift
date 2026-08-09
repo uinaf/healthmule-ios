@@ -344,6 +344,113 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testAutomaticActivityShowsSuccessAndSeparateBackgroundReceipt() {
+        let app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-success",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-latest",
+                in: app
+            ).contains("App foreground · Succeeded")
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-background",
+                in: app
+            ).contains("Background refresh · Succeeded")
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-schedule",
+                in: app
+            ).contains("Submitted")
+        )
+        XCTAssertTrue(
+            app.staticTexts[
+                "Receipts show attempts and outcomes. They do not prove iOS background cadence."
+            ].exists
+        )
+    }
+
+    @MainActor
+    func testAutomaticActivityShowsPendingOutcome() {
+        let app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-pending",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-latest",
+                in: app
+            ).contains("Pending")
+        )
+    }
+
+    @MainActor
+    func testAutomaticActivityShowsSkippedOutcome() {
+        let app = launch(
+            additionalArguments: [
+                "--ui-ready",
+                "--ui-show-sync",
+                "--ui-activity-skipped",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            value(
+                of: "automatic-activity-latest",
+                in: app
+            ).contains("Skipped")
+        )
+    }
+
+    @MainActor
+    func testAutomaticActivityShowsExplicitNoHistoryState() {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-sync"]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Automatic activity"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertEqual(
+            value(of: "automatic-activity-latest", in: app),
+            "Never observed"
+        )
+        XCTAssertEqual(
+            value(of: "automatic-activity-background", in: app),
+            "Never observed"
+        )
+        XCTAssertEqual(
+            value(of: "automatic-activity-schedule", in: app),
+            "Never requested"
+        )
+    }
+
+    @MainActor
     private func launch(
         additionalArguments: [String] = []
     ) -> XCUIApplication {
@@ -359,6 +466,14 @@ final class HealthMuleUITests: XCTestCase {
         in app: XCUIApplication
     ) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    @MainActor
+    private func value(
+        of identifier: String,
+        in app: XCUIApplication
+    ) -> String {
+        element(identifier, in: app).value as? String ?? ""
     }
 
     @MainActor

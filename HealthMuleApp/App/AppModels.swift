@@ -11,7 +11,7 @@ enum InitialLoadPhase: Equatable, Sendable {
     case loaded
 }
 
-enum SyncTrigger: String, Sendable {
+enum SyncTrigger: String, Codable, Equatable, Sendable {
     case appLaunch
     case foreground
     case manual
@@ -35,6 +35,31 @@ enum SyncTrigger: String, Sendable {
             .backgroundRefresh,
             .healthObserver:
             .automatic
+        }
+    }
+
+    var activityLabel: String {
+        switch self {
+        case .appLaunch:
+            "App launch"
+        case .foreground:
+            "App foreground"
+        case .manual:
+            "Manual sync"
+        case .retry:
+            "Retry uploads"
+        case .rebuild:
+            "Rebuild"
+        case .metricSelection:
+            "Metric selection"
+        case .historySelection:
+            "History selection"
+        case .backgroundRefresh:
+            "Background refresh"
+        case .healthObserver:
+            "Health observer"
+        case .watchCompanion:
+            "Watch request"
         }
     }
 }

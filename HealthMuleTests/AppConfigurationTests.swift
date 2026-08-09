@@ -1,3 +1,4 @@
+@preconcurrency import BackgroundTasks
 @preconcurrency import HealthKit
 import Foundation
 import HealthMuleCore
@@ -5,6 +6,85 @@ import XCTest
 @testable import HealthMule
 
 final class AppConfigurationTests: XCTestCase {
+    @MainActor
+    func testColdBackgroundBootstrapKeepsBackgroundAttributionExactlyOnce() {
+        XCTAssertEqual(
+            AppModel.preferredBootstrapTrigger(
+                current: .appLaunch,
+                requested: .backgroundRefresh
+            ),
+            .backgroundRefresh
+        )
+        XCTAssertFalse(
+            AppModel.backgroundRefreshRequiresFollowUp(
+                afterBootstrap: .backgroundRefresh
+            )
+        )
+        XCTAssertTrue(
+            AppModel.backgroundRefreshRequiresFollowUp(
+                afterBootstrap: .appLaunch
+            )
+        )
+        XCTAssertTrue(
+            AppModel.backgroundRefreshRequiresFollowUp(
+                afterBootstrap: nil
+            )
+        )
+    }
+
+    @MainActor
+    func testBackgroundRefreshSchedulingKeepsExistingRequest() {
+        XCTAssertFalse(
+            BackgroundRefreshCoordinator.shouldSubmit(
+                hasExistingRequest: true
+            )
+        )
+        XCTAssertTrue(
+            BackgroundRefreshCoordinator.shouldSubmit(
+                hasExistingRequest: false
+            )
+        )
+    }
+
+    @MainActor
+    func testBackgroundRefreshSchedulingMapsPublicErrorCodes() {
+        XCTAssertEqual(
+            BackgroundRefreshCoordinator.scheduleFailure(
+                domain: BGTaskScheduler.errorDomain,
+                code: 1
+            ),
+            .unavailable
+        )
+        XCTAssertEqual(
+            BackgroundRefreshCoordinator.scheduleFailure(
+                domain: BGTaskScheduler.errorDomain,
+                code: 2
+            ),
+            .tooManyPendingRequests
+        )
+        XCTAssertEqual(
+            BackgroundRefreshCoordinator.scheduleFailure(
+                domain: BGTaskScheduler.errorDomain,
+                code: 3
+            ),
+            .notPermitted
+        )
+        XCTAssertEqual(
+            BackgroundRefreshCoordinator.scheduleFailure(
+                domain: BGTaskScheduler.errorDomain,
+                code: 4
+            ),
+            .immediateRunIneligible
+        )
+        XCTAssertEqual(
+            BackgroundRefreshCoordinator.scheduleFailure(
+                domain: "unexpected",
+                code: 1
+            ),
+            .unknown
+        )
+    }
+
     func testSyncTriggersClassifyOperationOrigin() {
         for trigger in [
             SyncTrigger.manual,

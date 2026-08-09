@@ -9,6 +9,7 @@ struct SyncView: View {
             VStack(spacing: 24) {
                 syncHero
                 queueCard
+                automaticActivityCard
 
                 VStack(spacing: 12) {
                     SectionHeading(title: "Repair")
@@ -114,6 +115,107 @@ struct SyncView: View {
             SyncFactsRow(summary: model.syncSummary)
         }
         .healthMuleCard(padding: 16)
+    }
+
+    private var automaticActivityCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Automatic activity")
+                .font(HealthMuleStyle.Text.cardTitle)
+
+            ValueRow(
+                title: "Last automatic",
+                value: activityText(
+                    model.syncActivitySummary.latestAutomatic
+                )
+            )
+            .accessibilityIdentifier("automatic-activity-latest")
+
+            Divider()
+
+            ValueRow(
+                title: "Last background refresh",
+                value: activityText(
+                    model.syncActivitySummary.latestBackgroundRefresh
+                )
+            )
+            .accessibilityIdentifier("automatic-activity-background")
+
+            Divider()
+
+            ValueRow(
+                title: "Schedule request",
+                value: scheduleText(model.syncActivitySummary.schedule)
+            )
+            .accessibilityIdentifier("automatic-activity-schedule")
+
+            Text(
+                "Receipts show attempts and outcomes. They do not prove iOS background cadence."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .healthMuleCard(padding: 16)
+    }
+
+    private func activityText(_ receipt: SyncActivityReceipt?) -> String {
+        guard let receipt else { return "Never observed" }
+        let timestamp = receipt.finishedAt ?? receipt.startedAt
+        return "\(receipt.trigger.activityLabel) · "
+            + "\(outcomeLabel(receipt.outcome)) · "
+            + timestamp.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func outcomeLabel(_ outcome: SyncActivityOutcome) -> String {
+        switch outcome {
+        case .running:
+            "Running"
+        case .succeeded:
+            "Succeeded"
+        case .pending:
+            "Pending"
+        case .skipped:
+            "Skipped"
+        case .failed:
+            "Failed"
+        case .interrupted:
+            "Interrupted"
+        }
+    }
+
+    private func scheduleText(
+        _ receipt: BackgroundRefreshScheduleReceipt?
+    ) -> String {
+        guard let receipt else { return "Never requested" }
+        let result = switch receipt.result {
+        case .submitted:
+            "Submitted"
+        case .existingRequestKept:
+            "Existing request kept"
+        case .failed(let reason):
+            "Failed (\(scheduleFailureLabel(reason)))"
+        }
+        return result + " · "
+            + receipt.attemptedAt.formatted(
+                date: .abbreviated,
+                time: .shortened
+            )
+    }
+
+    private func scheduleFailureLabel(
+        _ failure: BackgroundRefreshScheduleFailure
+    ) -> String {
+        switch failure {
+        case .unavailable:
+            "unavailable"
+        case .tooManyPendingRequests:
+            "too many pending requests"
+        case .notPermitted:
+            "not permitted"
+        case .immediateRunIneligible:
+            "immediate run ineligible"
+        case .unknown:
+            "unknown reason"
+        }
     }
 
     private var syncPresentation: SyncPresentation {
