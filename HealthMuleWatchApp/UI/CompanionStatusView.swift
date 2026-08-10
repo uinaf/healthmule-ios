@@ -276,9 +276,14 @@ struct CompanionStatusView: View {
         case .waitingForSnapshot:
             "Waiting for iPhone status"
         case .stale:
-            status.freshness == .unknown
-                ? "Status time unavailable"
-                : "Last iPhone update is over \(Int(CompanionStatusModel.currentSnapshotInterval / 60)) minutes old"
+            switch status.freshness {
+            case .current:
+                "iPhone status current"
+            case .stale:
+                "Last iPhone update is over \(Int(CompanionStatusModel.currentSnapshotInterval / 60)) minutes old"
+            case .unknown:
+                "Status time unavailable"
+            }
         case .activationFailed:
             "iPhone connection failed"
         }
