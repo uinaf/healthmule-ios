@@ -56,6 +56,14 @@ final class CompanionStatusModelTests: XCTestCase {
         XCTAssertEqual(activating.headline, .waitingForPhone)
     }
 
+    func testFutureSnapshotReportsUnknownStatusTime() {
+        let future = status(snapshot: snapshot(age: -1))
+
+        XCTAssertEqual(future.freshness, .unknown)
+        XCTAssertEqual(future.connection, .stale)
+        XCTAssertEqual(future.headline, .statusTimeUnavailable)
+    }
+
     func testStaleStatusDoesNotHideActionableLastKnownState() {
         let staleAge = CompanionStatusModel.currentSnapshotInterval + 1
 

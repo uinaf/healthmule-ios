@@ -250,6 +250,12 @@ struct CompanionStatusView: View {
                 systemImage: "clock.badge.questionmark",
                 color: .orange
             )
+        case .statusTimeUnavailable:
+            StatusPresentation(
+                title: "Status Time Unknown",
+                systemImage: "clock.badge.questionmark",
+                color: .orange
+            )
         case .upToDate:
             StatusPresentation(
                 title: "Up to Date",
@@ -272,7 +278,7 @@ struct CompanionStatusView: View {
         case .stale:
             status.freshness == .unknown
                 ? "Status time unavailable"
-                : "Last iPhone update is over 30 minutes old"
+                : "Last iPhone update is over \(Int(CompanionStatusModel.currentSnapshotInterval / 60)) minutes old"
         case .activationFailed:
             "iPhone connection failed"
         }
