@@ -49,11 +49,26 @@ final class CompanionStatusModelTests: XCTestCase {
 
         XCTAssertEqual(stale.freshness, .stale)
         XCTAssertEqual(stale.connection, .stale)
-        XCTAssertEqual(stale.headline, .ready)
+        XCTAssertEqual(stale.headline, .statusOutOfDate)
         XCTAssertEqual(unreachable.connection, .unreachable)
         XCTAssertEqual(unreachable.headline, .phoneUnavailable)
         XCTAssertEqual(activating.connection, .connecting)
         XCTAssertEqual(activating.headline, .waitingForPhone)
+    }
+
+    func testStaleStatusDoesNotHideActionableLastKnownState() {
+        let staleAge = CompanionStatusModel.currentSnapshotInterval + 1
+
+        XCTAssertEqual(
+            status(snapshot: snapshot(age: staleAge, readiness: .setupRequired))
+                .headline,
+            .finishSetup
+        )
+        XCTAssertEqual(
+            status(snapshot: snapshot(age: staleAge, readiness: .attention))
+                .headline,
+            .needsAttention
+        )
     }
 
     func testEveryActivityProducesTruthfulHeadline() {

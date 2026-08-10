@@ -19,6 +19,7 @@ public enum CompanionStatusHeadline: Equatable, Sendable {
     case finishSetup
     case phoneUnavailable
     case ready
+    case statusOutOfDate
     case upToDate
 }
 
@@ -167,10 +168,12 @@ public struct CompanionStatusModel: Equatable, Sendable {
         if snapshot.readiness == .setupRequired {
             return .finishSetup
         }
+        if freshness != .current {
+            return .statusOutOfDate
+        }
         if
             snapshot.readiness == .ready,
             snapshot.activity == .synced,
-            freshness == .current,
             snapshot.pendingUploadCount == 0,
             snapshot.retryableUploadCount == 0,
             snapshot.permanentFailureCount == 0

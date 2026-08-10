@@ -85,7 +85,7 @@ struct CompanionStatusView: View {
         VStack(spacing: 6) {
             if let lastSuccess = status.lastSuccessfulSyncAt {
                 datedFactRow(
-                    title: "Last confirmed",
+                    title: "Last successful sync",
                     date: lastSuccess
                 )
             }
@@ -108,7 +108,7 @@ struct CompanionStatusView: View {
                 )
             }
             if let updatedAt = status.updatedAt {
-                datedFactRow(title: "Updated", date: updatedAt)
+                datedFactRow(title: "Status updated", date: updatedAt)
             }
         }
         .font(.caption2)
@@ -244,6 +244,12 @@ struct CompanionStatusView: View {
                 systemImage: "checkmark.circle",
                 color: .primary
             )
+        case .statusOutOfDate:
+            StatusPresentation(
+                title: "Status Out of Date",
+                systemImage: "clock.badge.questionmark",
+                color: .orange
+            )
         case .upToDate:
             StatusPresentation(
                 title: "Up to Date",
@@ -266,7 +272,7 @@ struct CompanionStatusView: View {
         case .stale:
             status.freshness == .unknown
                 ? "Status time unavailable"
-                : "Status may be out of date"
+                : "Last iPhone update is over 30 minutes old"
         case .activationFailed:
             "iPhone connection failed"
         }
