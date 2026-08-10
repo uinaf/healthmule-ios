@@ -392,12 +392,19 @@ final class HealthMuleUITests: XCTestCase {
 
     @MainActor
     func testPermanentFailureIsNotAdvertisedAsRetryable() throws {
+        let arguments = ["--ui-ready", "--ui-permanent-failure"]
+        let homeApp = launch(additionalArguments: arguments)
+
+        XCTAssertTrue(
+            homeApp.staticTexts["An upload was rejected"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(element("home-sync-action", in: homeApp).exists)
+        XCTAssertTrue(element("home-diagnostics-action", in: homeApp).isEnabled)
+        homeApp.terminate()
+
         let app = launch(
-            additionalArguments: [
-                "--ui-ready",
-                "--ui-show-sync",
-                "--ui-permanent-failure",
-            ]
+            additionalArguments: arguments + ["--ui-show-sync"]
         )
 
         XCTAssertTrue(element("sync-screen", in: app).waitForExistence(timeout: 10))
