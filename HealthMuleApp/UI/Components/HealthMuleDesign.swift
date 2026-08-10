@@ -310,9 +310,9 @@ struct SyncFactsRow: View {
 
         var label: String {
             switch self {
-            case .lastSync: "Last sync"
-            case .latestDay: "Latest day"
-            case .pending: "Pending"
+            case .lastSync: "Last Drive sync"
+            case .latestDay: "Data through"
+            case .pending: "To upload"
             }
         }
     }

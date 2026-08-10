@@ -3,20 +3,20 @@ import SwiftUI
 struct SyncView: View {
     @Bindable var model: AppModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isBackgroundDetailsExpanded = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: HealthMuleStyle.sectionSpacing) {
                 syncHero
-                queueCard
-                automaticActivityCard
+                uploadStatusCard
 
                 VStack(spacing: 12) {
-                    SectionHeading(title: "Repair")
+                    SectionHeading(title: "Fix a problem")
                     VStack(spacing: 10) {
                         SyncActionRow(
-                            title: "Retry pending uploads",
-                            subtitle: "Without rebuilding them.",
+                            title: "Retry waiting uploads",
+                            subtitle: "Try uploading prepared records again.",
                             systemImage: "arrow.clockwise",
                             isDisabled: model.operationState.isWorking
                                 || !model.syncReadiness.canSync
@@ -29,8 +29,8 @@ struct SyncView: View {
                         .accessibilityIdentifier("retry-uploads-action")
 
                         SyncActionRow(
-                            title: "Rebuild last 3 days",
-                            subtitle: "Recompute the rolling window.",
+                            title: "Recheck recent health data",
+                            subtitle: "Prepare the latest three days again.",
                             systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
                             isDisabled: model.operationState.isWorking
                                 || !model.syncReadiness.canSync
@@ -42,6 +42,8 @@ struct SyncView: View {
                         .accessibilityIdentifier("rebuild-action")
                     }
                 }
+
+                backgroundDetailsCard
 
                 HealthMuleNote(
                     text: "Opening the app reconciles automatically. iOS controls background timing.",
@@ -75,7 +77,26 @@ struct SyncView: View {
 
     @ViewBuilder
     private var syncHeroAction: some View {
-        if model.syncReadiness.canSync {
+        if model.syncSummary.permanentFailureCount > 0 {
+            if let diagnosticsURL = model.diagnosticsURL {
+                ShareLink(item: diagnosticsURL) {
+                    Label("Share Diagnostics", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .accessibilityIdentifier("sync-diagnostics-action")
+            } else {
+                Button {
+                    Task {
+                        await model.prepareDiagnosticsExport()
+                    }
+                } label: {
+                    Label("Prepare Diagnostics", systemImage: "doc.badge.gearshape")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(model.operationState.isWorking)
+                .accessibilityIdentifier("sync-diagnostics-action")
+            }
+        } else if model.syncReadiness.canSync {
             Button {
                 Task {
                     await model.reconcile(trigger: .manual)
@@ -83,7 +104,7 @@ struct SyncView: View {
             } label: {
                 // The spinning glyph carries "in progress" so the label does
                 // not have to restate a badge that already says Syncing.
-                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                Label(syncActionLabel, systemImage: "arrow.triangle.2.circlepath")
                     .symbolEffect(
                         .rotate,
                         options: .repeating,
@@ -102,9 +123,15 @@ struct SyncView: View {
         }
     }
 
-    private var queueCard: some View {
+    private var syncActionLabel: String {
+        model.presentedOperationState.isFailure(.sync)
+            ? "Try Sync Again"
+            : "Sync now"
+    }
+
+    private var uploadStatusCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Queue")
+            Text("Upload status")
                 .font(HealthMuleStyle.Text.cardTitle)
 
             SyncFactsRow(summary: model.syncSummary)
@@ -112,12 +139,9 @@ struct SyncView: View {
         .healthMuleCard(padding: 16)
     }
 
-    private var automaticActivityCard: some View {
-        VStack(spacing: 8) {
+    private var backgroundDetailsCard: some View {
+        DisclosureGroup(isExpanded: $isBackgroundDetailsExpanded) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Automatic activity")
-                    .font(HealthMuleStyle.Text.cardTitle)
-
                 activityRow(
                     title: "Last automatic sync",
                     systemImage: "arrow.triangle.2.circlepath",
@@ -140,13 +164,17 @@ struct SyncView: View {
 
                 scheduleRow(model.syncActivitySummary.schedule)
                     .accessibilityIdentifier("automatic-activity-schedule")
-            }
-            .healthMuleCard(padding: 16)
 
-            SectionFooter(
-                text: "Receipts show attempts and outcomes. They do not prove iOS background cadence."
-            )
+                SectionFooter(
+                    text: "These are past attempts. iOS decides when background work runs."
+                )
+            }
+            .padding(.top, 16)
+        } label: {
+            Text("Background details")
+                .font(HealthMuleStyle.Text.cardTitle)
         }
+        .healthMuleCard(padding: 16)
     }
 
     private func activityRow(
@@ -360,7 +388,7 @@ struct SyncView: View {
                 badge: "Needs attention",
                 tone: .danger,
                 title: "Sync needs another look",
-                message: "Your local copies are safe. Try the pending work again."
+                message: syncFailureMessage
             )
         }
         if model.syncSummary.pendingUploadCount > 0 {
@@ -396,15 +424,24 @@ struct SyncView: View {
             )
         }
         return SyncPresentation(
-            badge: "Queue clear",
+            badge: "Uploads complete",
             tone: .success,
-            title: "Everything is staged and current",
-            message: Self.defaultSyncMessage
+            title: "Your Drive export is current",
+            message: "Recent changes and missing history have been checked."
         )
     }
 
     private static let defaultSyncMessage =
-        "Changed days, the latest three days, and any missing backfill."
+        "HealthMule checks recent changes and fills any missing history."
+
+    private var syncFailureMessage: String {
+        guard
+            case .failed(.sync, let message) = model.presentedOperationState
+        else {
+            return "Sync could not finish. Try again."
+        }
+        return message
+    }
 
     private var setupActionLabel: String? {
         switch model.syncReadiness {
@@ -475,7 +512,7 @@ struct SyncDayProgressView: View {
         .tint(HealthMuleStyle.tint)
         .animation(.default, value: progress.completedUnits)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Reconciliation progress")
+        .accessibilityLabel("Sync progress")
         .accessibilityValue(progress.accessibilityValue)
         .accessibilityIdentifier("sync-day-progress")
     }

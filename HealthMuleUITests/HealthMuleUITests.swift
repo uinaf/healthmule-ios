@@ -176,6 +176,9 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["None"].exists)
         XCTAssertTrue(app.staticTexts["0"].exists)
         XCTAssertTrue(app.staticTexts["No automatic run observed"].exists)
+        XCTAssertTrue(app.staticTexts["Last Drive sync"].exists)
+        XCTAssertTrue(app.staticTexts["Data through"].exists)
+        XCTAssertTrue(app.staticTexts["To upload"].exists)
     }
 
     @MainActor
@@ -224,6 +227,7 @@ final class HealthMuleUITests: XCTestCase {
             homeApp.staticTexts["Sync needs another look"]
                 .waitForExistence(timeout: 10)
         )
+        XCTAssertEqual(element("home-sync-action", in: homeApp).label, "Try Sync Again")
         homeApp.terminate()
 
         let syncApp = launch(
@@ -234,6 +238,7 @@ final class HealthMuleUITests: XCTestCase {
             syncApp.staticTexts["Sync needs another look"]
                 .waitForExistence(timeout: 10)
         )
+        XCTAssertEqual(element("sync-now-action", in: syncApp).label, "Try Sync Again")
     }
 
     @MainActor
@@ -387,17 +392,43 @@ final class HealthMuleUITests: XCTestCase {
 
     @MainActor
     func testPermanentFailureIsNotAdvertisedAsRetryable() throws {
+        let arguments = ["--ui-ready", "--ui-permanent-failure"]
+        let homeApp = launch(additionalArguments: arguments)
+
+        XCTAssertTrue(
+            homeApp.staticTexts["An upload was rejected"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(element("home-sync-action", in: homeApp).exists)
+        XCTAssertTrue(element("home-diagnostics-action", in: homeApp).isEnabled)
+        homeApp.terminate()
+
         let app = launch(
-            additionalArguments: [
-                "--ui-ready",
-                "--ui-show-sync",
-                "--ui-permanent-failure",
-            ]
+            additionalArguments: arguments + ["--ui-show-sync"]
         )
 
         XCTAssertTrue(element("sync-screen", in: app).waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Upload blocked"].exists)
         XCTAssertFalse(element("retry-uploads-action", in: app).isEnabled)
+        XCTAssertFalse(element("sync-now-action", in: app).exists)
+        XCTAssertTrue(element("sync-diagnostics-action", in: app).isEnabled)
+    }
+
+    @MainActor
+    func testSyncPrioritizesRecoveryBeforeBackgroundDetails() throws {
+        let app = launch(
+            additionalArguments: ["--ui-ready", "--ui-show-sync"]
+        )
+        let repair = app.staticTexts["Fix a problem"]
+        let background = app.buttons["Background details"]
+
+        XCTAssertTrue(repair.waitForExistence(timeout: 10))
+        XCTAssertTrue(background.exists)
+        XCTAssertLessThan(repair.frame.minY, background.frame.minY)
+        XCTAssertTrue(app.staticTexts["Upload status"].exists)
+        XCTAssertTrue(app.staticTexts["Fix a problem"].exists)
+        XCTAssertTrue(app.staticTexts["Background details"].exists)
+        XCTAssertFalse(element("automatic-activity-latest", in: app).exists)
     }
 
     @MainActor
@@ -410,10 +441,7 @@ final class HealthMuleUITests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(
-            app.staticTexts["Automatic activity"]
-                .waitForExistence(timeout: 10)
-        )
+        expandBackgroundDetails(in: app)
         XCTAssertTrue(
             value(
                 of: "automatic-activity-latest",
@@ -434,7 +462,7 @@ final class HealthMuleUITests: XCTestCase {
         )
         XCTAssertTrue(
             app.staticTexts[
-                "Receipts show attempts and outcomes. They do not prove iOS background cadence."
+                "These are past attempts. iOS decides when background work runs."
             ].exists
         )
     }
@@ -449,10 +477,7 @@ final class HealthMuleUITests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(
-            app.staticTexts["Automatic activity"]
-                .waitForExistence(timeout: 10)
-        )
+        expandBackgroundDetails(in: app)
         XCTAssertTrue(
             value(
                 of: "automatic-activity-latest",
@@ -471,10 +496,7 @@ final class HealthMuleUITests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(
-            app.staticTexts["Automatic activity"]
-                .waitForExistence(timeout: 10)
-        )
+        expandBackgroundDetails(in: app)
         XCTAssertTrue(
             value(
                 of: "automatic-activity-latest",
@@ -489,10 +511,7 @@ final class HealthMuleUITests: XCTestCase {
             additionalArguments: ["--ui-ready", "--ui-show-sync"]
         )
 
-        XCTAssertTrue(
-            app.staticTexts["Automatic activity"]
-                .waitForExistence(timeout: 10)
-        )
+        expandBackgroundDetails(in: app)
         XCTAssertEqual(
             value(of: "automatic-activity-latest", in: app),
             "Never observed"
@@ -553,8 +572,8 @@ final class HealthMuleUITests: XCTestCase {
                 "--ui-activity-success",
             ]
         )
-        let automaticActivity = app.staticTexts["Automatic activity"]
-        XCTAssertTrue(automaticActivity.waitForExistence(timeout: 10))
+        expandBackgroundDetails(in: app)
+        let automaticActivity = element("automatic-activity-latest", in: app)
         for _ in 0..<4 where !automaticActivity.isHittable {
             app.swipeUp()
         }
@@ -664,6 +683,21 @@ final class HealthMuleUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    private func expandBackgroundDetails(in app: XCUIApplication) {
+        let details = app.buttons["Background details"]
+        XCTAssertTrue(details.waitForExistence(timeout: 10))
+        for _ in 0..<4 where !details.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(details.isHittable)
+        details.tap()
+        XCTAssertTrue(
+            element("automatic-activity-latest", in: app)
+                .waitForExistence(timeout: 5)
+        )
     }
 
     @MainActor

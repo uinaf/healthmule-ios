@@ -116,7 +116,7 @@ struct StatusView: View {
                     .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("open-setup-action")
-        case .sync:
+        case .sync(let title):
             Button {
                 Task {
                     await model.reconcile(trigger: .manual)
@@ -124,7 +124,7 @@ struct StatusView: View {
             } label: {
                 // The spinning glyph carries "in progress" so the label does
                 // not have to restate a badge that already says Syncing.
-                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                Label(title, systemImage: "arrow.triangle.2.circlepath")
                     .symbolEffect(
                         .rotate,
                         options: .repeating,
@@ -148,6 +148,25 @@ struct StatusView: View {
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-retry-action")
+        case .diagnostics:
+            if let diagnosticsURL = model.diagnosticsURL {
+                ShareLink(item: diagnosticsURL) {
+                    Label("Share Diagnostics", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .accessibilityIdentifier("home-diagnostics-action")
+            } else {
+                Button {
+                    Task {
+                        await model.prepareDiagnosticsExport()
+                    }
+                } label: {
+                    Label("Prepare Diagnostics", systemImage: "doc.badge.gearshape")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(model.operationState.isWorking)
+                .accessibilityIdentifier("home-diagnostics-action")
+            }
         }
     }
 
@@ -226,21 +245,21 @@ struct StatusView: View {
 
             if dynamicTypeSize > .large {
                 VStack(spacing: 14) {
-                    summaryLoadingFact("Last sync")
+                    summaryLoadingFact("Last Drive sync")
                     Divider()
-                    summaryLoadingFact("Latest day")
+                    summaryLoadingFact("Data through")
                     Divider()
-                    summaryLoadingFact("Pending")
+                    summaryLoadingFact("To upload")
                 }
             } else {
                 HStack(alignment: .top, spacing: 0) {
-                    summaryLoadingFact("Last sync")
+                    summaryLoadingFact("Last Drive sync")
                         .padding(.trailing, 10)
                     Divider()
-                    summaryLoadingFact("Latest day")
+                    summaryLoadingFact("Data through")
                         .padding(.horizontal, 10)
                     Divider()
-                    summaryLoadingFact("Pending")
+                    summaryLoadingFact("To upload")
                         .padding(.leading, 10)
                 }
             }
@@ -684,7 +703,7 @@ struct StatusView: View {
                 tone: .accent,
                 title: "Syncing your latest changes",
                 message: "New daily records are staged locally before anything is uploaded.",
-                action: .sync
+                action: .sync("Sync now")
             )
         }
         if model.presentedOperationState.isFailure(.sync) {
@@ -695,10 +714,10 @@ struct StatusView: View {
                 badge: "Needs attention",
                 tone: .danger,
                 title: "Sync needs another look",
-                message: "Your local copies are safe. Try the pending work again when you are ready.",
+                message: syncFailureMessage,
                 action: model.syncSummary.retryableUploadCount > 0
                     ? .retry
-                    : .none
+                    : .sync("Try Sync Again")
             )
         }
         if model.syncSummary.permanentFailureCount > 0 {
@@ -739,7 +758,7 @@ struct StatusView: View {
                 tone: .accent,
                 title: "Ready for the first sync",
                 message: "HealthMule will build the selected history and publish it to your Drive.",
-                action: .sync
+                action: .sync("Sync now")
             )
         }
         return HeroPresentation(
@@ -747,7 +766,7 @@ struct StatusView: View {
             tone: .success,
             title: "Everything is in sync",
             message: "Opening the app will keep reconciling recent changes automatically.",
-            action: .sync
+            action: .sync("Sync now")
         )
     }
 
@@ -773,8 +792,17 @@ struct StatusView: View {
             tone: .danger,
             title: "An upload was rejected",
             message: "The local record is safe, but Drive reported a non-retryable error. Export diagnostics before resetting local sync state.",
-            action: .none
+            action: .diagnostics
         )
+    }
+
+    private var syncFailureMessage: String {
+        guard
+            case .failed(.sync, let message) = model.presentedOperationState
+        else {
+            return "Sync could not finish. Try again."
+        }
+        return message
     }
 }
 
@@ -782,8 +810,9 @@ private struct HeroPresentation {
     enum Action {
         case none
         case setup(String)
-        case sync
+        case sync(String)
         case retry
+        case diagnostics
     }
 
     let badge: String
