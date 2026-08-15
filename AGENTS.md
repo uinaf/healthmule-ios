@@ -25,10 +25,10 @@
   Claude Code iOS Simulator MCP included — fail until an operator runs
   `sudo xcode-select -s /Applications/Xcode.app`. Use `./scripts/xcrun.sh`
   meanwhile.
-- Boot the target Simulator before `make test`, `make smoke`, or
-  `make verify-full`. Against a cold device the test runner loses a launch race
-  and every UI test fails with `SBMainWorkspace ... Busy`, which reads like a
-  product failure but is not one.
+- `make test`, `make smoke`, and `make verify-full` boot a cold target and wait
+  for it before testing. They shut it down on exit only when that invocation
+  booted it; an already-booted Simulator remains running. This avoids the
+  `SBMainWorkspace ... Busy` launch race without leaking a headless Simulator.
 - XcodeGen is pinned and provisioned into `.artifacts/toolchain` by
   `make project`. Do not install it separately; a different version rewrites the
   whole project file.

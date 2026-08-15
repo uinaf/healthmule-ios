@@ -59,6 +59,7 @@ case "${task}" in
     ;;
   test | smoke)
     destination="$(./scripts/simulator-destination.sh)"
+    simulator_id="${destination##*=}"
     set --
     if [[ "${task}" == "smoke" ]]; then
       set -- \
@@ -66,7 +67,9 @@ case "${task}" in
         "-only-testing:HealthMuleUITests/HealthMuleUITests/testAppShellUsesFocusedNavigation"
     fi
 
-    exec ./scripts/xcodebuild.sh test \
+    exec ./scripts/with-simulator-lifecycle.sh \
+      "${simulator_id}" \
+      ./scripts/xcodebuild.sh test \
       -quiet \
       -project HealthMule.xcodeproj \
       -scheme HealthMule \
@@ -87,11 +90,11 @@ case "${task}" in
     attachments_directory="${run_directory}/attachments"
 
     mkdir -p "${run_directory}"
-    ./scripts/xcrun.sh simctl boot "${simulator_id}" >/dev/null 2>&1 || true
-    ./scripts/xcrun.sh simctl bootstatus "${simulator_id}" -b
 
     set +e
-    ./scripts/xcodebuild.sh test \
+    ./scripts/with-simulator-lifecycle.sh \
+      "${simulator_id}" \
+      ./scripts/xcodebuild.sh test \
       -quiet \
       -project HealthMule.xcodeproj \
       -scheme HealthMule \

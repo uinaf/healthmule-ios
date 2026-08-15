@@ -220,6 +220,15 @@ grep -Fq "./scripts/generate-project.sh" scripts/ios-project-task.sh ||
   fail "The locked task runner must generate the project."
 grep -Fq 'destination="$(./scripts/simulator-destination.sh)"' scripts/ios-project-task.sh ||
   fail "The locked task runner must resolve test destinations."
+grep -Fq './scripts/with-simulator-lifecycle.sh' scripts/ios-project-task.sh ||
+  fail "Simulator tests must use the ownership-aware lifecycle wrapper."
+grep -Fq 'simctl shutdown "${simulator_id}"' scripts/with-simulator-lifecycle.sh ||
+  fail "The Simulator lifecycle wrapper must shut down devices it boots."
+grep -Fq 'if is_booted; then' scripts/with-simulator-lifecycle.sh ||
+  fail "The Simulator lifecycle wrapper must preserve already-booted devices."
+if grep -Fq 'with-simulator-lifecycle.sh' scripts/run-simulator.sh; then
+  fail "make run must leave its interactive Simulator running."
+fi
 grep -Fq "testAgentHarnessCapturesCriticalStates" scripts/ios-project-task.sh ||
   fail "The agent harness must run the critical-state UI scenario."
 grep -Fq "xcresulttool export attachments" scripts/ios-project-task.sh ||
