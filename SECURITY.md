@@ -10,11 +10,15 @@ If that route is unavailable, contact a repository maintainer through an
 existing private channel and ask for a secure reporting route before sharing
 sensitive details.
 
-## Scope and guidelines
+## What to include
 
-Include the affected version or commit, reproduction steps, potential impact,
-and any known mitigation. Remove credentials, personal health data, and other
-sensitive information from the report.
+- the affected version or commit
+- reproduction steps
+- potential impact
+- any known mitigation
+
+Remove credentials, personal health data, and other sensitive information from
+the report.
 
 ## Supported versions
 
@@ -24,5 +28,5 @@ report.
 
 ## Disclosure
 
-Please allow maintainers time to investigate and release a fix before sharing
-the vulnerability publicly. Coordinate disclosure through the private advisory.
+Allow maintainers time to investigate and release a fix before sharing the
+vulnerability publicly. Coordinate disclosure through the private advisory.

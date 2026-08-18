@@ -1,4 +1,4 @@
-# HealthMule — Apple Health to Google Drive
+# HealthMule: Apple Health to Google Drive
 
 Status: implemented v1 contract; physical-device acceptance pending
 Target: native iPhone app with a lightweight Apple Watch companion
@@ -26,7 +26,7 @@ weight, and training tracker without receiving unrelated medical data.
 
 ## Requirements
 
-### R1 — HealthKit authorization
+### R1: HealthKit authorization
 
 Request read access only for:
 
@@ -45,7 +45,7 @@ currently enabled subset; enabling a new type must return setup to Health access
 review before that type is queried. The app must still function when any subset
 is denied. It must never request write access.
 
-### R2 — Google Drive authorization
+### R2: Google Drive authorization
 
 Use Google OAuth with the `drive.file` scope. Do not request unrestricted Drive
 access.
@@ -67,7 +67,7 @@ discoverable.
 Store OAuth credentials in Keychain. Provide explicit Disconnect and Reconnect
 actions.
 
-### R3 — Daily export contract
+### R3: Daily export contract
 
 Write one file per local calendar day:
 
@@ -135,7 +135,7 @@ Rules:
   significant decimal digits after insignificant leading and trailing zeroes
   are removed. Reject wider values before decoding instead of rounding them.
 
-### R4 — Aggregation semantics
+### R4: Aggregation semantics
 
 - Steps, active energy, and resting energy: cumulative sum for the local day.
 - Weight: latest authorized sample in the local day.
@@ -157,7 +157,7 @@ Rules:
 - Use HealthKit statistics queries for cumulative metrics so multiple sources
   are de-duplicated according to HealthKit semantics.
 
-### R5 — Incremental and idempotent sync
+### R5: Incremental and idempotent sync
 
 - Keep an `HKQueryAnchor` per sample type in local application support storage.
 - Use `HKObserverQuery` to learn that a type changed, then
@@ -179,7 +179,7 @@ Rules:
 - Retain a deleted sample's UUID-to-date mapping until the anchor that consumed
   that deletion is durably written.
 
-### R6 — Manifest
+### R6: Manifest
 
 Maintain `manifest.json`:
 
@@ -197,7 +197,7 @@ Maintain `manifest.json`:
 
 Update the manifest only after all daily-file uploads in that sync succeed.
 
-### R7 — Initial backfill
+### R7: Initial backfill
 
 During onboarding, let the user choose:
 
@@ -208,7 +208,7 @@ During onboarding, let the user choose:
 Default to 30 days. Process the backfill in bounded day-sized batches and show
 progress. It must resume after interruption without duplicating records.
 
-### R8 — Background behavior
+### R8: Background behavior
 
 - Enable HealthKit background delivery for the allowlisted data types.
 - Register observer queries at app launch.
@@ -220,28 +220,28 @@ progress. It must resume after interruption without duplicating records.
   the app attempted or observed; they must not imply cadence or future runs.
 - Opening the app always triggers a reconciliation and retry pass.
 
-### R9 — User interface
+### R9: User interface
 
 The app keeps **Home** and **Settings** as permanent tabs and exposes four
 product surfaces without giving one-time workflows permanent tab weight:
 
-1. **Setup** — a Home drill-in
+1. **Setup**, a Home drill-in:
    - HealthKit authorization state
    - Google connection state
    - Drive folder name and open-in-Drive action
    - Backfill range
-2. **Status** — the Home summary and detail rows
+2. **Status**, the Home summary and detail rows:
    - Last successful sync
    - Latest exported date
    - Pending upload count
    - Per-metric permission/last-sample status
    - Latest automatic activity and its relative time
-3. **Sync** — a Home repair and activity drill-in
+3. **Sync**, a Home repair and activity drill-in:
    - Sync Now
    - Retry Failed Uploads
    - Rebuild Last 3 Days
    - Automatic/background receipts and schedule-request outcomes
-4. **Settings**
+4. **Settings**:
    - Metric toggles within the approved allowlist
    - Export diagnostics
    - Disconnect Google
@@ -256,7 +256,7 @@ expanded and actionable.
 Resetting local state must not delete Drive data without a separate destructive
 confirmation.
 
-### R10 — Diagnostics and privacy
+### R10: Diagnostics and privacy
 
 - Log only allowlisted sync lifecycle events, counts, durations, and redacted
   error classifications.
@@ -267,7 +267,7 @@ confirmation.
 - No telemetry leaves the device except the selected normalized records sent to
   the user's Google Drive.
 
-### R11 — Apple Watch companion
+### R11: Apple Watch companion
 
 Provide a paired watchOS companion that:
 

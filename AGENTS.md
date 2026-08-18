@@ -1,15 +1,23 @@
 # HealthMule agent guide
 
+HealthMule exports a read-only allowlist of Apple Health metrics as stable
+daily JSON files in the user's own Google Drive. There is no developer backend.
+The privacy boundaries in Repo rules are non-negotiable.
+
 ## Start here
 
-- [Product and export contract](docs/specs/healthkit-drive-exporter.md)
-- [Architecture and privacy boundaries](docs/ARCHITECTURE.md)
-- [Google OAuth setup](docs/GOOGLE_OAUTH.md)
-- [Physical-device acceptance](docs/DEVICE_TESTING.md)
-- [TestFlight delivery](docs/DISTRIBUTION.md)
-- [Sync-store scaling decision](docs/decisions/sync-store-persistence.md)
 - Generate the Xcode project: `make project`
 - Build and launch in Simulator: `make run`
+- Required gate before any push: `make verify`
+
+| Question | Doc |
+| --- | --- |
+| What the app must do and what the JSON contract is | [Product and export contract](docs/specs/healthkit-drive-exporter.md) |
+| Module map, sync invariants, privacy boundaries | [Architecture](docs/ARCHITECTURE.md) |
+| Connecting a real Drive account | [Google OAuth setup](docs/GOOGLE_OAUTH.md) |
+| What only a signed physical device can prove | [Physical-device acceptance](docs/DEVICE_TESTING.md) |
+| Shipping a build to testers | [TestFlight delivery](docs/DISTRIBUTION.md) |
+| Why the sync store needs a v2 migration plan | [Sync-store scaling decision](docs/decisions/sync-store-persistence.md) |
 
 ## Runner contract
 
@@ -19,10 +27,10 @@
 - Always call the `scripts/` wrappers instead of bare `swift`, `xcodebuild`, or
   `xcrun`. They locate `/Applications/Xcode*.app` themselves, so `make verify`
   and `make build` work even when `xcode-select` points at CommandLineTools.
-  `make test`, `make smoke`, and `make run` cannot be compensated for that way —
-  see below.
-- `xcrun simctl` and any tool that resolves Xcode through `xcode-select` — the
-  Claude Code iOS Simulator MCP included — fail until an operator runs
+- `make test`, `make smoke`, and `make run` get no such fallback. They need
+  `xcode-select` pointed at a full Xcode.
+- `xcrun simctl` and every tool that resolves Xcode through `xcode-select`,
+  the Claude Code iOS Simulator MCP included, fail until an operator runs
   `sudo xcode-select -s /Applications/Xcode.app`. Use `./scripts/xcrun.sh`
   meanwhile.
 - `make test`, `make smoke`, and `make verify-full` boot a cold target and wait
@@ -39,14 +47,18 @@
 - Fast local and required CI gate: `make verify`
 - Full iOS and Simulator gate: `make verify-full`
 - Runtime smoke test: `make smoke`
+- Full command matrix: [Contributing](CONTRIBUTING.md#validation)
 
-`make verify` checks the infrastructure contract, parses all app and iOS test
-Swift, and runs the deterministic core tests on Linux or macOS. Parsing is not
-type checking, so app, Watch, and UI changes also need `make build` or
-`make smoke` locally. Required CI runs `make verify` on Linux plus `make build`
-on macOS, so a compile break is caught on the pull request. The iOS unit and
-Simulator UI suites belong to `make verify-full`, which only ever runs locally
-or through the manual `Full Verify` workflow.
+What the gates prove:
+
+- `make verify` checks the infrastructure contract, parses all app and iOS test
+  Swift, and runs the deterministic core tests on Linux or macOS.
+- Parsing is not type checking, so app, Watch, and UI changes also need
+  `make build` or `make smoke` locally.
+- Required CI runs `make verify` on Linux plus `make build` on macOS, so a
+  compile break is caught on the pull request.
+- The iOS unit and Simulator UI suites belong to `make verify-full`, which runs
+  locally or through the manual `Full Verify` workflow, never on a pull request.
 
 ## Repo rules
 

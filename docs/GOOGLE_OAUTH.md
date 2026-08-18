@@ -125,10 +125,11 @@ and managed-folder recovery all succeed. OAuth-only setup is shown as finishing
 Drive setup; a failed folder check is shown as Drive unavailable. Neither state
 can start reconciliation or manual sync.
 
-Cached folders are accepted only when Drive reports a non-trashed folder MIME
-type; the cached `daily` folder must also remain a child of the verified root.
-Deleted, trashed, or incoherent folder trees are recreated, stale per-file IDs
-are discarded atomically, and the new tree receives a full local republish.
+- A cached folder is accepted only when Drive reports a non-trashed folder MIME
+  type.
+- The cached `daily` folder must also remain a child of the verified root.
+- Deleted, trashed, or incoherent folder trees are recreated, stale per-file IDs
+  are discarded atomically, and the new tree receives a full local republish.
 
 Changing accounts never inherits the previous account’s “Up to date” state.
 The new destination receives the complete local daily snapshot followed by a
@@ -146,64 +147,41 @@ guide](https://developers.google.com/identity/sign-in/ios/api-access) and
 ## Current Drive boundary
 
 Folder creation and multipart create/update requests are implemented.
-`DriveArtifactDestination` connects `DriveAPIClient` to the core
-`ExportArtifactDestination`: it maps dated daily artifacts and the manifest to
-their managed folders, then translates Drive failures into the core retry
-classifications. `AppModel` constructs this destination through
-`LiveSyncCoordinator`, so foreground reconciliation can stage and upload daily
-records followed by the manifest.
 
-Drive metadata and folder requests use an in-process `URLSession`. Multipart
-upload bodies are instead written to protected, backup-excluded files and sent
-with a dedicated background `URLSession`. Opaque SHA-256 destination and
-logical-operation keys in the task description reconnect an identical pending
-upload without exposing an account, Drive ID, or record body. Before a different
-account or replacement folder tree becomes active, the client invalidates the
-old destination and drains every task with an old or unrecognized destination
-key to a definitive HTTP response. It does not treat local cancellation as proof
-that Drive did not accept a body. A drain timeout or transport failure leaves
-Drive unprepared and temporarily unavailable until a later retry; the new
-destination is never published optimistically. Reconnecting the same
-destination preserves its tasks. Concurrent in-process callers reserve before
-their first suspension: callers for the same logical operation share one
-transfer, while distinct operations start in FIFO reservation order. SwiftUI
-handles the matching background session launch event; after delegate delivery
-finishes, the same durable sync queue reconciles the result. A transfer that
-completed while the process was absent is safely retried against the
-pre-generated Drive file ID, so create and update remain idempotent.
-Reconciliation observes a scheduled upload for at most 15 seconds. It then
-returns a retryable timeout and releases the app's sync gate without canceling
-the system-owned transfer.
+- `DriveArtifactDestination` connects `DriveAPIClient` to the core
+  `ExportArtifactDestination`. It maps dated daily artifacts and the manifest to
+  their managed folders, then translates Drive failures into the core retry
+  classifications.
+- `AppModel` constructs that destination through `LiveSyncCoordinator`, so
+  foreground reconciliation can stage and upload daily records followed by the
+  manifest.
+- The session split, destination draining, FIFO reservation order, and the
+  15-second upload observation window are documented once in
+  [Drive transport](ARCHITECTURE.md#drive-transport).
+- Interruption and relaunch acceptance still need a configured OAuth client, a
+  real Drive account, and a physical device. Use the
+  [physical-device checklist](DEVICE_TESTING.md).
 
-Concurrent folder setup for one Google account shares one discovery/create
-operation. Concurrent writes to the same logical artifact use a FIFO lane keyed
-by account and managed destination, so each body revision is applied in order
-and an uncached artifact receives only one generated Drive file ID.
+### Error classification
 
-The implemented path still needs interruption and relaunch acceptance proof
-with a configured OAuth client, a real Drive account, and a physical device.
-
-Current error classification recognizes:
-
-- a background upload `401` is retried once after another token refresh because
-  its bearer token may have expired while the system waited to transfer it;
-- a repeated Drive `401`, an immediate metadata-request `401`, and OAuth
-  token-endpoint grant failures as reauthorization required; the app returns to
-  a Reconnect state while keeping staged work;
-- network or server failures while refreshing a token as transient;
-- a stable-account mismatch during token refresh as transient, never as a
-  reauthorization failure;
-- `408`, `429`, and `5xx` as transient;
-- Drive `403` reasons `backendError`, `rateLimitExceeded`, and
-  `userRateLimitExceeded` as transient;
-- other HTTP failures as non-retryable.
+| Failure | Classification |
+|---|---|
+| First background upload `401` | Retried once after another token refresh, because its bearer token may have expired while the system waited to transfer it |
+| Repeated Drive `401`, immediate metadata-request `401`, OAuth token-endpoint grant failure | Reauthorization required; the app returns to Reconnect while keeping staged work |
+| Network or server failure while refreshing a token | Transient |
+| Stable-account mismatch during token refresh | Transient, never a reauthorization failure |
+| `408`, `429`, `5xx` | Transient |
+| Drive `403` reasons `backendError`, `rateLimitExceeded`, `userRateLimitExceeded` | Transient |
+| Any other HTTP failure | Non-retryable |
 
 The destination feeds these classifications into the durable core retry queue,
 which applies transient backoff and preserves blocked reauthorization or
-permanent-failure states. Restoring valid credentials explicitly resumes
-persisted reauthorization blocks, including after an interrupted sign-in and
-process relaunch. Non-retryable failures remain visible as blocked work and are
-not advertised as eligible for Retry.
+permanent-failure states.
+
+- Restoring valid credentials explicitly resumes persisted reauthorization
+  blocks, including after an interrupted sign-in and process relaunch.
+- Non-retryable failures stay visible as blocked work and are not advertised as
+  eligible for Retry.
 
 ## Troubleshooting
 

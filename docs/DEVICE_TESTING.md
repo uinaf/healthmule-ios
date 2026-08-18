@@ -7,12 +7,13 @@ app shells and deterministic contracts, but they do not prove those delivery
 boundaries.
 
 `make harness` is the unattended Simulator lane for agents and CI-capable Macs.
-It boots its selected iPhone Simulator, launches the app through critical
-loading, sync, failure, and automatic-activity fixtures, asserts their visible
-contracts, and exports screenshots with an xcresult summary under
-`.artifacts/agent-harness`. These fixtures contain no personal health data or
-Google credentials. They complement, but never replace, the physical-device
-checks in this document.
+
+- It boots its selected iPhone Simulator and launches the app through critical
+  loading, sync, failure, and automatic-activity fixtures.
+- It asserts their visible contracts and exports screenshots with an xcresult
+  summary under `.artifacts/agent-harness`.
+- The fixtures contain no personal health data or Google credentials.
+- They complement, never replace, the physical-device checks in this document.
 
 ## Current readiness
 
@@ -199,7 +200,13 @@ Development](https://developer.apple.com/documentation/backgroundtasks/starting-
 
 ## Evidence to retain
 
-Record the app version or commit, iOS version, permission combination,
-foreground or background state, and pass/fail result. Sanitize screenshots and
-diagnostics before sharing them; do not retain personal health values, account
-identifiers, access tokens, or device identifiers.
+Record for each scenario:
+
+- app version or commit
+- iOS version
+- permission combination
+- foreground or background state
+- pass or fail result
+
+Sanitize screenshots and diagnostics before sharing them. Do not retain personal
+health values, account identifiers, access tokens, or device identifiers.
