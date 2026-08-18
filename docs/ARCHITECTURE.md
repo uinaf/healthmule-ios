@@ -62,62 +62,77 @@ Solid arrows are implemented runtime paths.
 | Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, redacted sync counts, and bounded automatic-activity receipts. |
 | Diagnostics | A bounded in-memory recorder emits redacted lifecycle metadata through `OSLog` and a shareable JSON file. |
 
-`AppModel.live()` constructs the daily provider, protected staging root,
-`FileSyncStore`, `SyncEngine`, and Drive destination through
-`LiveSyncCoordinator`. Manual, launch, foreground, rebuild, retry, observer, and
-app-refresh triggers feed that same state machine. The UI distinguishes staged,
-uploaded, pending, and failed work; a successful manifest upload advances the
-last-successful timestamp.
+### Sync coordination
 
-`PhoneWatchConnectivityCoordinator` activates with the iPhone app model. It
-maps app state into `CompanionSyncSnapshot`, which contains only readiness,
-sync activity, timestamps, and queue counts. It never includes health values,
-record bodies, Google account details, Drive IDs, tokens, or diagnostic error
-strings. Watch requests feed the existing reconciliation path with the
-`watchCompanion` trigger; repeated delivery remains safe because reconciliation
-and Drive upserts are idempotent. Semantic snapshot equality excludes
-`generatedAt`, so timestamp-only updates neither republish application context
-nor complete a Watch request acknowledgement. Activation, session deactivation,
-and Watch pairing-state changes invalidate that publication cache so a newly
-activated or reinstalled companion can receive one current full snapshot.
+- `AppModel.live()` constructs the daily provider, protected staging root,
+  `FileSyncStore`, `SyncEngine`, and Drive destination through
+  `LiveSyncCoordinator`.
+- Manual, launch, foreground, rebuild, retry, observer, and app-refresh triggers
+  feed that same state machine.
+- The UI distinguishes staged, uploaded, pending, and failed work.
+- A successful manifest upload advances the last-successful timestamp.
 
-`CompanionStatusModel` treats a snapshot as current for 30 minutes, a
-conservative allowance for eventual application-context delivery. Future
-timestamps have unknown freshness. Last confirmed success and pending,
-retryable, and blocked counts remain independent facts even when the status is
-stale or the phone is unreachable. `CompanionRequestLifecycle` deterministically
-settles reply-before-snapshot and snapshot-before-reply ordering; a semantic
-snapshot change completes an accepted request, while the Watch adapter retains
-the 10-second accepted-state fallback. The next valid snapshot also clears a
-stale request-delivery failure so the companion does not remain in an obsolete
-error state.
+### Watch companion status
+
+`PhoneWatchConnectivityCoordinator` activates with the iPhone app model.
+
+- It maps app state into `CompanionSyncSnapshot`: readiness, sync activity,
+  timestamps, and queue counts only.
+- The snapshot never carries health values, record bodies, Google account
+  details, Drive IDs, tokens, or diagnostic error strings.
+- Watch requests feed the existing reconciliation path with the
+  `watchCompanion` trigger. Repeated delivery stays safe because reconciliation
+  and Drive upserts are idempotent.
+- Semantic snapshot equality excludes `generatedAt`, so a timestamp-only update
+  neither republishes application context nor completes a Watch request
+  acknowledgement.
+- Activation, session deactivation, and Watch pairing-state changes invalidate
+  that publication cache, so a newly activated or reinstalled companion can
+  receive one current full snapshot.
+
+`CompanionStatusModel` decides what the Watch is allowed to claim.
+
+- A snapshot counts as current for 30 minutes, a conservative allowance for
+  eventual application-context delivery.
+- A future timestamp has unknown freshness.
+- Last confirmed success and the pending, retryable, and blocked counts stay
+  independent facts even when the status is stale or the phone is unreachable.
+- `CompanionRequestLifecycle` settles reply-before-snapshot and
+  snapshot-before-reply ordering deterministically. A semantic snapshot change
+  completes an accepted request; the Watch adapter keeps the 10-second
+  accepted-state fallback.
+- The next valid snapshot clears a stale request-delivery failure, so the
+  companion does not remain in an obsolete error state.
+
+### Drive transport
 
 `DriveAPIClient` uses an in-process session for metadata operations and a
-dedicated background `URLSession` for multipart uploads. Upload bodies are
-protected, backup-excluded files; task descriptions retain only opaque SHA-256
-destination and operation keys plus a local filename. Activating or clearing a
-Drive destination first invalidates the client state, then drains tasks with an
-old or unknown destination key to a definitive HTTP response before publishing
-the new state. Client-side cancellation is not considered proof that Drive did
-not accept an upload. A definitive delegate completion drains an obsolete task
-even when its HTTP or transport result failed; the durable queue reconciles
-that failure separately. Only expiry of the local drain observation window,
-which means the transfer may still be running, leaves the destination
-unprepared and temporarily unavailable for a later retry. Tasks for the same
-destination key survive a reconnect. In-process calls reserve their logical
-operation before suspending: identical operations share one transfer, while
-different operations start in FIFO reservation order. The matching SwiftUI
-background task reconnects the session after relaunch, waits for delegate event
-delivery, and then feeds the result back through the durable reconciliation
-queue. Google OAuth, real Drive, physical-device HealthKit, and
-process-interruption behavior remain unverified until their external
-configuration is supplied.
+dedicated background `URLSession` for multipart uploads.
 
-At the Drive client boundary, concurrent setup calls for one account share a
-single managed-folder discovery/create operation. Artifact upserts reserve a
-FIFO lane per account, destination, and logical artifact key before their first
-suspension. This preserves distinct body revisions in call order and prevents
-two uncached calls from generating competing Drive file IDs.
+- Upload bodies are protected, backup-excluded files. Task descriptions retain
+  only opaque SHA-256 destination and operation keys plus a local filename.
+- Activating or clearing a Drive destination invalidates client state first,
+  then drains tasks with an old or unknown destination key to a definitive HTTP
+  response before publishing the new state.
+- Client-side cancellation is not proof that Drive did not accept an upload.
+- A definitive delegate completion drains an obsolete task even when its HTTP or
+  transport result failed; the durable queue reconciles that failure separately.
+- Only expiry of the local drain observation window, which means the transfer
+  may still be running, leaves the destination unprepared and temporarily
+  unavailable for a later retry.
+- Tasks for the same destination key survive a reconnect.
+- In-process calls reserve their logical operation before suspending. Identical
+  operations share one transfer; different operations start in FIFO reservation
+  order.
+- Concurrent setup calls for one account share a single managed-folder discovery
+  or create operation.
+- Artifact upserts reserve a FIFO lane per account, destination, and logical
+  artifact key before their first suspension. That preserves distinct body
+  revisions in call order and prevents two uncached calls from generating
+  competing Drive file IDs.
+- The matching SwiftUI background task reconnects the session after relaunch,
+  waits for delegate event delivery, then feeds the result back through the
+  durable reconciliation queue.
 
 ## Export and sync invariants
 
@@ -156,30 +171,34 @@ HealthKit and Google:
    detects a semantic or exact-byte mismatch, advances the revision, and
    restores the retry item before reporting the record unchanged.
 
-`HealthKitDailyRecordProvider` uses HealthKit statistics for cumulative values,
-maps authorized samples into `DailyAggregationInput`, and passes the result to
-the deterministic aggregator. `LiveSyncCoordinator` stages every affected date
-durably before committing each new `HKQueryAnchor`; a later upload failure
-remains represented in the persistent retry queue.
+### Reconciliation scope
 
-Each reconciliation includes the current local day and up to two previous days
-without crossing the selected backfill start. It also stages anchored change
-dates and any missing day between the selected start and today. The selected
-start is persisted as a validated `yyyy-MM-dd` local-date value when the user
-picks a range, so “Last 30 days” does not slide forward at midnight or change
-while traveling. If that persisted local date is temporarily ahead of today
-after a timezone change, reconciliation waits instead of moving the boundary
-backward. Metric and history controls are disabled while visible work is active.
-Every accepted selection change schedules reconciliation; if a change races an
-active sync, one serialized follow-up pass consumes the latest settings.
-Backfill work is persisted one day at a time, so an interrupted run resumes from
-dates not already present in `FileSyncStore`. Observer staging and an explicit
-Retry also include missing selected-range dates, so either path can heal a
-historical gap.
-An incremented export-contract revision re-stages every existing date once,
-durably requeues every otherwise-current daily artifact, and upserts them by
-Drive ID. This applies normalization changes and repairs remote-only gaps
-without deleting local recovery state.
+- `HealthKitDailyRecordProvider` uses HealthKit statistics for cumulative
+  values, maps authorized samples into `DailyAggregationInput`, and passes the
+  result to the deterministic aggregator.
+- `LiveSyncCoordinator` stages every affected date durably before committing
+  each new `HKQueryAnchor`. A later upload failure stays represented in the
+  persistent retry queue.
+- Each reconciliation covers the current local day and up to two previous days
+  without crossing the selected backfill start.
+- It also stages anchored change dates and any missing day between the selected
+  start and today.
+- The selected start is persisted as a validated `yyyy-MM-dd` local-date value
+  when the user picks a range, so “Last 30 days” does not slide forward at
+  midnight or change while traveling.
+- If that persisted local date is temporarily ahead of today after a timezone
+  change, reconciliation waits instead of moving the boundary backward.
+- Metric and history controls are disabled while visible work is active.
+- Every accepted selection change schedules reconciliation. If a change races an
+  active sync, one serialized follow-up pass consumes the latest settings.
+- Backfill work is persisted one day at a time, so an interrupted run resumes
+  from dates not already present in `FileSyncStore`.
+- Observer staging and an explicit Retry also include missing selected-range
+  dates, so either path can heal a historical gap.
+- An incremented export-contract revision re-stages every existing date once,
+  durably requeues every otherwise-current daily artifact, and upserts them by
+  Drive ID. That applies normalization changes and repairs remote-only gaps
+  without deleting local recovery state.
 
 ## HealthKit authorization
 
@@ -194,90 +213,105 @@ HealthKit deliberately does not reveal whether a person denied read permission.
 read it. The app separates the system request lifecycle from the evidence
 available through read queries.
 
-The overall Apple Health state is:
-
-- **Checking** — the app is asking HealthKit whether an authorization sheet is
-  currently needed.
-- **Check failed** — HealthKit did not return the request status. If a request
-  was completed previously, visible types remain queryable; otherwise sync
-  stays blocked until the check or request succeeds.
-- **Not requested** — the app has not completed its first authorization
-  request.
-- **Review needed** — HealthKit says an authorization sheet is needed for at
-  least one requested type. Previously visible types remain queryable.
-- **Request complete** — HealthKit says no authorization sheet is currently
-  needed. This does not confirm which individual read permissions were granted.
-- **Unavailable** — HealthKit is not available on this device.
-
-After a request has been made, each metric is reported independently as:
-
-- **Checking** — the visibility query is in progress.
-- **Not included** — the type is disabled in Settings and is not queried.
-- **Not requested** — the type is enabled but has not completed the system
-  request yet.
-- **Readable** — at least one visible sample exists, with its last sample date.
-- **No readable data** — the type is denied or no matching sample is visible;
-  the app cannot distinguish those states.
-- **Check failed** — the query itself failed, rather than returning no samples.
-- **Unavailable** — HealthKit cannot be queried on this device.
-
 See Apple’s [HealthKit authorization
 documentation](https://developer.apple.com/documentation/healthkit/authorizing-access-to-health-data).
+
+### Overall Apple Health state
+
+| State | Meaning |
+|---|---|
+| **Checking** | The app is asking HealthKit whether an authorization sheet is currently needed. |
+| **Check failed** | HealthKit did not return the request status. If a request was completed previously, visible types remain queryable; otherwise sync stays blocked until the check or request succeeds. |
+| **Not requested** | The app has not completed its first authorization request. |
+| **Review needed** | HealthKit says an authorization sheet is needed for at least one requested type. Previously visible types remain queryable. |
+| **Request complete** | HealthKit says no authorization sheet is currently needed. This does not confirm which individual read permissions were granted. |
+| **Unavailable** | HealthKit is not available on this device. |
+
+### Per-metric state
+
+Reported independently for each metric once a request has been made:
+
+| State | Meaning |
+|---|---|
+| **Checking** | The visibility query is in progress. |
+| **Not included** | The type is disabled in Settings and is not queried. |
+| **Not requested** | The type is enabled but has not completed the system request yet. |
+| **Readable** | At least one visible sample exists, with its last sample date. |
+| **No readable data** | The type is denied or no matching sample is visible; the app cannot distinguish those states. |
+| **Check failed** | The query itself failed, rather than returning no samples. |
+| **Unavailable** | HealthKit cannot be queried on this device. |
+
 The UI never presents readable-type counts as permission progress.
-UI metric switches control the app's request, query, observer, and export
-selection; they do not claim to revoke system Health permissions already
-granted. Disabled metrics skip HealthKit access and serialize as `null` or empty
-approved collections. When the selection changes, every existing local date is
-rebuilt so previously staged values from disabled metrics are scrubbed before
-the next Drive upsert. Settings prevents changes during a visible operation;
-each accepted change also queues a serialized reconciliation, including a
-follow-up pass if the selection changes while another sync is suspended.
 
-Observer queries are registered as bootstrap's first asynchronous action, but
-only for enabled types that have completed the system request.
-`HealthAnchorStore` archives one anchor per metric and keeps a
-UUID-to-date index so a later `HKDeletedObject` can identify an older affected
-day. Enabled observations stage their affected dates plus the rolling
-reconciliation window, commit the anchor, and attempt to flush pending uploads
-when Google is connected. Concurrent observer uploads use a single-flight
-drain: requests received during one upload produce at most one follow-up pass,
-while every observer still waits for its own durable staging before completing.
-New sample mappings are persisted and published to the live store before the
-anchor, while deletion mappings are retained until that anchor is durable; an
-interrupted anchor write therefore replays the deletion with its affected date
-still available both immediately and after a relaunch.
+### Metric selection
 
-Bootstrap resolves the Apple Health request state before replaying any pending
-uploads unblocked by restored Google credentials. A non-empty restored queue is
-shown as active sync work instead of leaving Health on `Checking` while Drive
-uploads run.
+- UI metric switches control the app's request, query, observer, and export
+  selection. They do not claim to revoke system Health permissions already
+  granted.
+- Disabled metrics skip HealthKit access and serialize as `null` or empty
+  approved collections.
+- When the selection changes, every existing local date is rebuilt so previously
+  staged values from disabled metrics are scrubbed before the next Drive upsert.
+- Settings prevents changes during a visible operation. Each accepted change
+  queues a serialized reconciliation, including a follow-up pass if the
+  selection changes while another sync is suspended.
 
-Initial anchored reads are scoped to the selected history start and paged in
-bounded batches. Each metric persists that query boundary with its anchor; an
-expanded history window resets that metric's anchor and safely replays from the
-earlier boundary. The active selected start remains the VO₂ carry-forward lower
-bound even when older staged artifacts remain available for repair after a
-range is narrowed.
+### Observers and anchors
 
-`DayBoundaryStore` persists the timezone and exact start/end instants first used
-for an exported local date. Later travel therefore does not reinterpret or
-rename an existing daily record. Persisted boundaries from builds that carried
-a midnight-DST end into the following day are normalized once using their
-original timezone. The backfill boundary resolves through this same store before
-HealthKit queries begin. New or normalized boundaries are published to in-memory
-state only after their atomic file write succeeds.
+- Observer queries are registered as bootstrap's first asynchronous action, but
+  only for enabled types that have completed the system request.
+- `HealthAnchorStore` archives one anchor per metric and keeps a UUID-to-date
+  index so a later `HKDeletedObject` can identify an older affected day.
+- Enabled observations stage their affected dates plus the rolling
+  reconciliation window, commit the anchor, then attempt to flush pending
+  uploads when Google is connected.
+- Concurrent observer uploads use a single-flight drain: requests received
+  during one upload produce at most one follow-up pass, while every observer
+  still waits for its own durable staging before completing.
+- New sample mappings are persisted and published to the live store before the
+  anchor. Deletion mappings are retained until that anchor is durable, so an
+  interrupted anchor write replays the deletion with its affected date still
+  available both immediately and after a relaunch.
+- Bootstrap resolves the Apple Health request state before replaying pending
+  uploads unblocked by restored Google credentials. A non-empty restored queue
+  is shown as active sync work instead of leaving Health on `Checking` while
+  Drive uploads run.
+- Initial anchored reads are scoped to the selected history start and paged in
+  bounded batches.
+- Each metric persists that query boundary with its anchor. An expanded history
+  window resets that metric's anchor and safely replays from the earlier
+  boundary.
+- The active selected start remains the VO₂ carry-forward lower bound even when
+  older staged artifacts remain available for repair after a range is narrowed.
 
-Sleep queries include a 24-hour lookback plus a bounded four-hour look-ahead so
-sessions crossing midnight can be clustered. A cluster is not eligible until
-four hours have elapsed since its latest fragment, preventing an incomplete
-pre-midnight fragment from being published on two adjacent dates. Anchored
-sleep additions, edits, and deletions rebuild both their directly overlapped
-dates and the following plausible session-ending date; the direct UUID/date
-mapping remains durable so deletion replay applies the same bounded expansion.
-Record provenance includes only samples from the cluster whose session ends on
-the exported day, so earlier lookback sessions do not inflate source names or
-sample counts. When a VO₂ value is carried forward, its selected source sample
-is included in provenance and de-duplicated from same-day samples by UUID.
+### Day boundaries
+
+- `DayBoundaryStore` persists the timezone and exact start/end instants first
+  used for an exported local date, so later travel does not reinterpret or
+  rename an existing daily record.
+- Persisted boundaries from builds that carried a midnight-DST end into the
+  following day are normalized once using their original timezone.
+- The backfill boundary resolves through this same store before HealthKit
+  queries begin.
+- New or normalized boundaries reach in-memory state only after their atomic
+  file write succeeds.
+
+### Sleep clustering
+
+- Sleep queries include a 24-hour lookback plus a bounded four-hour look-ahead
+  so sessions crossing midnight can be clustered.
+- A cluster is not eligible until four hours have elapsed since its latest
+  fragment. That prevents an incomplete pre-midnight fragment from being
+  published on two adjacent dates.
+- Anchored sleep additions, edits, and deletions rebuild both their directly
+  overlapped dates and the following plausible session-ending date. The direct
+  UUID/date mapping stays durable so deletion replay applies the same bounded
+  expansion.
+- Record provenance includes only samples from the cluster whose session ends on
+  the exported day, so earlier lookback sessions do not inflate source names or
+  sample counts.
+- A carried-forward VO₂ value includes its selected source sample in provenance,
+  de-duplicated from same-day samples by UUID.
 
 ## Google Drive identity
 
@@ -290,11 +324,12 @@ Apple Health Sync/
     └── YYYY-MM-DD.json
 ```
 
-Drive names are not unique. Google authorization is also not sufficient by
-itself to begin syncing. `GoogleConnectionState` keeps restoration, temporary
+Drive names are not unique, and Google authorization alone is not enough to
+begin syncing. `GoogleConnectionState` keeps restoration, temporary
 unavailability, reauthorization, OAuth-authorized folder setup, Drive
-unavailability, and fully connected states distinct. **Connected** means all of
-the following are true:
+unavailability, and fully connected states distinct.
+
+**Connected** requires all four of:
 
 1. GoogleSignIn restored or obtained the `drive.file` scope.
 2. Google supplied a stable user ID for the active account.
@@ -303,9 +338,9 @@ the following are true:
 4. The account was activated for subsequent file upserts without a newer
    disconnect or account transition superseding it.
 
-Sync readiness additionally requires protected local staging to be available.
-If local storage initialization fails, the Google card can remain accurately
-Connected while the Home and Sync surfaces report a blocking storage error.
+Sync readiness additionally requires protected local staging. If local storage
+initialization fails, the Google card stays accurately Connected while the Home
+and Sync surfaces report a blocking storage error.
 
 `DriveAPIClient` then uses:
 
@@ -318,42 +353,54 @@ Connected while the Home and Sync surfaces report a blocking storage error.
   either a successful create or `409 Conflict`;
 - `PATCH` multipart uploads for updates by file ID.
 
-Generated file IDs are persisted as `pendingCreate` before upload and become
-`committed` only after a definitive successful response. This state survives
-relaunch: a validation `404` reuses a pending ID because its create may still
-be completing, while a validation `404` for a committed ID clears that stale
-cache entry and allocates a fresh ID after tagged-file rediscovery.
+### File ID lifecycle
 
-Each metadata namespace is keyed by the SHA-256 digest of the stable Google user
-ID. The raw ID is neither used as a `UserDefaults` key nor logged. Legacy
-unscoped v1 metadata is intentionally ignored instead of being assigned to an
-unknown account; the app rediscovers managed folders and files through their
-private `appProperties`. Root discovery is not constrained to the top-level
-`root` parent, so a user-moved tree is recovered instead of duplicated; daily
-folder discovery remains constrained to the verified root ID.
+- Generated file IDs are persisted as `pendingCreate` before upload and become
+  `committed` only after a definitive successful response.
+- That state survives relaunch. A validation `404` reuses a pending ID because
+  its create may still be completing.
+- A validation `404` for a committed ID clears that stale cache entry and
+  allocates a fresh ID after tagged-file rediscovery.
 
-The app also persists a SHA-256 destination namespace derived from the stable
-account ID plus the verified root and `daily` folder IDs. When it changes,
-`LiveSyncCoordinator` resets only remote-upload completion state: local daily
-files and HealthKit anchors remain intact, every local day is queued for the
-new destination, and a new manifest is generated after those daily files
-upload. Replacing a deleted or trashed folder therefore republishes the same
-complete snapshot as switching accounts. The metadata transition clears stale
-file IDs atomically, and generation-checked cache writes prevent an older
-in-flight upload from restoring them.
+### Account namespacing
 
-The reset and namespace update run behind the coordinator’s single-flight gate.
-Drive requests carry their expected account ID through token refresh, and
-`AppModel` epochs every connection transition and activation. A late response
-from an older account can update neither the current connection status nor the
-new account’s active Drive destination.
+- Each metadata namespace is keyed by the SHA-256 digest of the stable Google
+  user ID. The raw ID is neither used as a `UserDefaults` key nor logged.
+- Legacy unscoped v1 metadata is ignored rather than assigned to an unknown
+  account; the app rediscovers managed folders and files through their private
+  `appProperties`.
+- Root discovery is not constrained to the top-level `root` parent, so a
+  user-moved tree is recovered instead of duplicated.
+- Daily folder discovery remains constrained to the verified root ID.
 
-Moving the configured folder within My Drive continues to work by immutable ID.
-Reset Local Sync State preserves Drive folder and file IDs plus saved local-day
-boundaries while clearing local HealthKit anchors, staged records, the local
-manifest, and retry state. The next sync rebuilds the selected local range.
-Previously exported Drive files outside that rebuilt range are intentionally
-not deleted and may no longer appear in the new manifest.
+### Destination changes
+
+- The app persists a SHA-256 destination namespace derived from the stable
+  account ID plus the verified root and `daily` folder IDs.
+- When it changes, `LiveSyncCoordinator` resets only remote-upload completion
+  state: local daily files and HealthKit anchors stay intact, every local day is
+  queued for the new destination, and a new manifest is generated after those
+  daily files upload.
+- Replacing a deleted or trashed folder therefore republishes the same complete
+  snapshot as switching accounts.
+- The metadata transition clears stale file IDs atomically, and
+  generation-checked cache writes prevent an older in-flight upload from
+  restoring them.
+- The reset and namespace update run behind the coordinator’s single-flight gate.
+- Drive requests carry their expected account ID through token refresh, and
+  `AppModel` epochs every connection transition and activation. A late response
+  from an older account can update neither the current connection status nor the
+  new account’s active Drive destination.
+- Moving the configured folder within My Drive keeps working by immutable ID.
+
+### Reset Local Sync State
+
+- Preserves Drive folder and file IDs plus saved local-day boundaries.
+- Clears local HealthKit anchors, staged records, the local manifest, and retry
+  state.
+- The next sync rebuilds the selected local range.
+- Previously exported Drive files outside that rebuilt range are intentionally
+  not deleted and may no longer appear in the new manifest.
 
 ## Persistence and privacy
 
@@ -381,7 +428,9 @@ declaration for `UserDefaults` remains in place.
 
 ## Background execution
 
-Background work is eventual and system-controlled:
+Background work is eventual and system-controlled.
+
+### Receipts
 
 - Each automatic reconciliation opportunity writes a bounded receipt before it
   starts and closes it after the coordinator transaction returns. A receipt
@@ -397,6 +446,8 @@ Background work is eventual and system-controlled:
   submits a new request without first cancelling the existing schedule. A
   background-task invocation schedules exactly once so a useful `submitted`
   receipt cannot be overwritten by a redundant follow-up attempt.
+
+### Triggers and transport
 
 - HealthKit observers are the primary change signal.
 - A reachable Watch request is acknowledged promptly, then the iPhone performs
@@ -434,18 +485,19 @@ transfers](https://developer.apple.com/documentation/foundation/downloading-file
 
 ## Build and verification boundaries
 
-`project.yml` is the XcodeGen source of truth for the generated
-`HealthMule.xcodeproj`. GoogleSignIn is pinned exactly in `project.yml`; the
-shared workspace `Package.resolved` is explicitly retained by `.gitignore` so
-the resolved transitive graph can be committed with the project.
-`scripts/check-app-dependencies.sh` verifies those versions match without
-network access, while the weekly Dependency Watch workflow compares the pin to
-Google's latest official release and opens one advisory issue per target
-version.
+### Project generation and dependency pins
 
-To update GoogleSignIn, edit its `exactVersion` in `project.yml`, regenerate the
-project, resolve the package graph, run the offline dependency check, then run
-the full gate. Do not hand-edit generated project structure or lock entries:
+- `project.yml` is the XcodeGen source of truth for the generated
+  `HealthMule.xcodeproj`.
+- GoogleSignIn is pinned exactly in `project.yml`. The shared workspace
+  `Package.resolved` is explicitly retained by `.gitignore` so the resolved
+  transitive graph can be committed with the project.
+- `scripts/check-app-dependencies.sh` verifies those versions match without
+  network access.
+- The weekly Dependency Watch workflow compares the pin to Google's latest
+  official release and opens one advisory issue per target version.
+
+To update GoogleSignIn, edit its `exactVersion` in `project.yml`, then run:
 
 ```sh
 make project
@@ -454,30 +506,34 @@ make project
 make verify-full
 ```
 
-[Contributing](../CONTRIBUTING.md#validation) owns the command matrix and what
-each command is for. What matters architecturally is which boundary each gate
-actually proves.
+Do not hand-edit generated project structure or lock entries.
 
-`make verify` is the fast cross-platform gate: it checks the serialized tooling
-contract, parses all app and iOS test Swift, and runs the deterministic
-Foundation package tests. Parsing is not type checking, so `make verify` alone
-never proves that the app or the Watch app compiles. The `Verify` workflow
-therefore pairs it with a macOS job running `make build`, which type checks the
-iOS app and the embedded Watch app on every pull request.
+### What each gate proves
 
-`make verify-full` adds the iOS app and UI tests on an available Simulator. It
-runs locally or through the manual `Full Verify` and `Upload TestFlight`
-workflows, never on a pull request.
+[Contributing](../CONTRIBUTING.md#validation) owns the command matrix. What
+matters architecturally is the boundary each gate actually proves.
 
-`make test`, `make smoke`, `make harness`, `make run`, and `make verify-full`
-(which runs the test task) require `xcode-select` to point at a full Xcode and
-fail early with that instruction otherwise. `make harness` boots its selected
-Simulator. The other test tasks need the target Simulator already booted; a
-cold device loses a launch race and reports `SBMainWorkspace ... Busy` for
-every UI test.
+- `make verify` is the fast cross-platform gate: the serialized tooling
+  contract, a Swift parse of all app and iOS test sources, and the deterministic
+  Foundation package tests.
+- Parsing is not type checking, so `make verify` alone never proves that the app
+  or the Watch app compiles. The `Verify` workflow pairs it with a macOS job
+  running `make build`, which type checks the iOS app and the embedded Watch app
+  on every pull request.
+- `make verify-full` adds the iOS app and UI tests on an available Simulator. It
+  runs locally or through the manual `Full Verify` and `Upload TestFlight`
+  workflows, never on a pull request.
+- `make test`, `make smoke`, `make harness`, `make run`, and `make verify-full`
+  (which runs the test task) require `xcode-select` to point at a full Xcode and
+  fail early with that instruction otherwise.
+- `make harness` boots its selected Simulator. The other test tasks need the
+  target Simulator already booted; a cold device loses a launch race and reports
+  `SBMainWorkspace ... Busy` for every UI test.
 
-No gate proves HealthKit authorization, observer delivery, Google OAuth, Drive
-uploads, or background relaunch behavior; those belong to the
+Snapshot presentation, freshness, privacy, semantic publication, and request
+ordering are deterministic core tests. No gate proves HealthKit authorization,
+observer delivery, Google OAuth, Drive uploads, background relaunch behavior, or
+paired-device `WCSession` transport. Prove those against the
 [physical-device checklist](DEVICE_TESTING.md).
 
 ## Reconciliation progress
@@ -499,18 +555,7 @@ restarting the bar at `0 of 1` for a single-artifact tail would read as a
 regression rather than progress. The visible cost is that the bar sits at its
 maximum while one artifact publishes.
 
-The phase determines the presented noun, so a pinned staging bar can no longer
-stand in for an unreported thirty-file upload. Progress carries counts and an
-optional local date only; it never carries health values or artifact contents.
-
-## Remaining integration gaps
-
-- Configure and exercise Google OAuth against a real Drive account.
-- Prove file-backed Drive upload interruption and relaunch reconciliation on a
-  physical device.
-- Prove HealthKit authorization, queries, observer delivery, and reconciliation
-  on a signed physical-iPhone build.
-- Prove paired-device `WCSession` reachability, request/reply delivery, and
-  background application-context delivery. Snapshot presentation, freshness,
-  privacy, semantic publication, and request ordering are deterministic core
-  tests; the actual paired transport remains a physical-device boundary.
+- The phase determines the presented noun, so a pinned staging bar can no longer
+  stand in for an unreported thirty-file upload.
+- Progress carries counts and an optional local date only. It never carries
+  health values or artifact contents.

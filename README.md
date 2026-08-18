@@ -6,16 +6,18 @@ HealthMule is an open-source iPhone and Apple Watch app that exports a small,
 read-only selection of Apple Health metrics as stable daily JSON files in your
 Google Drive.
 
-The iPhone owns HealthKit access, Google authorization, protected local staging,
-and Drive uploads. The Watch companion displays sanitized sync status and can
-request a sync while the phone is reachable. HealthMule has no developer
-backend, analytics, ads, or telemetry.
+- The iPhone owns HealthKit access, Google authorization, protected local
+  staging, and Drive uploads.
+- The Watch companion displays sanitized sync status and can request a sync
+  while the phone is reachable.
+- There is no developer backend, analytics, ads, or telemetry.
 
-The complete sync path is implemented and covered by deterministic core tests,
-Watch presentation-contract tests, and Simulator checks. HealthKit background
-delivery, real Drive uploads, and process-interruption recovery require
-acceptance testing with a signed build on physical devices; see
-[Physical-device testing](docs/DEVICE_TESTING.md).
+**Implemented:** the complete sync path, covered by deterministic core tests,
+Watch presentation-contract tests, and Simulator checks.
+
+**Unproven:** HealthKit background delivery, real Drive uploads, and
+process-interruption recovery. Prove them with a signed build against the
+[physical-device checklist](docs/DEVICE_TESTING.md).
 
 ## Quick start
 
@@ -52,10 +54,10 @@ and retain screenshots plus a machine-readable test summary:
 make harness
 ```
 
-Each run writes a new directory under `.artifacts/agent-harness`. Set
-`HEALTHMULE_HARNESS_OUTPUT` to place those artifacts elsewhere. The harness
-uses deterministic development fixtures; it does not claim real HealthKit
-background delivery or real Drive upload proof.
+- Each run writes a new directory under `.artifacts/agent-harness`.
+- Set `HEALTHMULE_HARNESS_OUTPUT` to place those artifacts elsewhere.
+- The fixtures are deterministic development data. They prove neither real
+  HealthKit background delivery nor real Drive uploads.
 
 The default build intentionally has no Google credentials. The UI and automated
 tests work in that state. Follow [Google OAuth setup](docs/GOOGLE_OAUTH.md) when

@@ -47,8 +47,9 @@ Choose additional proof based on the change:
 | `make harness` | Twelve deterministic UI states with screenshots and an xcresult summary |
 | `make verify-full` | Complete local iOS and Simulator gate |
 
-Run `make clean` to remove build products managed by these commands. HealthKit,
-Google, background-delivery, and Watch changes may also need the
+Run `make clean` to remove the build products these commands manage.
+
+HealthKit, Google, background-delivery, and Watch changes may also need the
 [physical-device checklist](docs/DEVICE_TESTING.md).
 
 ## Development notes
@@ -63,7 +64,11 @@ Google, background-delivery, and Watch changes may also need the
 
 ## Pull request expectations
 
-Keep changes focused, add meaningful tests for behavior changes, and update the
-owning documentation when a contract changes. Complete the pull request
-template with risks, verification evidence, complexity impact, and a sanitized
-review aid when one helps explain the change.
+- Keep each pull request focused on one change.
+- Add meaningful tests for behavior changes.
+- Update the owning documentation when a contract changes.
+- Fill in the inherited [pull request
+  template](https://github.com/uinaf/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
+  with risks, verification evidence, and complexity impact.
+- Add a sanitized review aid, such as a screenshot or recording, when it
+  explains the change faster than prose.
