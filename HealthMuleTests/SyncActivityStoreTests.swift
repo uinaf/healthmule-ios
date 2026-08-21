@@ -144,12 +144,13 @@ final class SyncActivityStoreTests: XCTestCase {
         let attributes = try FileManager.default.attributesOfItem(
             atPath: fileURL.path
         )
-        if let protection = attributes[.protectionKey] as? FileProtectionType {
-            XCTAssertEqual(
-                protection,
-                SyncActivityStoragePolicy.directoryProtection
-            )
-        }
+        let protection = try XCTUnwrap(
+            attributes[.protectionKey] as? FileProtectionType
+        )
+        XCTAssertEqual(
+            protection,
+            SyncActivityStoragePolicy.directoryProtection
+        )
         let values = try fileURL.resourceValues(
             forKeys: [.isExcludedFromBackupKey]
         )
