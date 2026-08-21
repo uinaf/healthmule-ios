@@ -393,7 +393,7 @@ grep -Fq 'sha256sum "${swift_binary}"' .github/workflows/verify.yml ||
   fail "Fast CI must bind cached Swift artifacts to the installed executable."
 grep -Fq "if: steps.swift-build-cache.outputs.cache-hit != 'true'" .github/workflows/verify.yml ||
   fail "Cache misses must use the canonical build-and-test path."
-grep -Eq '^[[:space:]]+runs-on:[[:space:]]+ubuntu-24\.04[[:space:]]*$' .github/workflows/verify.yml ||
+grep -Eq '^[[:space:]]+runs-on:[[:space:]]+blacksmith-2vcpu-ubuntu-2404[[:space:]]*$' .github/workflows/verify.yml ||
   fail "Fast CI must use the Linux runner."
 grep -Eq '^[[:space:]]+timeout-minutes:[[:space:]]+5[[:space:]]*$' .github/workflows/verify.yml ||
   fail "Fast CI must stay capped at five minutes."
