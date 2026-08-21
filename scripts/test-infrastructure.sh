@@ -361,23 +361,15 @@ grep -Fq "id: xcode-toolchain" .github/workflows/verify.yml ||
   fail "The macOS compile lane must fingerprint its Xcode toolchain."
 grep -Fq "key: verify-xcode-dependencies-v3-" .github/workflows/verify.yml ||
   fail "The macOS compile lane must keep a versioned dependency cache."
-grep -Fq "key: verify-xcode-build-v1-" .github/workflows/verify.yml ||
-  fail "The macOS compile lane must keep a versioned incremental build cache."
 for xcode_cache_path in \
   ".artifacts/toolchain" \
   ".artifacts/xcodegen" \
   ".artifacts/DerivedData/SourcePackages" \
   "HealthMule.xcodeproj" \
-  "HealthMuleApp/Resources/Info.plist" \
-  ".artifacts/DerivedData/Build" \
-  ".artifacts/DerivedData/CompilationCache.noindex" \
-  ".artifacts/DerivedData/ModuleCache.noindex" \
-  ".artifacts/DerivedData/SDKStatCaches.noindex"; do
+  "HealthMuleApp/Resources/Info.plist"; do
   grep -Fq "${xcode_cache_path}" .github/workflows/verify.yml ||
-    fail "The macOS compile cache must preserve ${xcode_cache_path}."
+    fail "The macOS dependency cache must preserve ${xcode_cache_path}."
 done
-grep -Fq "'Config/**', 'HealthMuleApp/**', 'HealthMuleShared/**', 'HealthMuleWatchApp/**', 'Sources/**', 'Makefile', 'project.yml', 'scripts/**', '.github/workflows/verify.yml'" .github/workflows/verify.yml ||
-  fail "The incremental Xcode cache must fingerprint every app build input."
 grep -Fq "id: swift-build-cache" .github/workflows/verify.yml ||
   fail "Fast CI must expose exact cache-hit state."
 grep -Eq '^[[:space:]]+path:[[:space:]]+\.build[[:space:]]*$' .github/workflows/verify.yml ||

@@ -119,18 +119,6 @@ jobs:
             HealthMuleApp/Resources/Info.plist
           key: verify-xcode-dependencies-v3-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml', 'scripts/install-xcodegen.sh') }}
 
-      - name: Restore incremental Xcode build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .artifacts/DerivedData/Build
-            .artifacts/DerivedData/CompilationCache.noindex
-            .artifacts/DerivedData/ModuleCache.noindex
-            .artifacts/DerivedData/SDKStatCaches.noindex
-          key: verify-xcode-build-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Config/**', 'HealthMuleApp/**', 'HealthMuleShared/**', 'HealthMuleWatchApp/**', 'Sources/**', 'Makefile', 'project.yml', 'scripts/**', '.github/workflows/verify.yml') }}
-          restore-keys: |
-            verify-xcode-build-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
-
       # make verify only parses Swift. This is the gate that type checks the
       # iOS app and the embedded Watch app.
       - name: Build unsigned app and Watch app
