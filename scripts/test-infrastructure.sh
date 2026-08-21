@@ -8,7 +8,7 @@ fail() {
 
 for task in project build test smoke harness run; do
   expected="./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh ${task}"
-  actual="$(make --no-print-directory --dry-run "${task}")"
+  actual="$(MAKEFLAGS= MAKELEVEL=0 make --no-print-directory --dry-run "${task}")"
   [[ "${actual}" == "${expected}" ]] ||
     fail "make ${task} must run exactly one complete task behind the Xcode lock."
 done
@@ -198,15 +198,17 @@ fi
 
 expected_parallel_invocation="--no-print-directory --jobs=3 test-infra check-app-syntax test-core"
 expected_fast_commands=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'
-actual_fast_verify="$(MAKEFLAGS= make --no-print-directory --dry-run verify)"
+actual_fast_verify="$(MAKEFLAGS= MAKELEVEL=0 make --no-print-directory --dry-run verify)"
 parallel_invocation="${actual_fast_verify%%$'\n'*}"
 actual_fast_commands="${actual_fast_verify#*$'\n'}"
-[[ "${parallel_invocation}" == */make\ "${expected_parallel_invocation}" ]] ||
+if [[ "${parallel_invocation}" != "make ${expected_parallel_invocation}" &&
+  "${parallel_invocation}" != */make\ "${expected_parallel_invocation}" ]]; then
   fail "make verify must run the three fast verification lanes through Make with bounded concurrency."
+fi
 [[ "${actual_fast_commands}" == "${expected_fast_commands}" ]] ||
   fail "make verify must remain the fast infrastructure, syntax, and core-test gate."
 
-actual_full_verify="$(MAKEFLAGS= make --no-print-directory --dry-run verify-full)"
+actual_full_verify="$(MAKEFLAGS= MAKELEVEL=0 make --no-print-directory --dry-run verify-full)"
 [[ "${actual_full_verify}" == *"${actual_fast_verify}"* ]] ||
   fail "make verify-full must extend the fast gate with the complete iOS test task."
 fast_verify_line="$(grep -nF -- "${expected_parallel_invocation}" <<<"${actual_full_verify}" | head -1 | cut -d: -f1)"
