@@ -116,7 +116,8 @@ jobs:
             .artifacts/xcodegen
             .artifacts/DerivedData/SourcePackages
             HealthMule.xcodeproj
-          key: verify-xcode-dependencies-v2-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml', 'scripts/install-xcodegen.sh') }}
+            HealthMuleApp/Resources/Info.plist
+          key: verify-xcode-dependencies-v3-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml', 'scripts/install-xcodegen.sh') }}
 
       - name: Restore incremental Xcode build cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
