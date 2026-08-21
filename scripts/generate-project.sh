@@ -17,6 +17,7 @@ fi
 
 pinned_root="${HEALTHMULE_XCODEGEN_ROOT:-.artifacts/toolchain/xcodegen-${pinned_version}}"
 pinned_binary="${pinned_root}/xcodegen/bin/xcodegen"
+cache_path="${HEALTHMULE_XCODEGEN_CACHE:-.artifacts/xcodegen/project-cache.json}"
 
 if [[ ! -x "${pinned_binary}" ]]; then
   # Only ever delete the directory this script installs, never the root itself:
@@ -26,4 +27,8 @@ if [[ ! -x "${pinned_binary}" ]]; then
   ./scripts/install-xcodegen.sh "${pinned_root}" >/dev/null
 fi
 
-exec "${pinned_binary}" generate --spec project.yml
+mkdir -p "$(dirname "${cache_path}")"
+exec "${pinned_binary}" generate \
+  --spec project.yml \
+  --use-cache \
+  --cache-path "${cache_path}"

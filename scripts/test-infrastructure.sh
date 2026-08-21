@@ -32,6 +32,10 @@ pinned_xcodegen="$(
   fail "scripts/install-xcodegen.sh must declare a pinned xcodegen_version."
 grep -q 'install-xcodegen.sh' scripts/generate-project.sh ||
   fail "scripts/generate-project.sh must provision the pinned XcodeGen."
+grep -Fq -- '--use-cache' scripts/generate-project.sh ||
+  fail "scripts/generate-project.sh must use XcodeGen's source-aware project cache."
+grep -Fq -- '--cache-path "${cache_path}"' scripts/generate-project.sh ||
+  fail "scripts/generate-project.sh must keep the XcodeGen cache repository-local."
 
 ./scripts/check-app-dependencies.sh
 
@@ -208,6 +212,17 @@ fi
 [[ "${actual_fast_commands}" == "${expected_fast_commands}" ]] ||
   fail "make verify must remain the fast infrastructure, syntax, and core-test gate."
 
+expected_cached_commands=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --skip-build --parallel --disable-sandbox'
+actual_cached_verify="$(MAKEFLAGS= MAKELEVEL=0 make --no-print-directory --dry-run verify-cached)"
+cached_parallel_invocation="${actual_cached_verify%%$'\n'*}"
+actual_cached_commands="${actual_cached_verify#*$'\n'}"
+if [[ "${cached_parallel_invocation}" != "make --no-print-directory --jobs=3 test-infra check-app-syntax test-core-cached" &&
+  "${cached_parallel_invocation}" != */make\ "--no-print-directory --jobs=3 test-infra check-app-syntax test-core-cached" ]]; then
+  fail "make verify-cached must run the three cached verification lanes through Make with bounded concurrency."
+fi
+[[ "${actual_cached_commands}" == "${expected_cached_commands}" ]] ||
+  fail "make verify-cached must preserve infrastructure, syntax, and the no-rebuild Swift test bundle."
+
 actual_full_verify="$(MAKEFLAGS= MAKELEVEL=0 make --no-print-directory --dry-run verify-full)"
 [[ "${actual_full_verify}" == *"${actual_fast_verify}"* ]] ||
   fail "make verify-full must extend the fast gate with the complete iOS test task."
@@ -246,6 +261,12 @@ grep -Fq "xcresulttool export attachments" scripts/ios-project-task.sh ||
 if grep -Fq "/usr/bin/xcrun" scripts/ios-project-task.sh; then
   fail "The locked task runner must not bypass repository Xcode wrappers."
 fi
+for package_flag in -disableAutomaticPackageResolution -skipPackageUpdates; do
+  grep -Fq -- "${package_flag}" scripts/ios-project-task.sh ||
+    fail "Locked Xcode verification must include ${package_flag}."
+  grep -Fq -- "${package_flag}" scripts/run-simulator.sh ||
+    fail "Interactive Xcode builds must include ${package_flag}."
+done
 grep -Fq 'selected}/usr/bin/simctl' scripts/ios-project-task.sh ||
   fail "Simulator tasks must validate the xcode-select toolchain directly."
 
@@ -336,6 +357,24 @@ for compile_input in \
   grep -Fq -- "- '${compile_input}'" .github/workflows/verify.yml ||
     fail "The macOS compile selector must include ${compile_input}."
 done
+grep -Fq "id: xcode-toolchain" .github/workflows/verify.yml ||
+  fail "The macOS compile lane must fingerprint its Xcode toolchain."
+grep -Fq "key: verify-xcode-dependencies-v1-" .github/workflows/verify.yml ||
+  fail "The macOS compile lane must keep a versioned dependency cache."
+grep -Fq "key: verify-xcode-build-v1-" .github/workflows/verify.yml ||
+  fail "The macOS compile lane must keep a versioned incremental build cache."
+for xcode_cache_path in \
+  ".artifacts/toolchain" \
+  ".artifacts/DerivedData/SourcePackages" \
+  ".artifacts/DerivedData/Build" \
+  ".artifacts/DerivedData/CompilationCache.noindex" \
+  ".artifacts/DerivedData/ModuleCache.noindex" \
+  ".artifacts/DerivedData/SDKStatCaches.noindex"; do
+  grep -Fq "${xcode_cache_path}" .github/workflows/verify.yml ||
+    fail "The macOS compile cache must preserve ${xcode_cache_path}."
+done
+grep -Fq "'Config/**', 'HealthMuleApp/**', 'HealthMuleShared/**', 'HealthMuleWatchApp/**', 'Sources/**', 'Makefile', 'project.yml', 'scripts/**', '.github/workflows/verify.yml'" .github/workflows/verify.yml ||
+  fail "The incremental Xcode cache must fingerprint every app build input."
 grep -Fq "id: swift-build-cache" .github/workflows/verify.yml ||
   fail "Fast CI must expose exact cache-hit state."
 grep -Eq '^[[:space:]]+path:[[:space:]]+\.build[[:space:]]*$' .github/workflows/verify.yml ||
@@ -350,10 +389,13 @@ grep -Fq 'HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache' 
   fail "Fast CI must keep Swift module caches inside the cached build directory."
 grep -Fq "if: steps.swift-build-cache.outputs.cache-hit == 'true'" .github/workflows/verify.yml ||
   fail "Exact cache hits must use the no-rebuild verification path."
-grep -Fq "make test-infra check-app-syntax" .github/workflows/verify.yml ||
-  fail "Exact cache hits must still run infrastructure and app syntax checks."
-grep -Fq "./scripts/swift.sh test --skip-build --parallel --disable-sandbox" .github/workflows/verify.yml ||
-  fail "Exact cache hits must run the complete cached Swift test bundle."
+grep -Eq '^[[:space:]]+run:[[:space:]]+make verify-cached[[:space:]]*$' .github/workflows/verify.yml ||
+  fail "Exact cache hits must call the canonical cached verification graph."
+if grep -Fq 'swift --version' .github/workflows/verify.yml; then
+  fail "Fast CI must fingerprint the Swift executable without launching the compiler before cache restore."
+fi
+grep -Fq 'sha256sum "${swift_binary}"' .github/workflows/verify.yml ||
+  fail "Fast CI must bind cached Swift artifacts to the installed executable."
 grep -Fq "if: steps.swift-build-cache.outputs.cache-hit != 'true'" .github/workflows/verify.yml ||
   fail "Cache misses must use the canonical build-and-test path."
 grep -Eq '^[[:space:]]+runs-on:[[:space:]]+ubuntu-24\.04[[:space:]]*$' .github/workflows/verify.yml ||

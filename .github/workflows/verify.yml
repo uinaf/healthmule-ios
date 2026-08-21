@@ -40,8 +40,6 @@ jobs:
               - 'HealthMule.xcodeproj/**'
               - 'HealthMuleApp/**'
               - 'HealthMuleShared/**'
-              - 'HealthMuleTests/**'
-              - 'HealthMuleUITests/**'
               - 'HealthMuleWatchApp/**'
               - 'Sources/**'
               - 'Makefile'
@@ -64,10 +62,9 @@ jobs:
       - name: Fingerprint Swift toolchain
         id: swift-toolchain
         run: |
-          swift_version="$(swift --version)"
-          printf '%s\n' "${swift_version}"
-          version_hash="$(printf '%s' "${swift_version}" | sha256sum | cut -d ' ' -f 1)"
-          echo "hash=${version_hash}" >> "${GITHUB_OUTPUT}"
+          swift_binary="$(command -v swift)"
+          echo "binary=${swift_binary}"
+          echo "hash=$(sha256sum "${swift_binary}" | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
 
       - name: Restore Swift build cache
         id: swift-build-cache
@@ -82,9 +79,7 @@ jobs:
         if: steps.swift-build-cache.outputs.cache-hit == 'true'
         env:
           HEALTHMULE_MODULE_CACHE: ${{ github.workspace }}/.build/module-cache
-        run: |
-          make test-infra check-app-syntax
-          ./scripts/swift.sh test --skip-build --parallel --disable-sandbox
+        run: make verify-cached
 
       - name: Build and run verification
         if: steps.swift-build-cache.outputs.cache-hit != 'true'
@@ -104,6 +99,34 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Fingerprint Xcode toolchain
+        id: xcode-toolchain
+        run: |
+          xcode_version="$(./scripts/xcodebuild.sh -version)"
+          printf '%s\n' "${xcode_version}"
+          version_hash="$(printf '%s' "${xcode_version}" | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "hash=${version_hash}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore Xcode dependency cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .artifacts/toolchain
+            .artifacts/DerivedData/SourcePackages
+          key: verify-xcode-dependencies-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml', 'scripts/install-xcodegen.sh') }}
+
+      - name: Restore incremental Xcode build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .artifacts/DerivedData/Build
+            .artifacts/DerivedData/CompilationCache.noindex
+            .artifacts/DerivedData/ModuleCache.noindex
+            .artifacts/DerivedData/SDKStatCaches.noindex
+          key: verify-xcode-build-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Config/**', 'HealthMuleApp/**', 'HealthMuleShared/**', 'HealthMuleWatchApp/**', 'Sources/**', 'Makefile', 'project.yml', 'scripts/**', '.github/workflows/verify.yml') }}
+          restore-keys: |
+            verify-xcode-build-v1-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode-toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
 
       # make verify only parses Swift. This is the gate that type checks the
       # iOS app and the embedded Watch app.

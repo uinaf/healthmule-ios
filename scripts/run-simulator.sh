@@ -15,6 +15,8 @@ derived_data=".artifacts/DerivedData"
   -scheme HealthMule \
   -destination "${destination}" \
   -derivedDataPath "${derived_data}" \
+  -disableAutomaticPackageResolution \
+  -skipPackageUpdates \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY=-

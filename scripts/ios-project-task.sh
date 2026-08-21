@@ -15,6 +15,11 @@ case "${task}" in
     ;;
 esac
 
+package_resolution_flags=(
+  -disableAutomaticPackageResolution
+  -skipPackageUpdates
+)
+
 case "${task}" in
   test | smoke | harness | run)
     # xcodebuild spawns its Simulator helpers through xcode-select rather than
@@ -55,6 +60,7 @@ case "${task}" in
       -scheme HealthMule \
       -destination "generic/platform=iOS Simulator" \
       -derivedDataPath .artifacts/DerivedData \
+      "${package_resolution_flags[@]}" \
       CODE_SIGNING_ALLOWED=NO
     ;;
   test | smoke)
@@ -76,6 +82,7 @@ case "${task}" in
       "$@" \
       -destination "${destination}" \
       -derivedDataPath .artifacts/DerivedData \
+      "${package_resolution_flags[@]}" \
       CODE_SIGNING_ALLOWED=YES \
       CODE_SIGNING_REQUIRED=NO \
       CODE_SIGN_IDENTITY=-
@@ -102,6 +109,7 @@ case "${task}" in
       -destination "${destination}" \
       -derivedDataPath .artifacts/DerivedData \
       -resultBundlePath "${result_bundle}" \
+      "${package_resolution_flags[@]}" \
       CODE_SIGNING_ALLOWED=YES \
       CODE_SIGNING_REQUIRED=NO \
       CODE_SIGN_IDENTITY=-
