@@ -359,13 +359,15 @@ for compile_input in \
 done
 grep -Fq "id: xcode-toolchain" .github/workflows/verify.yml ||
   fail "The macOS compile lane must fingerprint its Xcode toolchain."
-grep -Fq "key: verify-xcode-dependencies-v1-" .github/workflows/verify.yml ||
+grep -Fq "key: verify-xcode-dependencies-v2-" .github/workflows/verify.yml ||
   fail "The macOS compile lane must keep a versioned dependency cache."
 grep -Fq "key: verify-xcode-build-v1-" .github/workflows/verify.yml ||
   fail "The macOS compile lane must keep a versioned incremental build cache."
 for xcode_cache_path in \
   ".artifacts/toolchain" \
+  ".artifacts/xcodegen" \
   ".artifacts/DerivedData/SourcePackages" \
+  "HealthMule.xcodeproj" \
   ".artifacts/DerivedData/Build" \
   ".artifacts/DerivedData/CompilationCache.noindex" \
   ".artifacts/DerivedData/ModuleCache.noindex" \
