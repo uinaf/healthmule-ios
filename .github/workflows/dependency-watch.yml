@@ -16,7 +16,7 @@ concurrency:
 jobs:
   google-signin:
     name: Check GoogleSignIn-iOS
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
 
     steps:
