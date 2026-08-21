@@ -52,11 +52,13 @@ The privacy boundaries in Repo rules are non-negotiable.
 What the gates prove:
 
 - `make verify` checks the infrastructure contract, parses all app and iOS test
-  Swift, and runs the deterministic core tests on Linux or macOS.
+  Swift, and runs the deterministic core tests on Linux or macOS. Make runs
+  those three independent lanes concurrently with a bounded job count.
 - Parsing is not type checking, so app, Watch, and UI changes also need
   `make build` or `make smoke` locally.
-- Required CI runs `make verify` on Linux plus `make build` on macOS, so a
-  compile break is caught on the pull request.
+- Required CI always runs `make verify` on Linux. It adds `make build` on macOS
+  when app, Watch, project, package, build-script, or compile-workflow inputs
+  change; documentation-only and unrelated automation changes skip that lane.
 - The iOS unit and Simulator UI suites belong to `make verify-full`, which runs
   locally or through the manual `Full Verify` workflow, never on a pull request.
 

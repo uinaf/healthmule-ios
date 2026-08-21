@@ -196,15 +196,23 @@ else
     fail "The Watch companion dependency scan failed."
 fi
 
-expected_fast_verify=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'
-actual_fast_verify="$(make --no-print-directory --dry-run verify)"
-[[ "${actual_fast_verify}" == "${expected_fast_verify}" ]] ||
-  fail "make verify must remain the fast infrastructure and core-test gate."
+expected_parallel_invocation="--no-print-directory --jobs=3 test-infra check-app-syntax test-core"
+expected_fast_commands=$'./scripts/test-infrastructure.sh\n./scripts/check-swift-syntax.sh\n./scripts/swift.sh test --parallel --disable-sandbox'
+actual_fast_verify="$(MAKEFLAGS= make --no-print-directory --dry-run verify)"
+parallel_invocation="${actual_fast_verify%%$'\n'*}"
+actual_fast_commands="${actual_fast_verify#*$'\n'}"
+[[ "${parallel_invocation}" == */make\ "${expected_parallel_invocation}" ]] ||
+  fail "make verify must run the three fast verification lanes through Make with bounded concurrency."
+[[ "${actual_fast_commands}" == "${expected_fast_commands}" ]] ||
+  fail "make verify must remain the fast infrastructure, syntax, and core-test gate."
 
-expected_full_verify="${expected_fast_verify}"$'\n./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh test'
-actual_full_verify="$(make --no-print-directory --dry-run verify-full)"
-[[ "${actual_full_verify}" == "${expected_full_verify}" ]] ||
+actual_full_verify="$(MAKEFLAGS= make --no-print-directory --dry-run verify-full)"
+[[ "${actual_full_verify}" == *"${actual_fast_verify}"* ]] ||
   fail "make verify-full must extend the fast gate with the complete iOS test task."
+fast_verify_line="$(grep -nF -- "${expected_parallel_invocation}" <<<"${actual_full_verify}" | head -1 | cut -d: -f1)"
+ios_test_line="$(grep -nF -- './scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh test' <<<"${actual_full_verify}" | head -1 | cut -d: -f1)"
+[[ -n "${fast_verify_line}" && -n "${ios_test_line}" && "${fast_verify_line}" -lt "${ios_test_line}" ]] ||
+  fail "make verify-full must finish fast verification before starting its locked iOS test task."
 
 parsed_booted_ids="$(
   printf '%s\n' \
@@ -309,6 +317,23 @@ for trigger in pull_request push schedule workflow_dispatch; do
 done
 grep -Fq "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" .github/workflows/verify.yml ||
   fail "Fast CI must pin the Swift build cache action."
+grep -Fq "uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d" .github/workflows/verify.yml ||
+  fail "Fast CI must pin the app compile path selector."
+grep -Fq "compile: \${{ steps.filter.outputs.compile }}" .github/workflows/verify.yml ||
+  fail "Fast CI must expose the app compile selection."
+grep -Fq "if: needs.changes.outputs.compile == 'true'" .github/workflows/verify.yml ||
+  fail "The macOS compile lane must run only for selected app changes."
+for compile_input in \
+  "HealthMuleApp/**" \
+  "HealthMuleShared/**" \
+  "HealthMuleWatchApp/**" \
+  "Sources/**" \
+  "Package.swift" \
+  "project.yml" \
+  "scripts/**"; do
+  grep -Fq -- "- '${compile_input}'" .github/workflows/verify.yml ||
+    fail "The macOS compile selector must include ${compile_input}."
+done
 grep -Fq "id: swift-build-cache" .github/workflows/verify.yml ||
   fail "Fast CI must expose exact cache-hit state."
 grep -Eq '^[[:space:]]+path:[[:space:]]+\.build[[:space:]]*$' .github/workflows/verify.yml ||

@@ -3,6 +3,9 @@ SHELL := /bin/bash
 
 .PHONY: project test-infra check-app-syntax test-core build test smoke harness run verify verify-full clean
 
+VERIFY_FAST_TARGETS := test-infra check-app-syntax test-core
+VERIFY_FAST_JOBS ?= 3
+
 project:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh project
 
@@ -30,9 +33,11 @@ harness:
 run:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh run
 
-verify: test-infra check-app-syntax test-core
+verify:
+	$(MAKE) --no-print-directory --jobs=$(VERIFY_FAST_JOBS) $(VERIFY_FAST_TARGETS)
 
-verify-full: test-infra check-app-syntax test-core test
+verify-full: verify
+	$(MAKE) --no-print-directory test
 
 clean:
 	./scripts/swift.sh package clean

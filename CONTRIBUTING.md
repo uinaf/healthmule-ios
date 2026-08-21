@@ -35,6 +35,10 @@ Run the fast required gate for every change:
 make verify
 ```
 
+Make runs the infrastructure, Swift syntax, and core-test lanes concurrently.
+`make verify-full` keeps the fast gate and Simulator suite ordered behind the
+repository's Xcode lock.
+
 Choose additional proof based on the change:
 
 | Command | Purpose |

@@ -8,12 +8,48 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select compile lane
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      compile: ${{ steps.filter.outputs.compile }}
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select app compile changes
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            compile:
+              - '.github/workflows/verify.yml'
+              - 'Config/**'
+              - 'HealthMule.xcodeproj/**'
+              - 'HealthMuleApp/**'
+              - 'HealthMuleShared/**'
+              - 'HealthMuleTests/**'
+              - 'HealthMuleUITests/**'
+              - 'HealthMuleWatchApp/**'
+              - 'Sources/**'
+              - 'Makefile'
+              - 'Package.resolved'
+              - 'Package.swift'
+              - 'project.yml'
+              - 'scripts/**'
+
   verify:
     name: Verify
     runs-on: ubuntu-24.04
@@ -58,6 +94,8 @@ jobs:
 
   compile:
     name: Compile app and Watch app
+    needs: changes
+    if: needs.changes.outputs.compile == 'true'
     runs-on: macos-26
     timeout-minutes: 20
 
