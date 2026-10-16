@@ -53,7 +53,7 @@ Solid arrows are implemented runtime paths.
 | App shell | An adaptive SwiftUI tab shell keeps Home and Settings as permanent destinations. Setup, sync repair, and per-metric status are focused Home drill-ins, preserving the four required product screens without giving one-time workflows permanent tab weight. `AppModel` owns observable UI state and platform services. |
 | Schema | `HealthMuleCore` encodes explicit JSON `null` values, validates local dates and offset-bearing timestamps, preserves unknown fields, and emits canonical sorted JSON. |
 | Aggregation | Pure Swift inputs cover latest values, stable arithmetic means, asleep-interval unioning, workout de-duplication, derived totals, and deterministic source ordering. |
-| Durable sync | `SyncEngine` and `FileSyncStore` implement semantic no-op detection, artifact revisions, a persistent retry queue, manifest ordering, retry backoff, reauthorization blocking, and full republishing when the destination account or managed folder identity changes. Date inventory is served from persisted artifact IDs; daily JSON is decoded on recover and reused in memory. The live index is schema v2 (SHA-256 digests and byte counts, not embedded payloads). A v1 index is migrated on recover and copied to `sync-state.v1.json`. See [FileSyncStore v2 migration](decisions/sync-store-v2-migration.md). |
+| Durable sync | `SyncEngine` and `FileSyncStore` implement semantic no-op detection, artifact revisions, a persistent retry queue, manifest ordering, retry backoff, reauthorization blocking, and full republishing when the destination account or managed folder identity changes. Date inventory is served from persisted artifact IDs; daily JSON is decoded on recover and reused in memory. The live index is schema v2 (SHA-256 digests and byte counts, not embedded payloads). A v1 index is migrated on recover and copied once to `sync-state.v1.json`; v2 is published with one atomic write. Older builds cannot read v2: rollback restores the frozen v1 copy (pre-migration revisions only) or deletes the index and recovers from artifact files. |
 | Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
 | HealthKit | A dedicated `HealthKitClient` actor keeps queries, sample transformation, aggregation, and anchor/day-boundary persistence off the UI actor. The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
 | Google | GoogleSignIn restores and refreshes credentials, distinguishing a revoked grant, an account change, and a temporary network failure. OAuth authorization and verified Drive readiness are separate states. Every token refresh and Drive request is bound to its expected stable account ID. `DriveArtifactDestination` maps core artifacts and retry classifications onto account-scoped folder discovery and stable-ID multipart upserts. |
@@ -524,27 +524,8 @@ Do not hand-edit generated project structure or lock entries.
 
 ### What each gate proves
 
-[Contributing](../CONTRIBUTING.md#validation) owns the command matrix. What
-matters architecturally is the boundary each gate actually proves.
-
-- `make verify` is the fast cross-platform gate: the serialized tooling
-  contract, a Swift parse of all app and iOS test sources, and the deterministic
-  Foundation package tests.
-- Parsing is not type checking, so `make verify` alone never proves that the app
-  or the Watch app compiles. The `Verify` workflow pairs it with a path-filtered
-  macOS job running `make build`. Documentation-only and unrelated automation
-  changes skip that lane; app, Watch, project, package, or build-script
-  changes type-check the iOS app and the embedded Watch app.
-- `make verify-full` adds the iOS app and UI tests on an available Simulator. It
-  runs locally or through the manual `Full Verify` and `Upload TestFlight`
-  workflows, never on a pull request.
-- `make test`, `make smoke`, `make harness`, `make run`, and `make verify-full`
-  (which runs the test task) require `xcode-select` to point at a full Xcode and
-  fail early with that instruction otherwise.
-- `make test`, `make smoke`, `make harness`, and `make verify-full` boot a cold
-  target and wait for it. They shut it down on exit only when that invocation
-  booted it; an already-booted Simulator remains running. This avoids the
-  `SBMainWorkspace ... Busy` launch race without leaking a headless Simulator.
+[Contributing](../CONTRIBUTING.md#validation) owns the command matrix and the
+[agent guide](../AGENTS.md#validation) owns what each gate proves.
 
 Snapshot presentation, freshness, privacy, semantic publication, and request
 ordering are deterministic core tests. No gate proves HealthKit authorization,

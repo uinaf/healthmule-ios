@@ -67,8 +67,8 @@ Run `make verify` for the fast required gate. App and UI changes also need an
 appropriate Xcode or Simulator check. The complete command matrix and pull
 request expectations live in [Contributing](CONTRIBUTING.md).
 
-Releases ship from CI, not a developer Mac; see
-[TestFlight distribution](docs/DISTRIBUTION.md).
+Builds reach TestFlight only through the manual `Upload TestFlight` workflow,
+never from a developer Mac.
 
 ## Privacy boundary
 
@@ -86,8 +86,6 @@ Releases ship from CI, not a developer Mac; see
 - [Physical-device acceptance testing](docs/DEVICE_TESTING.md)
 - [Architecture and privacy boundaries](docs/ARCHITECTURE.md)
 - [Product and export contract](docs/specs/healthkit-drive-exporter.md)
-- [TestFlight distribution](docs/DISTRIBUTION.md)
-- [Sync-store scaling decision](docs/decisions/sync-store-persistence.md)
 - [Security reporting](https://github.com/altaywtf/.github/blob/main/SECURITY.md)
 
 ## Contributing

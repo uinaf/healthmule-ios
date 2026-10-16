@@ -16,8 +16,6 @@ The privacy boundaries in Repo rules are non-negotiable.
 | Module map, sync invariants, privacy boundaries | [Architecture](docs/ARCHITECTURE.md) |
 | Connecting a real Drive account | [Google OAuth setup](docs/GOOGLE_OAUTH.md) |
 | What only a signed physical device can prove | [Physical-device acceptance](docs/DEVICE_TESTING.md) |
-| Shipping a build to testers | [TestFlight delivery](docs/DISTRIBUTION.md) |
-| Why the sync store uses a digest index | [Sync-store scaling decision](docs/decisions/sync-store-persistence.md) |
 
 ## Runner contract
 
@@ -63,16 +61,18 @@ What the gates prove:
   when app, Watch, project, package, build-script, or compile-workflow inputs
   change; documentation-only and unrelated automation changes skip that lane.
 - The iOS unit and Simulator UI suites belong to `make verify-full`, which runs
-  locally or through the manual `Full Verify` workflow, never on a pull request.
+  locally or through the manual `Full Verify` and `Upload TestFlight` workflows,
+  never on a pull request.
 
 ## Delivery
 
 - Repository admins push to `main` directly; contributors open pull requests.
 - A push to `main` runs `Verify` only; nothing ships on merge.
-- `Upload TestFlight` is a manual dispatch from `main` that uploads a signed
-  build to App Store Connect ([TestFlight delivery](docs/DISTRIBUTION.md)).
-  External testing and App Store submission stay manual App Store Connect
-  steps.
+- `Upload TestFlight` is a manual dispatch from `main`
+  (`gh workflow run testflight.yml --ref main`) that uploads a signed build to
+  App Store Connect. External testing and App Store submission stay manual App
+  Store Connect steps. Setup and the sync-store decision record:
+  [Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
 
 ## Repo rules
 
