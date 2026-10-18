@@ -8,7 +8,8 @@
   <link rel="canonical" href="https://healthmule.uinaf.dev/">
   <link rel="icon" href="/assets/icon.png" type="image/png">
   <link rel="stylesheet" href="/styles.css">
-  <meta name="theme-color" content="#11120f">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -18,24 +19,23 @@
   </header>
   <main id="main" class="wrap">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="eyebrow">iPhone + Apple Watch</p>
-        <h1 id="hero-title">Apple Health.<br><span>Your own files.</span></h1>
-        <p class="intro">Export the metrics you choose as daily JSON to your own Google Drive. No HealthMule account. No developer backend.</p>
-        <fieldset class="preview-controls" aria-describedby="preview-note">
-          <legend>Explore the app</legend>
-          <label><input type="radio" name="preview" id="preview-home" checked><span><strong>Home</strong><small>Check connections and sync status.</small></span></label>
-          <label><input type="radio" name="preview" id="preview-settings"><span><strong>Settings</strong><small>Choose which health metrics to include.</small></span></label>
-          <label><input type="radio" name="preview" id="preview-sync"><span><strong>Sync</strong><small>Follow daily records as they are prepared.</small></span></label>
-        </fieldset>
-        <p class="preview-note" id="preview-note">Simulator previews with sample states, not live Drive uploads.</p>
-        <p class="availability">App Store release in preparation.</p>
-      </div>
+      <h1 id="hero-title">Apple Health to Google Drive.</h1>
+      <p class="intro">Daily JSON exports of the metrics you choose. <br>Read-only HealthKit access, with no developer backend.</p>
+      <p class="availability">For iPhone and Apple Watch. App Store release in preparation.</p>
+    </section>
+    <section class="app-preview" aria-label="Explore HealthMule" aria-describedby="preview-note">
+      <fieldset class="preview-controls">
+        <legend class="visually-hidden">Choose an app screen</legend>
+        <label><input type="radio" name="preview" id="preview-home"><span>Home</span></label>
+        <label><input type="radio" name="preview" id="preview-settings" checked><span>Settings</span></label>
+        <label><input type="radio" name="preview" id="preview-sync"><span>Sync</span></label>
+      </fieldset>
       <div class="screens">
-        <figure class="preview-home"><div class="phone-frame"><img src="/assets/home-dark.webp" width="660" height="1435" alt="HealthMule Home in dark mode, ready for the first sync, with a sync summary and connection status." fetchpriority="high"></div><figcaption>Home · sample connections</figcaption></figure>
-        <figure class="preview-settings"><div class="phone-frame"><img src="/assets/settings.webp" width="660" height="1435" alt="HealthMule Settings with the nine supported health metric toggles enabled." loading="lazy"></div><figcaption>Settings · sample preferences</figcaption></figure>
-        <figure class="preview-sync"><div class="phone-frame"><img src="/assets/sync-in-progress.webp" width="660" height="1435" alt="HealthMule sync progress, showing Processing 12 of 30 days." loading="lazy"></div><figcaption>Sync · simulated progress</figcaption></figure>
+        <figure class="preview-home"><img src="/assets/home-dark.webp" width="660" height="1435" alt="HealthMule Home in dark mode, ready for the first sync, with a sync summary and connection status." loading="lazy"><figcaption>Check connections and sync status.</figcaption></figure>
+        <figure class="preview-settings"><img src="/assets/settings.webp" width="660" height="1435" alt="HealthMule Settings with the nine supported health metric toggles enabled." fetchpriority="high"><figcaption>Choose which health metrics to include.</figcaption></figure>
+        <figure class="preview-sync"><img src="/assets/sync-in-progress.webp" width="660" height="1435" alt="HealthMule sync progress, showing Processing 12 of 30 days." loading="lazy"><figcaption>Follow daily records as they are prepared.</figcaption></figure>
       </div>
+      <p class="preview-note" id="preview-note">Simulator previews with sample states, not live Drive uploads.</p>
     </section>
     <section class="facts" aria-label="Export and privacy">
       <div><h2>Read-only HealthKit.</h2><p>Select from nine supported health types. HealthMule never writes to your Apple Health records.</p></div>
