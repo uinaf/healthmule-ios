@@ -472,12 +472,28 @@ grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
 grep -Fq 'exec ./scripts/with-xcode-lock.sh "$0"' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must serialize project generation, archive, and export behind one Xcode lock."
 
+signing_fixture_dir="${dependency_fixture_dir}/signing"
+mkdir -p "${signing_fixture_dir}/bin"
+for team in 54QY62678F WRONG12345; do
+  openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+    -subj "/CN=Apple Development: CI/OU=${team}" \
+    -keyout "${signing_fixture_dir}/${team}.key" \
+    -out "${signing_fixture_dir}/${team}.pem" >/dev/null 2>&1
+  openssl x509 -in "${signing_fixture_dir}/${team}.pem" -outform DER \
+    -out "${signing_fixture_dir}/${team}.der"
+  rm "${signing_fixture_dir}/${team}.key"
+done
+signing_sha1="$(openssl x509 -in "${signing_fixture_dir}/54QY62678F.pem" \
+  -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
+wrong_team_sha1="$(openssl x509 -in "${signing_fixture_dir}/WRONG12345.pem" \
+  -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
+
 valid_testflight_environment=(
   env
   HEALTHMULE_APPLE_TEAM_ID=54QY62678F
   HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64=Zml4dHVyZQ==
   HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD=fixture-p12-password
-  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1=1111111111111111111111111111111111111111
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1="${signing_sha1}"
   HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'
   HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID=12345678-1234-1234-1234-123456789abc
   HEALTHMULE_APP_STORE_CONNECT_KEY_ID=ABC123DEFG
@@ -485,38 +501,20 @@ valid_testflight_environment=(
   HEALTHMULE_GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.123-valid
 )
 "${valid_testflight_environment[@]}" ./scripts/ci/validate-testflight-configuration.sh
-if "${valid_testflight_environment[@]}" \
+for invalid_configuration in \
   HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID=12345678-12341234-1234-123456789abc \
-  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
-  fail "TestFlight validation must reject a non-canonical issuer UUID."
-fi
-if "${valid_testflight_environment[@]}" \
   HEALTHMULE_GOOGLE_REDIRECT_SCHEME=com.googleusercontent.apps.wrong \
-  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
-  fail "TestFlight validation must reject an OAuth redirect scheme from another client."
-fi
-if "${valid_testflight_environment[@]}" \
   HEALTHMULE_GOOGLE_CLIENT_ID=123-valid.googleusercontent.com \
-  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
-  fail "TestFlight validation must reject a non-iOS Google OAuth client ID."
-fi
-for missing_signing_value in \
-  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 \
-  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD \
-  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1; do
-  if "${valid_testflight_environment[@]}" "${missing_signing_value}=" \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64= \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD= \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1= \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1=not-a-fingerprint; do
+  if "${valid_testflight_environment[@]}" "${invalid_configuration}" \
     ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
-    fail "TestFlight validation must reject missing ${missing_signing_value}."
+    fail "TestFlight validation accepted invalid ${invalid_configuration%%=*}."
   fi
 done
-if "${valid_testflight_environment[@]}" \
-  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1=not-a-fingerprint \
-  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
-  fail "TestFlight validation must reject an invalid certificate fingerprint."
-fi
 
-signing_fixture_dir="${dependency_fixture_dir}/signing"
-mkdir -p "${signing_fixture_dir}/bin"
 cat >"${signing_fixture_dir}/bin/security" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -546,16 +544,18 @@ case "${command}" in
     touch "${SIGNING_FIXTURE_STATE}/imported"
     ;;
   find-certificate)
-    printf 'fixture certificate\n'
+    cat "${SIGNING_FIXTURE_CERTIFICATE}"
     ;;
   find-identity)
     [[ -f "${SIGNING_FIXTURE_STATE}/imported" ]] || exit 1
+    fingerprint="${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}"
+    kind="Apple Development"
     case "${SIGNING_FIXTURE_MODE:-valid}" in
-      wrong-kind) printf '  1) 1111111111111111111111111111111111111111 "Developer ID Application: CI (54QY62678F)"\n     1 valid identities found\n' ;;
-      absent) printf '     0 valid identities found\n' ;;
-      wrong) printf '  1) 2222222222222222222222222222222222222222 "Apple Development: CI (54QY62678F)"\n     1 valid identities found\n' ;;
-      *) printf '  1) 1111111111111111111111111111111111111111 "Apple Development: CI (54QY62678F)"\n     1 valid identities found\n' ;;
+      absent) printf '     0 valid identities found\n'; exit 0 ;;
+      wrong) fingerprint=2222222222222222222222222222222222222222 ;;
+      wrong-kind) kind="Developer ID Application" ;;
     esac
+    printf '  1) %s "%s: CI"\n     1 valid identities found\n' "${fingerprint}" "${kind}"
     ;;
   delete-keychain)
     rm -f "${@: -1}"
@@ -566,51 +566,24 @@ case "${command}" in
 esac
 EOF
 chmod +x "${signing_fixture_dir}/bin/security"
-signing_openssl_path="$(command -v openssl)"
-cat >"${signing_fixture_dir}/bin/openssl" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" != "x509" ]]; then
-  exec "${SIGNING_FIXTURE_OPENSSL}" "$@"
-fi
-certificate=
-for ((index=1; index<=$#; index++)); do
-  if [[ "${!index}" == "-in" ]]; then
-    ((index+=1))
-    certificate="$(cat "${!index}")"
-    break
-  fi
-done
-[[ -n "${certificate}" ]] || certificate="$(cat)"
-team=54QY62678F
-[[ "${SIGNING_FIXTURE_MODE:-valid}" != "wrong-team" ]] || team=WRONG12345
-printf 'subject=\n    OU=%s\n    CN=Apple Development: CI\n' "${team}"
-if [[ "${certificate}" == "wrong-archive-certificate" ]]; then
-  printf 'sha1 Fingerprint=22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22\n'
-else
-  printf 'sha1 Fingerprint=11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11\n'
-fi
-EOF
-chmod +x "${signing_fixture_dir}/bin/openssl"
 cat >"${signing_fixture_dir}/bin/codesign" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 prefix=
 while [[ "$#" -gt 1 ]]; do
   case "${1}" in
-    --extract-certificates) prefix="${2}"; shift ;;
     --extract-certificates=*) prefix="${1#*=}" ;;
   esac
   shift
 done
 [[ -n "${prefix}" ]]
-app="$(basename "${1}")"
+app="${1##*/}"
 touch "${SIGNING_FIXTURE_STATE}/inspected-${app}"
+certificate="${SIGNING_FIXTURE_CERTIFICATE%.pem}.der"
 if [[ "${SIGNING_FIXTURE_ARCHIVE_MISMATCH:-}" == "${app}" ]]; then
-  printf 'wrong-archive-certificate' >"${prefix}0"
-else
-  printf 'fixture certificate' >"${prefix}0"
+  certificate="${SIGNING_FIXTURE_CERTIFICATE%/*}/WRONG12345.der"
 fi
+cp "${certificate}" "${prefix}0"
 EOF
 chmod +x "${signing_fixture_dir}/bin/codesign"
 
@@ -640,7 +613,7 @@ run_signing_fixture() {
       RUNNER_TEMP="${signing_fixture_dir}/work/runner temp" \
       GITHUB_ENV="${signing_fixture_dir}/work/github-env" \
       SIGNING_FIXTURE_STATE="${signing_fixture_dir}/state" \
-      SIGNING_FIXTURE_OPENSSL="${signing_openssl_path}" \
+      SIGNING_FIXTURE_CERTIFICATE="${signing_fixture_dir}/54QY62678F.pem" \
       "$@" "./scripts/ci/${script}-testflight.sh"
   )
 }
@@ -709,8 +682,15 @@ done
 
 for signing_failure in wrong wrong-kind wrong-team absent import-error; do
   prepare_signing_fixture
+  fixture_team=54QY62678F
+  fixture_sha1="${signing_sha1}"
+  if [[ "${signing_failure}" == "wrong-team" ]]; then
+    fixture_team=WRONG12345
+    fixture_sha1="${wrong_team_sha1}"
+  fi
   if run_signing_fixture configure SIGNING_FIXTURE_MODE="${signing_failure}" \
-    >/dev/null 2>&1; then
+    SIGNING_FIXTURE_CERTIFICATE="${signing_fixture_dir}/${fixture_team}.pem" \
+    HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1="${fixture_sha1}" >/dev/null 2>&1; then
     fail "Signing setup must reject ${signing_failure} instead of letting Xcode create another certificate."
   fi
   if grep -q '^HEALTHMULE_SIGNING_KEYCHAIN_PATH=' \

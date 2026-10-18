@@ -23,7 +23,7 @@ if [[ -e "${keychain_path}" ]]; then
 fi
 
 rm -rf \
-  "${RUNNER_TEMP}/healthmule-testflight" \
+  "${credentials_dir}" \
   "${RUNNER_TEMP}/HealthMule.xcarchive" \
   "${RUNNER_TEMP}/HealthMuleExport"
 rm -f \

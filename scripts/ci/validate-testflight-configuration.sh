@@ -35,7 +35,7 @@ expected_redirect_scheme="com.googleusercontent.apps.${client_id_prefix}"
 [[ "${HEALTHMULE_GOOGLE_REDIRECT_SCHEME}" != *-example ]] ||
   fail "HEALTHMULE_GOOGLE_REDIRECT_SCHEME must not use the example placeholder."
 
-grep -Fq -- "-----BEGIN PRIVATE KEY-----" <<<"${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY}" ||
+[[ "${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY}" == *"-----BEGIN PRIVATE KEY-----"* ]] ||
   fail "HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY is not an App Store Connect private key."
-grep -Fq -- "-----END PRIVATE KEY-----" <<<"${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY}" ||
+[[ "${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY}" == *"-----END PRIVATE KEY-----"* ]] ||
   fail "HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY is incomplete."
