@@ -20,9 +20,22 @@ enum PersistedStorageAssertions {
             line: line
         )
         if let protection = values.fileProtection {
+            let expectedURLProtection = try XCTUnwrap(
+                [
+                    FileProtectionType.none: URLFileProtection.none,
+                    .complete: .complete,
+                    .completeUnlessOpen: .completeUnlessOpen,
+                    .completeUntilFirstUserAuthentication:
+                        .completeUntilFirstUserAuthentication,
+                    .completeWhenUserInactive: .completeWhenUserInactive,
+                ][expectedProtection],
+                "unsupported file protection class",
+                file: file,
+                line: line
+            )
             XCTAssertEqual(
                 protection,
-                URLFileProtection.completeUntilFirstUserAuthentication,
+                expectedURLProtection,
                 file: file,
                 line: line
             )

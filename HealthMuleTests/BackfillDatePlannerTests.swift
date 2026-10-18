@@ -94,7 +94,9 @@ final class BackfillDatePlannerTests: XCTestCase {
     }
 
     func testVO2HistoryStartDoesNotReachIntoOlderExistingRecords() throws {
-        let requestedStart = Date(timeIntervalSince1970: 2_000)
+        let requestedStart = try ISO8601Timestamp(
+            rawValue: "2026-07-15T00:00:00Z"
+        ).date()
 
         let resolved = LiveSyncCoordinator.effectiveHistoryStart(
             requestedStart: requestedStart,
@@ -108,7 +110,9 @@ final class BackfillDatePlannerTests: XCTestCase {
     }
 
     func testVO2HistoryStartAcceptsAnExpandedEarlierSelection() throws {
-        let expandedStart = Date(timeIntervalSince1970: 1_000)
+        let expandedStart = try ISO8601Timestamp(
+            rawValue: "2026-06-01T00:00:00Z"
+        ).date()
 
         let resolved = LiveSyncCoordinator.effectiveHistoryStart(
             requestedStart: expandedStart,

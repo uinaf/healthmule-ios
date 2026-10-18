@@ -17,7 +17,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("root-id", for: accountID)
         await metadataStore.setDailyID("daily-id", for: accountID)
 
@@ -168,7 +168,7 @@ final class DriveAPIClientTests: XCTestCase {
             }
         }
 
-        let metadataStore = try Self.makeMetadataStore(
+        let metadataStore = try makeMetadataStore(
             suiteName: suiteName
         )
         let client = Self.makeClient(metadataStore: metadataStore)
@@ -217,7 +217,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("root-a", for: firstAccountID)
         await metadataStore.setDailyID("daily-a", for: firstAccountID)
         await metadataStore.setRootID("root-b", for: secondAccountID)
@@ -309,7 +309,7 @@ final class DriveAPIClientTests: XCTestCase {
                 "fileIDs": ["manifest": "legacy-manifest"],
             ]
         )
-        let metadataStore = try Self.makeMetadataStore(
+        let metadataStore = try makeMetadataStore(
             suiteName: suiteName,
             legacyData: legacyData
         )
@@ -419,7 +419,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("old-root", for: accountID)
         await metadataStore.setDailyID("old-daily", for: accountID)
         await metadataStore.commitFolders(
@@ -441,7 +441,7 @@ final class DriveAPIClientTests: XCTestCase {
         // Simulate a crash after a new pre-generated root ID was persisted,
         // but before the final folder transition and cache purge committed.
         await metadataStore.setRootID("new-root", for: accountID)
-        let reloadedStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let reloadedStore = try makeMetadataStore(suiteName: suiteName)
         let preCommitManifestID = await reloadedStore.fileID(
             for: "manifest",
             accountID: accountID
@@ -476,6 +476,10 @@ final class DriveAPIClientTests: XCTestCase {
     {
         let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
         let accountID = "google-user-file-id-status"
+        let directory = Self.metadataDirectory(for: suiteName)
+        addTeardownBlock {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+        }
         defer {
             UserDefaults(suiteName: suiteName)?
                 .removePersistentDomain(forName: suiteName)
@@ -495,7 +499,7 @@ final class DriveAPIClientTests: XCTestCase {
             forKey: Self.metadataStateKey(for: accountID)
         )
 
-        let migratedStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let migratedStore = try makeMetadataStore(suiteName: suiteName)
         let legacySnapshot = await migratedStore.fileIDSnapshot(
             for: "manifest",
             accountID: accountID
@@ -508,7 +512,7 @@ final class DriveAPIClientTests: XCTestCase {
             for: "daily:2026-07-24",
             accountID: accountID
         )
-        let reloadedStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let reloadedStore = try makeMetadataStore(suiteName: suiteName)
         let pendingSnapshot = await reloadedStore.fileIDSnapshot(
             for: "daily:2026-07-24",
             accountID: accountID
@@ -549,7 +553,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -626,7 +630,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -680,7 +684,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("old-root", for: accountID)
         await metadataStore.setDailyID("old-daily", for: accountID)
         await metadataStore.commitFolders(
@@ -786,7 +790,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -891,7 +895,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         let counter = RequestCounter()
         let requests = StringRecorder()
         URLProtocolStub.setHandler { request in
@@ -1006,7 +1010,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("orphaned-root", for: accountID)
         let counter = RequestCounter()
         URLProtocolStub.setHandler { request in
@@ -1093,7 +1097,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         let requests = StringRecorder()
         URLProtocolStub.setHandler { request in
             guard
@@ -1207,7 +1211,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         let counter = RequestCounter()
         let requests = StringRecorder()
         URLProtocolStub.setHandler { request in
@@ -1330,7 +1334,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("trashed-root", for: accountID)
         await metadataStore.setDailyID("daily-id", for: accountID)
         await metadataStore.setFileID(
@@ -1434,7 +1438,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setRootID("stale-root", for: accountID)
         await metadataStore.setDailyID("daily-id", for: accountID)
         let counter = RequestCounter()
@@ -1523,7 +1527,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -1617,7 +1621,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         let client = Self.makeClient(metadataStore: metadataStore)
         try await client.activateAccount(
             "google-user",
@@ -1657,7 +1661,7 @@ final class DriveAPIClientTests: XCTestCase {
         let transport = SuspendingTransitionDriveUploadTransport()
         let client = DriveAPIClient(
             tokenProvider: { _ in "test-token" },
-            metadataStore: try Self.makeMetadataStore(
+            metadataStore: try makeMetadataStore(
                 suiteName: suiteName
             ),
             uploadTransport: transport
@@ -1711,7 +1715,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -1804,7 +1808,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
             URLProtocolStub.removeHandler()
         }
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "moved-manifest",
             for: "manifest",
@@ -1917,7 +1921,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
             URLProtocolStub.removeHandler()
         }
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.reserveFileID(
             reservedID,
             for: "manifest",
@@ -2006,7 +2010,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
             URLProtocolStub.removeHandler()
         }
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.reserveFileID(
             reservedID,
             for: "manifest",
@@ -2137,7 +2141,7 @@ final class DriveAPIClientTests: XCTestCase {
         )
 
         do {
-            let firstStore = try Self.makeMetadataStore(
+            let firstStore = try makeMetadataStore(
                 suiteName: suiteName
             )
             let configuration = URLSessionConfiguration.ephemeral
@@ -2213,7 +2217,7 @@ final class DriveAPIClientTests: XCTestCase {
         )
 
         do {
-            let retryStore = try Self.makeMetadataStore(
+            let retryStore = try makeMetadataStore(
                 suiteName: suiteName
             )
             let configuration = URLSessionConfiguration.ephemeral
@@ -2253,7 +2257,7 @@ final class DriveAPIClientTests: XCTestCase {
             reservedID
         )
 
-        let finalStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let finalStore = try makeMetadataStore(suiteName: suiteName)
         let committedSnapshot = await finalStore.fileIDSnapshot(
             for: "manifest",
             accountID: accountID
@@ -2273,7 +2277,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
             URLProtocolStub.removeHandler()
         }
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             staleID,
             for: "manifest",
@@ -2378,7 +2382,7 @@ final class DriveAPIClientTests: XCTestCase {
                 .removePersistentDomain(forName: suiteName)
             URLProtocolStub.removeHandler()
         }
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             staleID,
             for: "manifest",
@@ -2493,7 +2497,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(
+        let metadataStore = try makeMetadataStore(
             suiteName: suiteName,
             successfulConditionalWriteBarrier: {
                 await metadataWriteGate.suspend()
@@ -2649,7 +2653,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -2744,7 +2748,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -2817,7 +2821,7 @@ final class DriveAPIClientTests: XCTestCase {
         }
 
         let metadataWriteGate = AsyncSuspensionGate()
-        let metadataStore = try Self.makeMetadataStore(
+        let metadataStore = try makeMetadataStore(
             suiteName: suiteName,
             successfulConditionalWriteBarrier: {
                 await metadataWriteGate.suspend()
@@ -3893,7 +3897,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -3974,7 +3978,7 @@ final class DriveAPIClientTests: XCTestCase {
             URLProtocolStub.removeHandler()
         }
 
-        let metadataStore = try Self.makeMetadataStore(suiteName: suiteName)
+        let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
             "manifest-a",
             for: "manifest",
@@ -4075,7 +4079,7 @@ final class DriveAPIClientTests: XCTestCase {
         )
     }
 
-    private nonisolated static func makeMetadataStore(
+    private nonisolated func makeMetadataStore(
         suiteName: String,
         legacyData: Data? = nil,
         successfulConditionalWriteBarrier:
@@ -4085,7 +4089,12 @@ final class DriveAPIClientTests: XCTestCase {
         if let legacyData {
             defaults.set(legacyData, forKey: "drive.metadata.v1")
         }
-        let directory = metadataDirectory(for: suiteName)
+        let directory = Self.metadataDirectory(for: suiteName)
+        addTeardownBlock {
+            if FileManager.default.fileExists(atPath: directory.path) {
+                try FileManager.default.removeItem(at: directory)
+            }
+        }
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true

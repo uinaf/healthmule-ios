@@ -100,8 +100,8 @@ Each daily file must conform to this schema:
     }
   ],
   "totals": {
-    "workoutMinutes": 83.0,
-    "workoutActiveEnergyKcal": 475.0
+    "workoutMinutes": 56.0,
+    "workoutActiveEnergyKcal": 312.0
   },
   "sources": {
     "deviceNames": ["Apple Watch", "iPhone"],
