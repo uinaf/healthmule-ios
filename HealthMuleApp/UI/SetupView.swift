@@ -216,9 +216,9 @@ struct SetupView: View {
                     systemImage: "heart.fill"
                 )
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .buttonStyle(.borderedProminent)
-            .foregroundStyle(HealthMuleStyle.canvas)
             .buttonBorderShape(.roundedRectangle(radius: 12))
             .tint(HealthMuleStyle.tint)
             .controlSize(.large)

@@ -266,7 +266,6 @@ struct StatusHero<Action: View>: View {
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.roundedRectangle(radius: 12))
                     .tint(HealthMuleStyle.tint)
-                    .foregroundStyle(HealthMuleStyle.canvas)
                     .controlSize(.large)
             }
         }
@@ -440,6 +439,16 @@ struct OperationBanner: View {
     }
 }
 
+private struct HealthMulePrimaryActionLabelModifier: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(
+            isEnabled ? HealthMuleStyle.canvas : Color.primary
+        )
+    }
+}
+
 private struct HealthMuleCardModifier: ViewModifier {
     let padding: CGFloat
 
@@ -464,6 +473,11 @@ private struct HealthMuleCardModifier: ViewModifier {
 }
 
 extension View {
+    /// Apply inside the control label to inherit the control's disabled state.
+    func healthMulePrimaryActionLabel() -> some View {
+        modifier(HealthMulePrimaryActionLabelModifier())
+    }
+
     func healthMuleCard(padding: CGFloat = 18) -> some View {
         modifier(HealthMuleCardModifier(padding: padding))
     }

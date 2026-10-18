@@ -112,6 +112,7 @@ struct StatusView: View {
             NavigationLink(value: HomeRoute.setup) {
                 Label(title, systemImage: "arrow.right")
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .accessibilityIdentifier("open-setup-action")
         case .sync(let title):
@@ -129,6 +130,7 @@ struct StatusView: View {
                         isActive: model.operationState.isWorking(.sync)
                     )
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
@@ -143,6 +145,7 @@ struct StatusView: View {
                     systemImage: "arrow.clockwise"
                 )
                 .frame(maxWidth: .infinity)
+                .healthMulePrimaryActionLabel()
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-retry-action")
@@ -151,6 +154,7 @@ struct StatusView: View {
                 ShareLink(item: diagnosticsURL) {
                     Label("Share Diagnostics", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
+                        .healthMulePrimaryActionLabel()
                 }
                 .accessibilityIdentifier("home-diagnostics-action")
             } else {
@@ -161,6 +165,7 @@ struct StatusView: View {
                 } label: {
                     Label("Prepare Diagnostics", systemImage: "doc.badge.gearshape")
                         .frame(maxWidth: .infinity)
+                        .healthMulePrimaryActionLabel()
                 }
                 .disabled(model.operationState.isWorking)
                 .accessibilityIdentifier("home-diagnostics-action")
