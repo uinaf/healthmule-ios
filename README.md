@@ -23,11 +23,10 @@ Requirements:
 - Matching iOS and watchOS Simulator runtimes for app builds and launches
 - Swift 6
 
-`make project` provisions the pinned [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-under `.artifacts/toolchain`; do not install it separately.
-
-Generate the project and launch the phone app in the first available iPhone
-Simulator. Xcode also builds and embeds the Watch companion:
+Generate the project, which provisions the pinned
+[XcodeGen](https://github.com/yonaskolb/XcodeGen), and launch the phone app in
+the first available iPhone Simulator. Xcode also builds and embeds the Watch
+companion:
 
 ```sh
 make project
@@ -77,8 +76,8 @@ Deployment credentials and hostname ownership live in the
 
 - HealthKit access is read-only and limited to the types in the product spec.
 - Google access uses the narrow `drive.file` scope.
-- Health values, OAuth tokens, exported records, and raw HealthKit metadata must
-  never appear in logs or diagnostics.
+- Logs and diagnostics carry no health values, OAuth tokens, exported records,
+  or raw HealthKit metadata.
 - Local health staging, anchors, and saved day boundaries use file protection
   and are excluded from device backups.
 

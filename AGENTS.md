@@ -16,71 +16,57 @@ daily JSON files in the user's own Google Drive. There is no developer backend.
 | Connecting a real Drive account | [Google OAuth setup](docs/GOOGLE_OAUTH.md) |
 | What only a signed physical device can prove | [Physical-device acceptance](docs/DEVICE_TESTING.md) |
 
-## Runner contract
+## Toolchain
 
-- Core tests and `make verify` need only a Swift 6 toolchain and run on Linux.
-- Everything that compiles the app or the Watch app needs a full Xcode with the
-  iOS and watchOS SDKs.
-- Always call the `scripts/` wrappers instead of bare `swift`, `xcodebuild`, or
-  `xcrun`. They locate `/Applications/Xcode*.app` themselves, so `make verify`
-  and `make build` work even when `xcode-select` points at CommandLineTools.
-- `make test`, `make smoke`, `make harness`, and `make run` get no such fallback. They need
-  `xcode-select` pointed at a full Xcode.
-- Use `./scripts/xcrun.sh simctl` when `xcode-select` points at CommandLineTools.
-  Tools without that wrapper need an operator to select a full Xcode.
-- Simulator test commands wait for boot and shut down only devices they booted.
-  Leave already-running Simulators alone.
-- XcodeGen is pinned and provisioned into `.artifacts/toolchain` by
-  `make project`. Do not install it separately; a different version rewrites the
-  whole project file.
+- `make verify` and core tests need only a Swift 6 toolchain and run on Linux.
+  Compiling the iPhone or Watch app needs a full Xcode with the iOS and watchOS
+  SDKs.
+- Call the `scripts/` wrappers rather than bare `swift`, `xcodebuild`, or
+  `xcrun`. They find `/Applications/Xcode*.app` themselves, so `make verify`,
+  `make build`, and `./scripts/xcrun.sh simctl` work while `xcode-select`
+  points at CommandLineTools.
+- `make test`, `make smoke`, `make harness`, and `make run` use the toolchain
+  `xcode-select` points at, which must be a full Xcode.
+- Simulator tasks shut down only the devices they booted.
+- `make project` provisions the pinned XcodeGen into `.artifacts/toolchain`.
+  Another XcodeGen version rewrites the whole project file.
 
 ## Validation
 
-- Fast contract tests: `make test-core`
-- Fast local and required CI gate: `make verify`
-- Full iOS and Simulator gate: `make verify-full`
-- Runtime smoke test: `make smoke`
-- Full command matrix: [Contributing](CONTRIBUTING.md#validation)
+`make verify` runs the infrastructure contract, a Swift parse of the app and
+iOS tests, and the core tests. Parsing is not type checking, so app, Watch, and
+UI changes also need `make build` or `make smoke`. `make verify-full` adds the
+iOS unit and Simulator UI suites. The full matrix is in
+[Contributing](CONTRIBUTING.md#validation).
 
-What the gates prove:
-
-- `make verify` checks the infrastructure contract, parses all app and iOS test
-  Swift, and runs the deterministic core tests on Linux or macOS. Make runs
-  those three independent lanes concurrently with a bounded job count.
-- Parsing is not type checking, so app, Watch, and UI changes also need
-  `make build` or `make smoke` locally.
-- Required CI always runs `make verify` on Linux. It adds `make build` on macOS
-  when app, Watch, project, package, build-script, or compile-workflow inputs
-  change; documentation-only and unrelated automation changes skip that lane.
-- The iOS unit and Simulator UI suites belong to `make verify-full`, which runs
-  locally or through the manual `Full Verify` and `Upload TestFlight` workflows,
-  never on a pull request.
+CI runs `make verify` on Linux for every pull request and push to `main`, plus
+`make build` on macOS when compile inputs change; the path filter lives in
+[verify.yml](.github/workflows/verify.yml). `make verify-full` runs locally or
+through the manual `Full Verify` and `Upload TestFlight` workflows.
 
 ## Delivery
 
 - Open pull requests and merge after the required `verify` check passes.
-- A push to `main` runs `Verify` only; nothing ships on merge.
-- `Upload TestFlight` is a manual dispatch from `main`
-  (`gh workflow run testflight.yml --ref main`) that uploads a signed build to
-  App Store Connect. External testing and App Store submission stay manual App
-  Store Connect steps. Setup and the sync-store decision record:
+- Merging to `main` ships nothing. `Upload TestFlight` is a manual dispatch from
+  `main` (`gh workflow run testflight.yml --ref main`) that uploads a signed
+  build to App Store Connect; external testing and App Store submission are
+  manual App Store Connect steps. Setup and the sync-store decision record:
   [Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
 
 ## Repo rules
 
-- Keep `HealthMuleCore` Foundation-only and deterministic.
-- HealthKit is read-only. Never add HealthKit write types or entitlements.
-- Never log health values, OAuth tokens, record bodies, or raw metadata.
-- Preserve explicit JSON `null` values and unknown fields in exported records.
-- Keep local OAuth configuration in ignored `Config/Secrets.xcconfig`, signing
-  in ignored `Config/Signing.xcconfig`, and runtime tokens in Keychain. Never
-  commit credentials or client secrets.
+- `HealthMuleCore` stays Foundation-only and deterministic.
+- HealthKit access is read-only, with no write types or entitlements.
+- Logs carry no health values, OAuth tokens, record bodies, or raw metadata.
+- Exported records keep explicit JSON `null` values and unknown fields.
+- OAuth configuration lives in ignored `Config/Secrets.xcconfig`, signing in
+  ignored `Config/Signing.xcconfig`, and runtime tokens in Keychain.
 - Simulator fixtures are development proof only. HealthKit background delivery
-  and real Drive uploads require the physical-device checklist in the docs.
+  and real Drive uploads need the physical-device checklist.
 
 ## Repository skills
 
-- Use [Swift concurrency](.agents/skills/swift-concurrency/SKILL.md) for tasks, actor isolation, Sendable, and callback-to-async changes.
-- Use [SwiftUI](.agents/skills/swiftui-expert-skill/SKILL.md) for view, state, layout, and accessibility changes.
-- Use [Swift testing](.agents/skills/swift-testing-expert/SKILL.md) for test architecture and async test failures; preserve the existing test framework unless migration is requested.
-- Use [Xcode build optimization](.agents/skills/xcode-build-orchestrator/SKILL.md) for build timing and optimization work; its five companion skills are installed alongside it. Keep `project.yml` as the project source and use the repository build commands.
+- [Swift concurrency](.agents/skills/swift-concurrency/SKILL.md): tasks, actor isolation, Sendable, callback-to-async changes.
+- [SwiftUI](.agents/skills/swiftui-expert-skill/SKILL.md): views, state, layout, accessibility.
+- [Swift testing](.agents/skills/swift-testing-expert/SKILL.md): test architecture and async test failures, within the existing test framework.
+- [Xcode build optimization](.agents/skills/xcode-build-orchestrator/SKILL.md): build timing and optimization, with its five companion skills. `project.yml` stays the project source.
