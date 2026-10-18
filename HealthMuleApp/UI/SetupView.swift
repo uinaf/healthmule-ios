@@ -23,7 +23,9 @@ struct SetupView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                OperationBanner(state: model.operationState)
+                if !isGoogleOperation {
+                    OperationBanner(state: model.presentedOperationState)
+                }
                 backgroundDeliveryAdvisory
                 healthCard
                 historyCard
@@ -298,9 +300,8 @@ struct SetupView: View {
         .accessibilityIdentifier("backfill-range-picker")
     }
 
-    @ViewBuilder
     private var googleCard: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 18) {
             if isGoogleStepComplete {
                 DisclosureGroup(
                     isExpanded: $isGoogleDetailsExpanded
@@ -318,9 +319,29 @@ struct SetupView: View {
                     googleStepContent
                 }
             }
+
+            if isGoogleOperation {
+                OperationBanner(
+                    state: model.presentedOperationState,
+                    identifier: "google-operation-status"
+                )
+            }
         }
         .healthMuleCard()
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("google-state")
+    }
+
+    private var isGoogleOperation: Bool {
+        switch model.presentedOperationState {
+        case .working(.googleConnection, _),
+             .warning(.googleConnection, _),
+             .succeeded(.googleConnection, _),
+             .failed(.googleConnection, _):
+            true
+        default:
+            false
+        }
     }
 
     private var googleStepHeader: some View {
@@ -353,7 +374,9 @@ struct SetupView: View {
             .font(.callout)
             .foregroundStyle(.secondary)
         case .restoring:
-            InlineProgressLabel(title: "Checking Google connection")
+            if !model.presentedOperationState.isWorking(.googleConnection) {
+                InlineProgressLabel(title: "Checking Google connection")
+            }
         case .disconnected:
             GoogleSignInButton(scheme: googleButtonScheme) {
                 Task {
@@ -400,7 +423,7 @@ struct SetupView: View {
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            } else {
+            } else if !model.presentedOperationState.isWorking(.googleConnection) {
                 InlineProgressLabel(title: "Finishing Drive folder setup")
             }
         case .driveUnavailable(let account):

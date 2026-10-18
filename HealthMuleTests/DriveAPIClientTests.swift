@@ -146,6 +146,56 @@ final class DriveAPIClientTests: XCTestCase {
     }
 
     @MainActor
+    func testDriveSetupRetryPreservesFolderFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let keys = ["backfill.customStart", "backfill.selectedStart", "sync.driveExportsPaused"]
+        let previous = keys.map { UserDefaults.standard.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+            try? FileManager.default.removeItem(at: directory)
+            URLProtocolStub.removeHandler()
+        }
+        UserDefaults.standard.removeObject(forKey: "sync.driveExportsPaused")
+        let metadata = DriveMetadataStore(directoryURL: directory.appendingPathComponent("metadata"))
+        let account = GoogleAccount(id: "account", email: nil)
+        let auth = CleanupGoogleAuth()
+        auth.restoredConnection = .authorized(account)
+        URLProtocolStub.setHandler { @Sendable request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            return try Self.response(for: request, status: 403, json: [
+                "error": ["errors": [["reason": "storageQuotaExceeded"]]],
+            ])
+        }
+        let model = AppModel(
+            googleConfiguration: GoogleOAuthConfiguration(
+                clientID: "123-retry.apps.googleusercontent.com",
+                redirectScheme: "com.googleusercontent.apps.123-retry"
+            ),
+            googleAuth: auth,
+            driveClient: Self.makeClient(metadataStore: metadata),
+            healthKit: HealthKitClient(),
+            diagnostics: DiagnosticsRecorder(exportDirectory: directory.appendingPathComponent("diagnostics")),
+            syncActivityStore: SyncActivityStore(directoryURL: directory.appendingPathComponent("activity")),
+            stagingRoot: directory.appendingPathComponent("staging"),
+            syncCoordinator: nil,
+            syncInitializationError: nil,
+            isUITesting: true
+        )
+        model.googleConnection = .driveUnavailable(account)
+
+        await model.retryGoogleRestore()
+
+        XCTAssertEqual(model.googleConnection, .driveUnavailable(account))
+        guard case .failed(.googleConnection, let message) = model.operationState else {
+            return XCTFail("The retry must finish with the folder error")
+        }
+        XCTAssertEqual(message, "Google Drive request failed (403: storageQuotaExceeded).")
+    }
+
+    @MainActor
     func testConnectedAccountCleanupFinishesAfterConnectionStateChanges() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let keys = [
@@ -5127,7 +5177,8 @@ private final class HandlerStore: @unchecked Sendable {
 @MainActor
 private final class CleanupGoogleAuth: GoogleAuthenticating {
     private(set) var disconnectCount = 0
-    func restore() async throws -> GoogleConnectionState { .disconnected }
+    var restoredConnection: GoogleConnectionState = .disconnected
+    func restore() async throws -> GoogleConnectionState { restoredConnection }
     func connect() async throws -> GoogleConnectionState { .disconnected }
     func accessToken(for expectedAccountID: String) async throws -> String { "test-token" }
     func disconnect() async throws { disconnectCount += 1 }

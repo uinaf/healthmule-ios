@@ -15,7 +15,7 @@ struct SettingsView: View {
             googleSection
             driveExportsSection
             resetSection
-            OperationBanner(state: model.operationState)
+            OperationBanner(state: model.presentedOperationState)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)

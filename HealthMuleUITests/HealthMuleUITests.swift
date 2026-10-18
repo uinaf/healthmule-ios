@@ -219,6 +219,87 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testAutomaticFailuresStayHiddenInSetupAndSettings() throws {
+        let arguments = ["--ui-ready", "--ui-operation-failed-automatic"]
+        let setupApp = launch(additionalArguments: arguments + ["--ui-show-setup"])
+        XCTAssertTrue(element("setup-screen", in: setupApp).waitForExistence(timeout: 10))
+        XCTAssertFalse(element("operation-status", in: setupApp).exists)
+        setupApp.terminate()
+
+        let settingsApp = launch(additionalArguments: arguments)
+        settingsApp.tabBars.buttons["Settings"].tap()
+        let reset = settingsApp.buttons["Reset Local Sync State"]
+        for _ in 0..<6 where !reset.isHittable {
+            settingsApp.swipeUp()
+        }
+        XCTAssertTrue(reset.isHittable)
+        settingsApp.swipeUp()
+        XCTAssertFalse(element("operation-status", in: settingsApp).exists)
+    }
+
+    @MainActor
+    func testUserFailuresRemainVisibleInSetupAndSettings() throws {
+        let arguments = ["--ui-ready", "--ui-operation-failed-user"]
+        let setupApp = launch(additionalArguments: arguments + ["--ui-show-setup"])
+        XCTAssertTrue(element("setup-screen", in: setupApp).waitForExistence(timeout: 10))
+        XCTAssertTrue(element("operation-status", in: setupApp).exists)
+        setupApp.terminate()
+
+        let settingsApp = launch(additionalArguments: arguments)
+        settingsApp.tabBars.buttons["Settings"].tap()
+        let feedback = element("operation-status", in: settingsApp)
+        for _ in 0..<7 where !feedback.isHittable {
+            settingsApp.swipeUp()
+        }
+        XCTAssertTrue(feedback.isHittable)
+        XCTAssertTrue(feedback.label.contains("Manual sync failed."))
+    }
+
+    @MainActor
+    func testDriveRetryShowsProgressAndFailureInsideGoogleCard() throws {
+        for (flag, message, isWorking) in [
+            ("--ui-google-operation-working", "Checking Drive folder…", true),
+            ("--ui-google-operation-failed", "Drive could not finish setup. Try again.", false),
+        ] {
+            let app = launch(additionalArguments: [
+                "--ui-show-setup",
+                "--ui-health-request-complete",
+                "--ui-google-drive-unavailable",
+                flag,
+            ])
+            XCTAssertTrue(element("setup-screen", in: app).waitForExistence(timeout: 10))
+            let feedback = element("google-operation-status", in: app)
+            for _ in 0..<6 where !feedback.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(feedback.isHittable)
+            XCTAssertTrue(feedback.label.contains(message))
+            XCTAssertFalse(element("operation-status", in: app).exists)
+            XCTAssertEqual(app.buttons["Try Drive Again"].isEnabled, !isWorking)
+            capture(isWorking ? "setup-drive-retry-working" : "setup-drive-retry-failed", from: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testGoogleFailureIsVisibleWithCompletedDetailsCollapsed() throws {
+        let app = launch(additionalArguments: [
+            "--ui-show-setup",
+            "--ui-ready",
+            "--ui-google-operation-failed",
+        ])
+        XCTAssertTrue(element("setup-screen", in: app).waitForExistence(timeout: 10))
+        let feedback = element("google-operation-status", in: app)
+        for _ in 0..<6 where !feedback.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(feedback.isHittable)
+        XCTAssertTrue(feedback.label.contains("Drive could not finish setup. Try again."))
+        XCTAssertFalse(app.buttons["Open in Google Drive"].exists)
+        capture("setup-collapsed-google-failure", from: app)
+    }
+
+    @MainActor
     func testUserFailureRemainsVisibleOnHomeAndSync() throws {
         let arguments = ["--ui-ready", "--ui-operation-failed-user"]
         let homeApp = launch(additionalArguments: arguments)

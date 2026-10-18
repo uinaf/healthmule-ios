@@ -365,6 +365,7 @@ struct InlineProgressLabel: View {
 
 struct OperationBanner: View {
     let state: OperationState
+    var identifier = "operation-status"
 
     var body: some View {
         if state != .idle {
@@ -388,7 +389,7 @@ struct OperationBanner: View {
             }
             .healthMuleCard(padding: 14)
             .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("operation-status")
+            .accessibilityIdentifier(identifier)
         }
     }
 

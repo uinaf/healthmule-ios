@@ -442,7 +442,7 @@ final class AppModel {
         await Self.refreshHealthBeforeCredentialReplay(
             refreshHealth: { [self] in
                 await refreshHealthConnectionState(
-                    publishingCheckingState: !operationState.isWorking
+                    publishingCheckingState: false
                 )
             },
             resumeDrive: { [self] in
@@ -1203,7 +1203,8 @@ final class AppModel {
             guard
                 await refreshDriveFolder(
                     expectedEpoch: restoredEpoch,
-                    operationOrigin: .userInitiated
+                    operationOrigin: .userInitiated,
+                    settlingOperation: restoringState
                 ),
                 googleConnection.isDriveReady,
                 operationEpoch == expectedOperationEpoch,
@@ -1786,7 +1787,8 @@ final class AppModel {
     @discardableResult
     private func refreshDriveFolder(
         expectedEpoch: UInt64? = nil,
-        operationOrigin: OperationOrigin
+        operationOrigin: OperationOrigin,
+        settlingOperation: OperationState? = nil
     ) async -> Bool {
         let folderEpoch = expectedEpoch ?? googleTransitionEpoch
         let folderOperationEpoch = operationEpoch
@@ -1816,17 +1818,23 @@ final class AppModel {
                     for: error,
                     expectedEpoch: folderEpoch
                 )
+            let markedUnavailable: Bool
             if
                 !requiresReconnect,
                 !isLocalStorageFailure,
                 error is DriveAPIError
             {
-                _ = await markDriveUnavailableIfNeeded(
+                markedUnavailable = await markDriveUnavailableIfNeeded(
                     expectedEpoch: folderEpoch
                 )
+            } else {
+                markedUnavailable = false
             }
             if operationEpoch == folderOperationEpoch,
-               !operationState.isWorking
+               !operationState.isWorking || operationState == settlingOperation,
+               requiresReconnect
+                    || markedUnavailable
+                    || isGoogleTransitionCurrent(folderEpoch)
             {
                 setOperationState(
                     .failed(
@@ -2573,7 +2581,17 @@ final class AppModel {
             from: BackfillRange.thirtyDays.startDate(customDate: .now)
         )
         enabledMetrics = Set(HealthMetric.allCases)
-        if arguments.contains("--ui-operation-working") {
+        if arguments.contains("--ui-google-operation-working") {
+            setOperationState(
+                .working(.googleConnection, "Checking Drive folder…"),
+                origin: .userInitiated
+            )
+        } else if arguments.contains("--ui-google-operation-failed") {
+            setOperationState(
+                .failed(.googleConnection, "Drive could not finish setup. Try again."),
+                origin: .userInitiated
+            )
+        } else if arguments.contains("--ui-operation-working") {
             setOperationState(
                 .working(.sync, "Syncing"),
                 origin: .automatic
