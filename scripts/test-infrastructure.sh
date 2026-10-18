@@ -461,8 +461,10 @@ grep -Fq 'signingStyle -string automatic' scripts/ci/upload-testflight.sh ||
 if grep -Fq 'Apple Distribution' project.yml scripts/ci/upload-testflight.sh; then
   fail "Automatic TestFlight signing must not force a manual distribution identity."
 fi
-grep -Fq 'CODE_SIGN_IDENTITY="${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}"' scripts/ci/upload-testflight.sh ||
-  fail "TestFlight archive must pin the imported development certificate."
+grep -Fq 'CODE_SIGN_IDENTITY="Apple Development"' scripts/ci/upload-testflight.sh ||
+  fail "Automatic TestFlight archives must use the Apple Development selector."
+grep -Fq 'OTHER_CODE_SIGN_FLAGS="--keychain \"${HEALTHMULE_SIGNING_KEYCHAIN_PATH}\""' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight archive signing must use the imported identity keychain."
 grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
@@ -571,20 +573,53 @@ set -euo pipefail
 if [[ "${1:-}" != "x509" ]]; then
   exec "${SIGNING_FIXTURE_OPENSSL}" "$@"
 fi
-cat >/dev/null
+certificate=
+for ((index=1; index<=$#; index++)); do
+  if [[ "${!index}" == "-in" ]]; then
+    ((index+=1))
+    certificate="$(cat "${!index}")"
+    break
+  fi
+done
+[[ -n "${certificate}" ]] || certificate="$(cat)"
 team=54QY62678F
 [[ "${SIGNING_FIXTURE_MODE:-valid}" != "wrong-team" ]] || team=WRONG12345
 printf 'subject=\n    OU=%s\n    CN=Apple Development: CI\n' "${team}"
-printf 'sha1 Fingerprint=11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11\n'
+if [[ "${certificate}" == "wrong-archive-certificate" ]]; then
+  printf 'sha1 Fingerprint=22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22\n'
+else
+  printf 'sha1 Fingerprint=11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11\n'
+fi
 EOF
 chmod +x "${signing_fixture_dir}/bin/openssl"
+cat >"${signing_fixture_dir}/bin/codesign" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+prefix=
+while [[ "$#" -gt 1 ]]; do
+  case "${1}" in
+    --extract-certificates) prefix="${2}"; shift ;;
+    --extract-certificates=*) prefix="${1#*=}" ;;
+  esac
+  shift
+done
+[[ -n "${prefix}" ]]
+app="$(basename "${1}")"
+touch "${SIGNING_FIXTURE_STATE}/inspected-${app}"
+if [[ "${SIGNING_FIXTURE_ARCHIVE_MISMATCH:-}" == "${app}" ]]; then
+  printf 'wrong-archive-certificate' >"${prefix}0"
+else
+  printf 'fixture certificate' >"${prefix}0"
+fi
+EOF
+chmod +x "${signing_fixture_dir}/bin/codesign"
 
 prepare_signing_fixture() {
   rm -rf "${signing_fixture_dir}/work" "${signing_fixture_dir}/state"
   mkdir -p "${signing_fixture_dir}/work/scripts/ci" \
     "${signing_fixture_dir}/work/Config" "${signing_fixture_dir}/state" \
     "${signing_fixture_dir}/work/runner temp"
-  cp scripts/ci/{configure,validate,cleanup}-testflight*.sh \
+  cp scripts/ci/{configure,validate,cleanup,upload}-testflight*.sh \
     "${signing_fixture_dir}/work/scripts/ci/"
   printf '%s\n' '/Users/runner/Library/Keychains/login.keychain-db' \
     '/Library/Keychains/System Keychain.keychain' \
@@ -639,6 +674,38 @@ if grep -Eq 'fixture-p12-password|Zml4dHVyZQ==|BEGIN PRIVATE KEY' \
   fail "Signing setup must not export credential payloads to later steps."
 fi
 assert_signing_cleanup
+
+for mismatched_archive_app in HealthMule.app HealthMuleWatch.app; do
+  prepare_signing_fixture
+  run_signing_fixture configure >/dev/null
+  printf '#!/usr/bin/env bash\nexit 0\n' >"${signing_fixture_dir}/work/scripts/generate-project.sh"
+  cat >"${signing_fixture_dir}/work/scripts/xcodebuild.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1}" == "archive" ]]; then
+  mkdir -p "${RUNNER_TEMP}/HealthMule.xcarchive/Products/Applications/HealthMule.app/Watch/HealthMuleWatch.app"
+else
+  touch "${SIGNING_FIXTURE_STATE}/exported"
+fi
+EOF
+  chmod +x "${signing_fixture_dir}/work/scripts/"{generate-project,xcodebuild}.sh
+  if run_signing_fixture upload HEALTHMULE_XCODE_LOCKED=1 \
+    GITHUB_RUN_NUMBER=1 GITHUB_RUN_ATTEMPT=1 \
+    GITHUB_STEP_SUMMARY="${signing_fixture_dir}/work/summary" \
+    HEALTHMULE_SIGNING_KEYCHAIN_PATH="${signing_keychain}" \
+    HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH="${signing_fixture_dir}/work/runner temp/healthmule-testflight/AuthKey_ABC123DEFG.p8" \
+    SIGNING_FIXTURE_ARCHIVE_MISMATCH="${mismatched_archive_app}" \
+    >"${signing_fixture_dir}/state/upload.log" 2>&1; then
+    fail "TestFlight must reject an archive signed with an unexpected certificate."
+  fi
+  grep -Fq 'The archived app or Watch app is not signed with the pinned development certificate.' \
+    "${signing_fixture_dir}/state/upload.log" ||
+    fail "A mismatched archive must fail its certificate check before metadata or export."
+  [[ -e "${signing_fixture_dir}/state/inspected-${mismatched_archive_app}" && \
+     ! -e "${signing_fixture_dir}/state/exported" ]] ||
+    fail "TestFlight must inspect ${mismatched_archive_app} and refuse export when its signing identity differs."
+  assert_signing_cleanup
+done
 
 for signing_failure in wrong wrong-kind wrong-team absent import-error; do
   prepare_signing_fixture

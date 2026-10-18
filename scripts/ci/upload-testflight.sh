@@ -51,9 +51,21 @@ build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
   -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}" \
   -showBuildTimingSummary \
   CODE_SIGN_STYLE=Automatic \
-  CODE_SIGN_IDENTITY="${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}" \
+  CODE_SIGN_IDENTITY="Apple Development" \
+  OTHER_CODE_SIGN_FLAGS="--keychain \"${HEALTHMULE_SIGNING_KEYCHAIN_PATH}\"" \
   DEVELOPMENT_TEAM="${HEALTHMULE_APPLE_TEAM_ID}" \
   CURRENT_PROJECT_VERSION="${build_number}"
+
+for signed_app in \
+  "${archive_path}/Products/Applications/HealthMule.app" \
+  "${archive_path}/Products/Applications/HealthMule.app/Watch/HealthMuleWatch.app"; do
+  certificate_prefix="${RUNNER_TEMP}/healthmule-testflight/$(basename "${signed_app}")-certificate-"
+  codesign --display --extract-certificates="${certificate_prefix}" "${signed_app}" >/dev/null
+  openssl x509 -inform DER -in "${certificate_prefix}0" -noout -fingerprint -sha1 |
+    tr -d ':' |
+    grep -Eiq "^sha1 Fingerprint=${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}$" ||
+    fail "The archived app or Watch app is not signed with the pinned development certificate."
+done
 
 archive_info="${archive_path}/Info.plist"
 version="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "${archive_info}")"
