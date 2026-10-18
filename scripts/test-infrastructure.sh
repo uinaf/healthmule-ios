@@ -461,6 +461,8 @@ grep -Fq 'signingStyle -string automatic' scripts/ci/upload-testflight.sh ||
 if grep -Fq 'Apple Distribution' project.yml scripts/ci/upload-testflight.sh; then
   fail "Automatic TestFlight signing must not force a manual distribution identity."
 fi
+grep -Fq 'CODE_SIGN_IDENTITY="${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}"' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight archive must pin the imported development certificate."
 grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
@@ -541,6 +543,9 @@ case "${command}" in
     [[ "${SIGNING_FIXTURE_MODE:-valid}" != "import-error" ]] || exit 1
     touch "${SIGNING_FIXTURE_STATE}/imported"
     ;;
+  find-certificate)
+    printf 'fixture certificate\n'
+    ;;
   find-identity)
     [[ -f "${SIGNING_FIXTURE_STATE}/imported" ]] || exit 1
     case "${SIGNING_FIXTURE_MODE:-valid}" in
@@ -559,6 +564,20 @@ case "${command}" in
 esac
 EOF
 chmod +x "${signing_fixture_dir}/bin/security"
+signing_openssl_path="$(command -v openssl)"
+cat >"${signing_fixture_dir}/bin/openssl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "x509" ]]; then
+  exec "${SIGNING_FIXTURE_OPENSSL}" "$@"
+fi
+cat >/dev/null
+team=54QY62678F
+[[ "${SIGNING_FIXTURE_MODE:-valid}" != "wrong-team" ]] || team=WRONG12345
+printf 'subject=\n    OU=%s\n    CN=Apple Development: CI\n' "${team}"
+printf 'sha1 Fingerprint=11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11\n'
+EOF
+chmod +x "${signing_fixture_dir}/bin/openssl"
 
 prepare_signing_fixture() {
   rm -rf "${signing_fixture_dir}/work" "${signing_fixture_dir}/state"
@@ -586,6 +605,7 @@ run_signing_fixture() {
       RUNNER_TEMP="${signing_fixture_dir}/work/runner temp" \
       GITHUB_ENV="${signing_fixture_dir}/work/github-env" \
       SIGNING_FIXTURE_STATE="${signing_fixture_dir}/state" \
+      SIGNING_FIXTURE_OPENSSL="${signing_openssl_path}" \
       "$@" "./scripts/ci/${script}-testflight.sh"
   )
 }
@@ -620,7 +640,7 @@ if grep -Eq 'fixture-p12-password|Zml4dHVyZQ==|BEGIN PRIVATE KEY' \
 fi
 assert_signing_cleanup
 
-for signing_failure in wrong wrong-kind absent import-error; do
+for signing_failure in wrong wrong-kind wrong-team absent import-error; do
   prepare_signing_fixture
   if run_signing_fixture configure SIGNING_FIXTURE_MODE="${signing_failure}" \
     >/dev/null 2>&1; then

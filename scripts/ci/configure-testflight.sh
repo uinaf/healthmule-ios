@@ -43,6 +43,13 @@ rm "${credentials_dir}/identity.p12"
 security find-identity -v -p codesigning "${keychain_path}" | \
   grep -Eq "^[[:space:]]*[0-9]+\\) ${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1} \"Apple Development:" ||
   fail "The configured development signing identity is missing, expired, or has no private key."
+certificate_details="$(security find-certificate -c 'Apple Development:' -p "${keychain_path}" |
+  openssl x509 -noout -subject -fingerprint -sha1 -nameopt sep_multiline,sname)"
+grep -Eq "^[[:space:]]*OU=${HEALTHMULE_APPLE_TEAM_ID}$" <<<"${certificate_details}" ||
+  fail "The pinned development certificate does not belong to the configured Apple team."
+tr -d ':' <<<"${certificate_details}" |
+  grep -Eiq "^sha1 Fingerprint=${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}$" ||
+  fail "The imported development certificate does not match the pinned fingerprint."
 security list-keychains -d user -s "${keychain_path}" "${original_keychains[@]}"
 printf '%s\n' "${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY}" >"${api_key_path}"
 
