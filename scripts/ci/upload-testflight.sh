@@ -36,6 +36,13 @@ export_path="${RUNNER_TEMP}/HealthMuleExport"
 export_options_path="${RUNNER_TEMP}/HealthMuleExportOptions.plist"
 build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
 
+provisioning_options=(
+  -allowProvisioningUpdates
+  -authenticationKeyPath "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}"
+  -authenticationKeyID "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}"
+  -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}"
+)
+
 ./scripts/generate-project.sh
 
 ./scripts/xcodebuild.sh archive \
@@ -45,10 +52,7 @@ build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
   -configuration Release \
   -destination "generic/platform=iOS" \
   -archivePath "${archive_path}" \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}" \
-  -authenticationKeyID "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}" \
-  -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}" \
+  "${provisioning_options[@]}" \
   -showBuildTimingSummary \
   CODE_SIGN_STYLE=Automatic \
   CODE_SIGN_IDENTITY="Apple Development" \
@@ -85,17 +89,14 @@ plutil -insert uploadSymbols -bool true "${export_options_path}"
   -archivePath "${archive_path}" \
   -exportPath "${export_path}" \
   -exportOptionsPlist "${export_options_path}" \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}" \
-  -authenticationKeyID "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}" \
-  -authenticationKeyIssuerID "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}"
+  "${provisioning_options[@]}"
 
-{
-  echo "## TestFlight upload accepted"
-  echo
-  echo "- Version: ${version} (${archived_build})"
-  echo "- Bundle ID: ${bundle_identifier}"
-  echo "- Commit: ${GITHUB_SHA:-unknown}"
-  echo
-  echo "App Store Connect processing continues after this job succeeds."
-} >>"${GITHUB_STEP_SUMMARY}"
+cat >>"${GITHUB_STEP_SUMMARY}" <<EOF
+## TestFlight upload accepted
+
+- Version: ${version} (${archived_build})
+- Bundle ID: ${bundle_identifier}
+- Commit: ${GITHUB_SHA:-unknown}
+
+App Store Connect processing continues after this job succeeds.
+EOF
