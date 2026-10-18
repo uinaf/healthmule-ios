@@ -66,7 +66,7 @@ What the gates prove:
 
 ## Delivery
 
-- Repository admins push to `main` directly; contributors open pull requests.
+- Open pull requests and merge after the required `verify` check passes.
 - A push to `main` runs `Verify` only; nothing ships on merge.
 - `Upload TestFlight` is a manual dispatch from `main`
   (`gh workflow run testflight.yml --ref main`) that uploads a signed build to

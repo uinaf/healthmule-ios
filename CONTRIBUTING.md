@@ -75,7 +75,7 @@ installations to the most recent build. Remove personal health data from reports
 - Add meaningful tests for behavior changes.
 - Update the owning documentation when a contract changes.
 - Fill in the inherited [pull request
-  template](https://github.com/altaywtf/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
+  template](https://github.com/uinaf/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
   with risks, verification evidence, and complexity impact.
 - Add a sanitized review aid, such as a screenshot or recording, when it
   explains the change faster than prose.
@@ -86,7 +86,7 @@ installations to the most recent build. Remove personal health data from reports
   `verify`. The shared scan is the last step of `verify`: it passes through
   on pull requests and scans on pushes to `main` and manual runs, where a
   failure turns `verify` red.
-- Checks are non-strict; repository admins retain direct writes through
-  a bypass limited to the check ruleset. Renovate has no bypass.
+- Checks are non-strict. The repository check ruleset has no bypass;
+  changes reach `main` through pull requests after `verify` passes.
 - Shared release-age and major/digest rules remain unchanged. Add new voting
   checks to the ruleset; workflow presence alone does not require them.

@@ -100,7 +100,7 @@ deployment configuration.
 - [Physical-device acceptance testing](docs/DEVICE_TESTING.md)
 - [Architecture and privacy boundaries](docs/ARCHITECTURE.md)
 - [Product and export contract](docs/specs/healthkit-drive-exporter.md)
-- [Security reporting](https://github.com/altaywtf/.github/blob/main/SECURITY.md)
+- [Security reporting](https://github.com/uinaf/.github/blob/main/SECURITY.md)
 
 ## Contributing
 
