@@ -148,7 +148,13 @@ final class DriveAPIClientTests: XCTestCase {
     @MainActor
     func testConnectedAccountCleanupFinishesAfterConnectionStateChanges() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let keys = ["backfill.customStart", "backfill.selectedStart", "sync.driveExportsPaused"]
+        let keys = [
+            "backfill.customStart",
+            "backfill.selectedStart",
+            "sync.driveExportsPaused",
+            "sync.destinationAccountNamespace.v1",
+            "sync.lastSuccessful",
+        ]
         let previous = keys.map { UserDefaults.standard.object(forKey: $0) }
         defer {
             for (key, value) in zip(keys, previous) {
