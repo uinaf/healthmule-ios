@@ -444,6 +444,14 @@ cleanup_step_line="$(grep -nF -- '- name: Remove release credentials' "${testfli
   fail "TestFlight cleanup must run after the archive and upload step."
 grep -Fq 'HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY }}' "${testflight_workflow}" ||
   fail "The App Store Connect private key must be sourced from an Environment secret."
+for signing_secret in \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD; do
+  grep -Fq "${signing_secret}: \${{ secrets.${signing_secret} }}" "${testflight_workflow}" ||
+    fail "${signing_secret} must come from the release Environment secrets."
+done
+grep -Fq 'HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1: ${{ vars.HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1 }}' "${testflight_workflow}" ||
+  fail "The release workflow must supply the pinned development certificate fingerprint."
 grep -Fq 'method -string app-store-connect' scripts/ci/upload-testflight.sh ||
   fail "TestFlight export must use the current App Store Connect distribution method."
 grep -Fq 'destination -string upload' scripts/ci/upload-testflight.sh ||
@@ -453,6 +461,8 @@ grep -Fq 'signingStyle -string automatic' scripts/ci/upload-testflight.sh ||
 if grep -Fq 'Apple Distribution' project.yml scripts/ci/upload-testflight.sh; then
   fail "Automatic TestFlight signing must not force a manual distribution identity."
 fi
+grep -Fq 'CODE_SIGN_IDENTITY="${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}"' scripts/ci/upload-testflight.sh ||
+  fail "TestFlight archive must pin the imported development certificate."
 grep -Fq -- '-allowProvisioningUpdates' scripts/ci/upload-testflight.sh ||
   fail "TestFlight must allow Xcode to manage CI provisioning assets."
 grep -Fq -- '-authenticationKeyPath' scripts/ci/upload-testflight.sh ||
@@ -463,6 +473,9 @@ grep -Fq 'exec ./scripts/with-xcode-lock.sh "$0"' scripts/ci/upload-testflight.s
 valid_testflight_environment=(
   env
   HEALTHMULE_APPLE_TEAM_ID=54QY62678F
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64=Zml4dHVyZQ==
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD=fixture-p12-password
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1=1111111111111111111111111111111111111111
   HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'
   HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID=12345678-1234-1234-1234-123456789abc
   HEALTHMULE_APP_STORE_CONNECT_KEY_ID=ABC123DEFG
@@ -485,5 +498,173 @@ if "${valid_testflight_environment[@]}" \
   ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
   fail "TestFlight validation must reject a non-iOS Google OAuth client ID."
 fi
+for missing_signing_value in \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1; do
+  if "${valid_testflight_environment[@]}" "${missing_signing_value}=" \
+    ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
+    fail "TestFlight validation must reject missing ${missing_signing_value}."
+  fi
+done
+if "${valid_testflight_environment[@]}" \
+  HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1=not-a-fingerprint \
+  ./scripts/ci/validate-testflight-configuration.sh >/dev/null 2>&1; then
+  fail "TestFlight validation must reject an invalid certificate fingerprint."
+fi
+
+signing_fixture_dir="${dependency_fixture_dir}/signing"
+mkdir -p "${signing_fixture_dir}/bin"
+cat >"${signing_fixture_dir}/bin/security" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+command="${1:?}"
+shift
+case "${command}" in
+  list-keychains)
+    if [[ "${1:-}" == "-d" ]]; then shift 2; fi
+    if [[ "${1:-}" == "-s" ]]; then
+      shift
+      printf '%s\n' "$@" >"${SIGNING_FIXTURE_STATE}/keychains"
+    else
+      if [[ "${SIGNING_FIXTURE_MODE:-valid}" == "snapshot-error" ]]; then
+        printf '    "/partial/keychain"\n'
+        exit 1
+      fi
+      while IFS= read -r keychain; do
+        printf '    "%s"\n' "${keychain}"
+      done <"${SIGNING_FIXTURE_STATE}/keychains"
+    fi
+    ;;
+  create-keychain)
+    touch "${@: -1}" "${SIGNING_FIXTURE_STATE}/created"
+    ;;
+  import)
+    [[ "${SIGNING_FIXTURE_MODE:-valid}" != "import-error" ]] || exit 1
+    touch "${SIGNING_FIXTURE_STATE}/imported"
+    ;;
+  find-certificate)
+    printf 'fixture certificate\n'
+    ;;
+  find-identity)
+    [[ -f "${SIGNING_FIXTURE_STATE}/imported" ]] || exit 1
+    case "${SIGNING_FIXTURE_MODE:-valid}" in
+      wrong-kind) printf '  1) 1111111111111111111111111111111111111111 "Developer ID Application: CI (54QY62678F)"\n     1 valid identities found\n' ;;
+      absent) printf '     0 valid identities found\n' ;;
+      wrong) printf '  1) 2222222222222222222222222222222222222222 "Apple Development: CI (54QY62678F)"\n     1 valid identities found\n' ;;
+      *) printf '  1) 1111111111111111111111111111111111111111 "Apple Development: CI (54QY62678F)"\n     1 valid identities found\n' ;;
+    esac
+    ;;
+  delete-keychain)
+    rm -f "${@: -1}"
+    touch "${SIGNING_FIXTURE_STATE}/deleted"
+    ;;
+  unlock-keychain|set-keychain-settings|set-key-partition-list) ;;
+  *) printf 'Unexpected security command: %s\n' "${command}" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "${signing_fixture_dir}/bin/security"
+signing_openssl_path="$(command -v openssl)"
+cat >"${signing_fixture_dir}/bin/openssl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "x509" ]]; then
+  exec "${SIGNING_FIXTURE_OPENSSL}" "$@"
+fi
+cat >/dev/null
+team=54QY62678F
+[[ "${SIGNING_FIXTURE_MODE:-valid}" != "wrong-team" ]] || team=WRONG12345
+printf 'subject=\n    OU=%s\n    CN=Apple Development: CI\n' "${team}"
+printf 'sha1 Fingerprint=11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11:11\n'
+EOF
+chmod +x "${signing_fixture_dir}/bin/openssl"
+
+prepare_signing_fixture() {
+  rm -rf "${signing_fixture_dir}/work" "${signing_fixture_dir}/state"
+  mkdir -p "${signing_fixture_dir}/work/scripts/ci" \
+    "${signing_fixture_dir}/work/Config" "${signing_fixture_dir}/state" \
+    "${signing_fixture_dir}/work/runner temp"
+  cp scripts/ci/{configure,validate,cleanup}-testflight*.sh \
+    "${signing_fixture_dir}/work/scripts/ci/"
+  printf '%s\n' '/Users/runner/Library/Keychains/login.keychain-db' \
+    '/Library/Keychains/System Keychain.keychain' \
+    >"${signing_fixture_dir}/state/keychains"
+  cp "${signing_fixture_dir}/state/keychains" \
+    "${signing_fixture_dir}/state/original-keychains"
+  : >"${signing_fixture_dir}/work/github-env"
+}
+
+run_signing_fixture() {
+  local script="${1}"
+  shift
+  (
+    cd "${signing_fixture_dir}/work"
+    "${valid_testflight_environment[@]}" \
+      CI=true GITHUB_ACTIONS=true \
+      PATH="${signing_fixture_dir}/bin:${PATH}" \
+      RUNNER_TEMP="${signing_fixture_dir}/work/runner temp" \
+      GITHUB_ENV="${signing_fixture_dir}/work/github-env" \
+      SIGNING_FIXTURE_STATE="${signing_fixture_dir}/state" \
+      SIGNING_FIXTURE_OPENSSL="${signing_openssl_path}" \
+      "$@" "./scripts/ci/${script}-testflight.sh"
+  )
+}
+
+assert_signing_cleanup() {
+  run_signing_fixture cleanup >/dev/null
+  cmp -s "${signing_fixture_dir}/state/keychains" \
+    "${signing_fixture_dir}/state/original-keychains" ||
+    fail "Signing cleanup must restore the original keychain search list."
+  [[ -f "${signing_fixture_dir}/state/deleted" ]] ||
+    fail "Signing cleanup must delete its temporary keychain."
+  [[ ! -e "${signing_fixture_dir}/work/runner temp/healthmule-testflight" && \
+     ! -e "${signing_fixture_dir}/work/Config/Signing.xcconfig" && \
+     ! -e "${signing_fixture_dir}/work/Config/Secrets.xcconfig" ]] ||
+    fail "Signing cleanup must remove ephemeral credentials."
+}
+
+prepare_signing_fixture
+run_signing_fixture configure >/dev/null
+signing_keychain="${signing_fixture_dir}/work/runner temp/healthmule-testflight/signing.keychain-db"
+grep -Fxq "${signing_keychain}" "${signing_fixture_dir}/state/keychains" ||
+  fail "Signing setup must make its imported identity available to Xcode."
+grep -Fxq "HEALTHMULE_SIGNING_KEYCHAIN_PATH=${signing_keychain}" \
+  "${signing_fixture_dir}/work/github-env" ||
+  fail "Signing setup must export the temporary keychain path."
+[[ -s "${signing_fixture_dir}/work/Config/Signing.xcconfig" && \
+   -s "${signing_fixture_dir}/work/Config/Secrets.xcconfig" ]] ||
+  fail "Signing setup must configure the app."
+if grep -Eq 'fixture-p12-password|Zml4dHVyZQ==|BEGIN PRIVATE KEY' \
+  "${signing_fixture_dir}/work/github-env"; then
+  fail "Signing setup must not export credential payloads to later steps."
+fi
+assert_signing_cleanup
+
+for signing_failure in wrong wrong-kind wrong-team absent import-error; do
+  prepare_signing_fixture
+  if run_signing_fixture configure SIGNING_FIXTURE_MODE="${signing_failure}" \
+    >/dev/null 2>&1; then
+    fail "Signing setup must reject ${signing_failure} instead of letting Xcode create another certificate."
+  fi
+  if grep -q '^HEALTHMULE_SIGNING_KEYCHAIN_PATH=' \
+    "${signing_fixture_dir}/work/github-env"; then
+    fail "Failed signing setup must not export a usable keychain."
+  fi
+  assert_signing_cleanup
+done
+
+prepare_signing_fixture
+if run_signing_fixture configure SIGNING_FIXTURE_MODE=snapshot-error >/dev/null 2>&1; then
+  fail "Signing setup must reject an incomplete keychain search-list snapshot."
+fi
+run_signing_fixture cleanup >/dev/null
+cmp -s "${signing_fixture_dir}/state/keychains" \
+  "${signing_fixture_dir}/state/original-keychains" ||
+  fail "Cleanup must preserve the search list when its snapshot failed."
+[[ ! -e "${signing_fixture_dir}/state/created" && \
+   ! -e "${signing_fixture_dir}/state/deleted" && \
+   ! -e "${signing_fixture_dir}/work/runner temp/healthmule-testflight" ]] ||
+  fail "A failed search-list snapshot must leave no signing keychain or credentials."
+
 grep -Eq 'xcodegen_sha256="[0-9a-f]{64}"' scripts/install-xcodegen.sh ||
   fail "The XcodeGen installer must pin a SHA-256 digest."

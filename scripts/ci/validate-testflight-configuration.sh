@@ -7,6 +7,9 @@ fail() {
 }
 
 : "${HEALTHMULE_APPLE_TEAM_ID:?HEALTHMULE_APPLE_TEAM_ID is required}"
+: "${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64:?Reusable development certificate is required}"
+: "${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD:?Development certificate password is required}"
+: "${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1:?Development certificate fingerprint is required}"
 : "${HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY:?HEALTHMULE_APP_STORE_CONNECT_API_PRIVATE_KEY is required}"
 : "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID:?HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID is required}"
 : "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID:?HEALTHMULE_APP_STORE_CONNECT_KEY_ID is required}"
@@ -15,6 +18,8 @@ fail() {
 
 [[ "${HEALTHMULE_APPLE_TEAM_ID}" =~ ^[A-Z0-9]{10}$ ]] ||
   fail "HEALTHMULE_APPLE_TEAM_ID must be a 10-character Apple team identifier."
+[[ "${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1}" =~ ^[A-F0-9]{40}$ ]] ||
+  fail "HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1 must be a SHA-1 certificate fingerprint."
 [[ "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID}" =~ ^[A-Z0-9]{10}$ ]] ||
   fail "HEALTHMULE_APP_STORE_CONNECT_KEY_ID must be a 10-character key identifier."
 [[ "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] ||
