@@ -94,7 +94,7 @@ struct SyncProgress: Equatable, Sendable {
     }
 
     var accessibilityValue: String {
-        "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
+        presentationText
     }
 }
 

@@ -80,13 +80,18 @@ installations to the most recent build. Remove personal health data from reports
 - Add a sanitized review aid, such as a screenshot or recording, when it
   explains the change faster than prose.
 
-## Dependency automerge
+## Dependencies
 
-- Eligible Renovate updates use GitHub auto-merge after required checks:
-  `verify`. The shared scan is the last step of `verify`: it passes through
-  on pull requests and scans on pushes to `main` and manual runs, where a
-  failure turns `verify` red.
-- Checks are non-strict. The repository check ruleset has no bypass;
-  changes reach `main` through pull requests after `verify` passes.
-- Shared release-age and major/digest rules remain unchanged. Add new voting
-  checks to the ruleset; workflow presence alone does not require them.
+[project.yml](project.yml) owns the exact GoogleSignIn version. To update it,
+change `exactVersion`, then run:
+
+```sh
+make project
+./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthMule.xcodeproj -scheme HealthMule -derivedDataPath .artifacts/DerivedData
+./scripts/check-app-dependencies.sh
+make verify-full
+```
+
+Commit the generated project and shared workspace `Package.resolved` together;
+do not edit them by hand. [Renovate configuration](renovate.json) owns automated
+update policy. Dependency pull requests use the same required `verify` check.

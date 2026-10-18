@@ -2,7 +2,6 @@
 
 HealthMule exports a read-only allowlist of Apple Health metrics as stable
 daily JSON files in the user's own Google Drive. There is no developer backend.
-The privacy boundaries in Repo rules are non-negotiable.
 
 ## Start here
 
@@ -27,14 +26,10 @@ The privacy boundaries in Repo rules are non-negotiable.
   and `make build` work even when `xcode-select` points at CommandLineTools.
 - `make test`, `make smoke`, `make harness`, and `make run` get no such fallback. They need
   `xcode-select` pointed at a full Xcode.
-- `xcrun simctl` and every tool that resolves Xcode through `xcode-select`,
-  the Claude Code iOS Simulator MCP included, fail until an operator runs
-  `sudo xcode-select -s /Applications/Xcode.app`. Use `./scripts/xcrun.sh`
-  meanwhile.
-- `make test`, `make smoke`, `make harness`, and `make verify-full` boot a cold target and wait
-  for it before testing. They shut it down on exit only when that invocation
-  booted it; an already-booted Simulator remains running. This avoids the
-  `SBMainWorkspace ... Busy` launch race without leaking a headless Simulator.
+- Use `./scripts/xcrun.sh simctl` when `xcode-select` points at CommandLineTools.
+  Tools without that wrapper need an operator to select a full Xcode.
+- Simulator test commands wait for boot and shut down only devices they booted.
+  Leave already-running Simulators alone.
 - XcodeGen is pinned and provisioned into `.artifacts/toolchain` by
   `make project`. Do not install it separately; a different version rewrites the
   whole project file.
@@ -54,9 +49,6 @@ What the gates prove:
   those three independent lanes concurrently with a bounded job count.
 - Parsing is not type checking, so app, Watch, and UI changes also need
   `make build` or `make smoke` locally.
-- This public repository uses standard GitHub-hosted `ubuntu-26.04` and
-  `macos-26` (Apple silicon, Xcode 26) runners. Swift verification stays on
-  `ubuntu-24.04` because the 26.04 image has no Swift toolchain.
 - Required CI always runs `make verify` on Linux. It adds `make build` on macOS
   when app, Watch, project, package, build-script, or compile-workflow inputs
   change; documentation-only and unrelated automation changes skip that lane.
@@ -80,8 +72,9 @@ What the gates prove:
 - HealthKit is read-only. Never add HealthKit write types or entitlements.
 - Never log health values, OAuth tokens, record bodies, or raw metadata.
 - Preserve explicit JSON `null` values and unknown fields in exported records.
-- Keep credentials in `Config/Secrets.xcconfig` and Keychain; neither is
-  committed.
+- Keep local OAuth configuration in ignored `Config/Secrets.xcconfig`, signing
+  in ignored `Config/Signing.xcconfig`, and runtime tokens in Keychain. Never
+  commit credentials or client secrets.
 - Simulator fixtures are development proof only. HealthKit background delivery
   and real Drive uploads require the physical-device checklist in the docs.
 

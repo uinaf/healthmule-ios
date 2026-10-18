@@ -292,7 +292,6 @@ final class AppConfigurationTests: XCTestCase {
 
     func testLatestBackgroundDeliveryResultReplacesAndClearsAdvisoryState() {
         var state = BackgroundDeliveryRegistrationState()
-        let healthAuthorizationState = HealthAuthorizationState.requestCompleted
 
         state.apply(
             BackgroundDeliveryRegistrationSummary(
@@ -320,8 +319,6 @@ final class AppConfigurationTests: XCTestCase {
         )
 
         XCTAssertTrue(state.failedEnabledMetrics.isEmpty)
-        XCTAssertEqual(healthAuthorizationState, .requestCompleted)
-        XCTAssertTrue(healthAuthorizationState.allowsQueries)
     }
 
     func testHealthReadTypesFollowEnabledMetricSelection() throws {
@@ -603,7 +600,7 @@ final class AppConfigurationTests: XCTestCase {
     @MainActor
     func testHealthStatusResolvesBeforeCredentialReplayCanSuspend() async {
         var healthState = HealthAuthorizationState.checking
-        let replayGate = AppModelSuspensionGate()
+        let replayGate = AsyncSuspensionGate()
 
         let refreshTask = Task { @MainActor in
             await AppModel.refreshHealthBeforeCredentialReplay(
@@ -942,37 +939,5 @@ final class AppConfigurationTests: XCTestCase {
             BackfillDateCodec.string(from: date, timeZone: timeZone),
             "2026-07-23"
         )
-    }
-}
-
-private actor AppModelSuspensionGate {
-    private var isSuspended = false
-    private var isReleased = false
-    private var suspensionWaiters: [CheckedContinuation<Void, Never>] = []
-    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
-
-    func suspend() async {
-        isSuspended = true
-        let waiters = suspensionWaiters
-        suspensionWaiters.removeAll()
-        waiters.forEach { $0.resume() }
-        guard !isReleased else { return }
-        await withCheckedContinuation { continuation in
-            releaseWaiters.append(continuation)
-        }
-    }
-
-    func waitUntilSuspended() async {
-        guard !isSuspended else { return }
-        await withCheckedContinuation { continuation in
-            suspensionWaiters.append(continuation)
-        }
-    }
-
-    func release() {
-        isReleased = true
-        let waiters = releaseWaiters
-        releaseWaiters.removeAll()
-        waiters.forEach { $0.resume() }
     }
 }

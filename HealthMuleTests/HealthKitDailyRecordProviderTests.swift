@@ -107,11 +107,6 @@ final class HealthKitDailyRecordProviderTests: XCTestCase {
             unit: .secondUnit(with: .milli),
             device: watch
         )
-        let oldSamples = HealthSourceProvenance.uniqueSamples(
-            directSamples: [weight, steps, restingHeartRate, hrv],
-            reusedQuantitySamples: [],
-            selectedSamples: []
-        )
         let newSamples = HealthSourceProvenance.uniqueSamples(
             directSamples: [steps],
             reusedQuantitySamples: HealthSourceProvenance.reusedQuantitySamples(
@@ -123,8 +118,10 @@ final class HealthKitDailyRecordProviderTests: XCTestCase {
             selectedSamples: []
         )
 
-        XCTAssertEqual(Set(newSamples.keys), Set(oldSamples.keys))
-        XCTAssertEqual(newSamples.count, oldSamples.count)
+        XCTAssertEqual(
+            Set(newSamples.keys),
+            Set([weight.uuid, steps.uuid, restingHeartRate.uuid, hrv.uuid])
+        )
         XCTAssertEqual(
             Set(newSamples.values.compactMap(\.device?.name)),
             Set(["Phone", "Watch"])
@@ -153,7 +150,6 @@ final class HealthKitDailyRecordProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(samples.map(\.uuid), [restingHeartRate.uuid])
-        XCTAssertFalse(samples.contains { $0.uuid == weight.uuid })
     }
 
     func testVO2FetchWindowCoversLaterDaysFromTheFirstQuery() {

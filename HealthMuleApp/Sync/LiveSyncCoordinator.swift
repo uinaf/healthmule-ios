@@ -477,7 +477,7 @@ actor LiveSyncCoordinator {
         existingRecordDates _: [LocalDate]
     ) -> Date {
         // Older artifacts can remain repair targets after a range is narrowed,
-        // but they must never widen R4's active VO2 carry-forward window.
+        // but they must never widen the active VO2 carry-forward window.
         requestedStart
     }
 

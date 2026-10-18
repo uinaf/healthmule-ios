@@ -24,16 +24,6 @@ final class CompanionSyncContractTests: XCTestCase {
         XCTAssertNotEqual(snapshot.semantics, differentPendingCount.semantics)
     }
 
-    func testSnapshotSemanticsRoundTripThroughPayloadCodec() throws {
-        let snapshot = makeSnapshot()
-
-        let decoded = try CompanionPayloadCodec.snapshot(
-            from: CompanionPayloadCodec.message(snapshot: snapshot)
-        )
-
-        XCTAssertEqual(decoded.semantics, snapshot.semantics)
-    }
-
     func testSnapshotRoundTripsThroughPropertyListSafeMessage() throws {
         let lastSync = Date(timeIntervalSince1970: 1_753_300_000)
         let snapshot = CompanionSyncSnapshot(

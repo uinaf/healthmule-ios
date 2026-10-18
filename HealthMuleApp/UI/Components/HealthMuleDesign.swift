@@ -7,9 +7,6 @@ enum HealthMuleStyle {
     static let sectionSpacing: CGFloat = 28
     static let rowIconSize: CGFloat = 28
 
-    /// One canonical scale so screens cannot drift apart. Card titles and body
-    /// copy sit a step below the system defaults, which read oversized in a
-    /// dense status app.
     enum Text {
         static let heroTitle = Font.title2.weight(.semibold)
         static let heroMessage = Font.subheadline
@@ -208,9 +205,6 @@ struct SectionHeading: View {
     }
 }
 
-/// Explanatory copy for the group above it. iOS puts this below its section,
-/// not above it as a subtitle. A heading answers "what is this". A footer
-/// answers "what does it mean".
 struct SectionFooter: View {
     let text: String
     /// Set when the section's own element already announces this string, so
@@ -274,8 +268,6 @@ struct StatusHero<Action: View>: View {
     }
 }
 
-/// The queue facts shown on both Home and Sync. One component so the two
-/// screens cannot disagree about their order, labels, or type.
 struct SyncFactsRow: View {
     let summary: SyncSummary
 

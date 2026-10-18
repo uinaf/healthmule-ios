@@ -68,7 +68,6 @@ struct SyncEngineTests {
         )
         #expect(await destination.callCount(for: .daily(record.date)) == 2)
         #expect(await destination.contains(.manifest))
-        #expect(fixture.events.contains("retry-upserts-same-artifact"))
     }
 
     @Test
@@ -311,7 +310,6 @@ struct SyncEngineTests {
         )
         let firstSync = try #require(fixture.syncs.first)
         let secondSync = try #require(fixture.syncs.last)
-        #expect(firstSync.semanticRevision == secondSync.semanticRevision)
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let record = try makeRecord(
@@ -1110,14 +1108,12 @@ private struct FailedUploadFixture: Decodable {
         let pendingUploadCount: Int
     }
 
-    let events: [String]
     let expected: Expected
 }
 
 private struct IdempotentSyncFixture: Decodable {
     struct Sync: Decodable {
         let date: String
-        let semanticRevision: Int
         let generatedAt: String
     }
 

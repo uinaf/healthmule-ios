@@ -44,23 +44,26 @@ flowchart LR
     Drive -->|"protected multipart body"| BackgroundSession["Background URLSession"]
 ```
 
-Solid arrows are implemented runtime paths.
+## Runtime owners
 
-## Current implementation
+- [`AppModel`](../HealthMuleApp/App/AppModel.swift) wires platform services and
+  exposes UI state.
+- [`HealthMuleCore`](../Sources/HealthMuleCore) owns schema, aggregation, and
+  durable sync; [`HealthMuleShared`](../HealthMuleShared) owns companion messages
+  and presentation contracts.
+- [`HealthMuleApp`](../HealthMuleApp) adapts HealthKit, Google Drive, and
+  background execution; [`HealthMuleWatchApp`](../HealthMuleWatchApp) presents
+  sanitized phone status and requests sync.
 
-| Area | Current contract |
-|---|---|
-| App shell | An adaptive SwiftUI tab shell keeps Home and Settings as permanent destinations. Setup, sync repair, and per-metric status are focused Home drill-ins, preserving the four required product screens without giving one-time workflows permanent tab weight. `AppModel` owns observable UI state and platform services. |
-| Schema | `HealthMuleCore` encodes explicit JSON `null` values, validates local dates and offset-bearing timestamps, preserves unknown fields, and emits canonical sorted JSON. |
-| Aggregation | Pure Swift inputs cover latest values, stable arithmetic means, asleep-interval unioning, workout de-duplication, derived totals, and deterministic source ordering. |
-| Durable sync | `SyncEngine` and `FileSyncStore` implement semantic no-op detection, artifact revisions, a persistent retry queue, manifest ordering, retry backoff, reauthorization blocking, and full republishing when the destination account or managed folder identity changes. Date inventory is served from persisted artifact IDs; daily JSON is decoded on recover and reused in memory. The live index is schema v2 (SHA-256 digests and byte counts, not embedded payloads). A v1 index is migrated on recover and copied once to `sync-state.v1.json`; v2 is published with one atomic write. Older builds cannot read v2: rollback restores the frozen v1 copy (pre-migration revisions only) or deletes the index and recovers from artifact files. |
-| Reconciliation | `LiveSyncCoordinator` combines enabled-metric anchored deltas, a rolling three-day window, missing dates from the fixed selected backfill boundary, and existing dates that need metric-selection scrubbing. It stages each date before committing anchors. |
-| HealthKit | A dedicated `HealthKitClient` actor keeps queries, sample transformation, aggregation, and anchor/day-boundary persistence off the UI actor. The app requests read access only, tracks the authorization-request lifecycle without claiming to know individual read grants, distinguishes a failed status check from a completed request, reports last readable samples, registers observer queries, fetches anchored deltas, preserves original day boundaries, and builds daily records with HealthKit statistics and sample queries. |
-| Google | GoogleSignIn restores and refreshes credentials, distinguishing a revoked grant, an account change, and a temporary network failure. OAuth authorization and verified Drive readiness are separate states. Every token refresh and Drive request is bound to its expected stable account ID. `DriveArtifactDestination` maps core artifacts and retry classifications onto account-scoped folder discovery and stable-ID multipart upserts. |
-| Watch companion | A watchOS 26 SwiftUI app receives a sanitized versioned status snapshot and sends an idempotent sync request through reachable Watch Connectivity messaging. A Foundation-only presentation model combines snapshot age, activation, reachability, and request delivery so stale or unreachable state cannot claim Up to Date. The iPhone owns the sync state machine and publishes status through application context plus a queued user-info transfer. |
-| Background refresh | The app registers a SwiftUI `BGAppRefreshTask` handler, bootstraps the same services if launched cold, and submits a best-effort request with a one-hour earliest start. An existing pending request is kept instead of cancelled and shifted later. |
-| Reporting | `AppModel` exposes operation-specific results, retryable and permanently blocked upload counts, the latest locally staged date, the last successful manifest upload for the active destination, per-metric readability, redacted sync counts, and bounded automatic-activity receipts. |
-| Diagnostics | A bounded in-memory recorder emits redacted lifecycle metadata through `OSLog` and a shareable JSON file. |
+### Sync store migration and rollback
+
+`FileSyncStore` uses a v2 index containing SHA-256 digests and byte counts;
+`daily/<date>.json` is the sole record-content copy. Recovery migrates a v1
+index, saves it once as `sync-state.v1.json`, and atomically publishes v2.
+Older builds cannot read v2. Rollback must restore the frozen v1 copy (which
+contains only pre-migration revisions) or delete the index and recover from
+artifact files. The decision and benchmark history live in
+[Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
 
 ### Sync coordination
 
@@ -311,7 +314,6 @@ The UI never presents readable-type counts as permission progress.
   history window and is reused per day in a reconcile; clustering still runs
   against that day’s boundary.
 - A cluster is not eligible until four hours have elapsed since its latest
-- A cluster is not eligible until four hours have elapsed since its latest
   fragment. That prevents an incomplete pre-midnight fragment from being
   published on two adjacent dates.
 - Anchored sleep additions, edits, and deletions rebuild both their directly
@@ -497,41 +499,13 @@ queries](https://developer.apple.com/documentation/healthkit/executing-observer-
 and [background URLSession
 transfers](https://developer.apple.com/documentation/foundation/downloading-files-in-the-background).
 
-## Build and verification boundaries
+## Verification boundaries
 
-### Project generation and dependency pins
-
-- `project.yml` is the XcodeGen source of truth for the generated
-  `HealthMule.xcodeproj`.
-- GoogleSignIn is pinned exactly in `project.yml`. The shared workspace
-  `Package.resolved` is explicitly retained by `.gitignore` so the resolved
-  transitive graph can be committed with the project.
-- `scripts/check-app-dependencies.sh` verifies those versions match without
-  network access.
-- The weekly Dependency Watch workflow compares the pin to Google's latest
-  official release and opens one advisory issue per target version.
-
-To update GoogleSignIn, edit its `exactVersion` in `project.yml`, then run:
-
-```sh
-make project
-./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthMule.xcodeproj -scheme HealthMule -derivedDataPath .artifacts/DerivedData
-./scripts/check-app-dependencies.sh
-make verify-full
-```
-
-Do not hand-edit generated project structure or lock entries.
-
-### What each gate proves
-
-[Contributing](../CONTRIBUTING.md#validation) owns the command matrix and the
-[agent guide](../AGENTS.md#validation) owns what each gate proves.
-
-Snapshot presentation, freshness, privacy, semantic publication, and request
-ordering are deterministic core tests. No gate proves HealthKit authorization,
-observer delivery, Google OAuth, Drive uploads, background relaunch behavior, or
-paired-device `WCSession` transport. Prove those against the
-[physical-device checklist](DEVICE_TESTING.md).
+[Contributing](../CONTRIBUTING.md#validation) owns validation and dependency
+update commands; the [agent guide](../AGENTS.md#validation) explains gate scope.
+The [physical-device checklist](DEVICE_TESTING.md) covers HealthKit, real Drive,
+background relaunch, and paired-Watch transport that deterministic tests cannot
+prove.
 
 ## Reconciliation progress
 

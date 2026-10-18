@@ -1,18 +1,9 @@
 # HealthMule: Apple Health to Google Drive
 
-Status: implemented v1 contract; physical-device acceptance pending
-Target: native iPhone app with a lightweight Apple Watch companion
-Runtime: Swift 6, SwiftUI, HealthKit, Watch Connectivity, Google Drive API v3
-Minimum deployment targets: iOS 26 and watchOS 26
-
-## Problem
-
-Apple Health's built-in full export is manual, large, and unsuitable for an
-ongoing personal fitness project. Build a private iPhone app that reads a small
-allowlist of fitness metrics, normalizes them into stable daily JSON records,
-and incrementally uploads those records to a user-controlled Google Drive
-folder. A separate trusted agent can then ingest the records into a calorie,
-weight, and training tracker without receiving unrelated medical data.
+HealthMule incrementally exports an allowlist of Apple Health metrics as stable
+daily JSON records in the user's Google Drive. The iPhone owns export and sync;
+the Apple Watch companion shows status and requests sync. Deployment targets and
+dependencies are defined in [project.yml](../../project.yml).
 
 ## Product principles
 
@@ -306,14 +297,15 @@ tests independent of HealthKit and Google.
 
 ## Drive upload rules
 
-- Daily JSON files are expected to stay well below 5 MB; use multipart uploads.
-- Search for the file by exact name within the configured parent folder once,
-  then cache its Drive file ID.
-- Update by file ID on later syncs.
-- Treat HTTP 401 as reauthorization required.
-- Retry 408, 429, and 5xx with exponential backoff and jitter.
-- Do not retry other 4xx responses indefinitely.
-- Serialize uploads to prevent two background triggers racing on the manifest.
+Use multipart uploads and immutable file IDs. Tagged-file discovery and
+Drive-generated create IDs prevent duplicate logical files after ambiguous
+responses; [Google Drive identity](../ARCHITECTURE.md#google-drive-identity)
+defines their lifecycle. Serialize reconciliation so competing triggers cannot
+race the manifest.
+
+[OAuth error classification](../GOOGLE_OAUTH.md#error-classification) defines
+retryable, reauthorization, and permanent failures. Background uploads refresh
+and retry the first `401` once; repeated `401` responses require reauthorization.
 
 ## Conformance fixtures
 
@@ -373,18 +365,6 @@ HealthKit instances, but expected output must be exact JSON.
 - Existing exported dates retain their original local-date filenames after a
   timezone change; the rolling reconciliation window uses the current timezone
   only for newly affected samples.
-
-## Non-goals
-
-- Calorie or macro tracking inside the iPhone app.
-- Medical advice, diagnosis, alerts, or interpretation.
-- Writing any data back to Apple Health.
-- Continuous heart-rate streaming.
-- GPS route export.
-- Android support.
-- A hosted backend, multi-user accounts, or public sharing.
-- Perfectly timed background synchronization.
-- A standalone Watch-to-Drive exporter or Watch-side Google authorization.
 
 ## Upstream references
 

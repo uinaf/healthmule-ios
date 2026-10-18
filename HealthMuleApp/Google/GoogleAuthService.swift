@@ -149,29 +149,7 @@ final class GoogleAuthService {
         {
             return .reauthorizationRequired
         }
-        if
-            containsNetworkError(error)
-                || (
-                    error.domain == "org.openid.appauth.general"
-                        && [-5, -6].contains(error.code)
-                )
-        {
-            return .refreshTemporarilyUnavailable
-        }
         return .refreshTemporarilyUnavailable
-    }
-
-    nonisolated private static func containsNetworkError(
-        _ error: NSError
-    ) -> Bool {
-        if error.domain == NSURLErrorDomain {
-            return true
-        }
-        guard let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
-        else {
-            return false
-        }
-        return containsNetworkError(underlying)
     }
 
     private static func presentingViewController() -> UIViewController? {
