@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ScaledMetric(relativeTo: .subheadline) private var metricIconWidth: CGFloat = 22
     @State private var isShowingResetConfirmation = false
     @State private var isShowingDisconnectConfirmation = false
+    @State private var isShowingTrashConfirmation = false
 
     var body: some View {
         Form {
@@ -12,6 +13,7 @@ struct SettingsView: View {
             metricsSection
             diagnosticsSection
             googleSection
+            driveExportsSection
             resetSection
             OperationBanner(state: model.operationState)
                 .listRowInsets(EdgeInsets())
@@ -26,34 +28,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(HealthMuleStyle.canvas)
         .accessibilityIdentifier("settings-screen")
-        .confirmationDialog(
-            "Disconnect Google?",
-            isPresented: $isShowingDisconnectConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Disconnect Google", role: .destructive) {
-                Task {
-                    await model.disconnectGoogle()
-                }
-            }
-        } message: {
-            Text("Existing files in Google Drive will not be deleted.")
-        }
-        .confirmationDialog(
-            "Reset local sync state?",
-            isPresented: $isShowingResetConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Reset Local State", role: .destructive) {
-                Task {
-                    await model.resetLocalState()
-                }
-            }
-        } message: {
-            Text(
-                "Local anchors, staged records, and retry state will be cleared. Saved day boundaries, stable Drive IDs, and existing files will be kept."
-            )
-        }
+
     }
 
     private var overviewSection: some View {
@@ -140,8 +115,47 @@ struct SettingsView: View {
                     Label("Disconnect Google", systemImage: "link")
                 }
                 .disabled(model.operationState.isWorking)
+                .alert("Disconnect Google?", isPresented: $isShowingDisconnectConfirmation) {
+                    Button("Disconnect Google", role: .destructive) {
+                        Task {
+                            await model.disconnectGoogle()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Existing files in Google Drive will not be deleted.")
+                }
             } footer: {
-                Text("Disconnecting revokes the app’s Google authorization.")
+                Text("Disconnecting revokes the app’s Google authorization. Drive exports are kept.")
+            }
+            .listRowBackground(HealthMuleStyle.surface)
+        }
+    }
+
+    @ViewBuilder
+    private var driveExportsSection: some View {
+        if model.googleConnection.account != nil {
+            Section {
+                Button(role: .destructive) {
+                    isShowingTrashConfirmation = true
+                } label: {
+                    Label("Move Drive Exports to Trash", systemImage: "trash")
+                }
+                .disabled(model.operationState.isWorking)
+                .alert("Move Drive exports to Trash?", isPresented: $isShowingTrashConfirmation) {
+                    Button("Move to Trash", role: .destructive) {
+                        Task {
+                            await model.trashDriveExports()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(
+                        "Accessible HealthMule exports will move to Google Drive Trash. Google will be disconnected to prevent re-upload. Local records and Apple Health data are kept. Folders and unrelated files are kept."
+                    )
+                }
+            } footer: {
+                Text("Only HealthMule exports this Google connection can access are moved. Other files are kept.")
             }
             .listRowBackground(HealthMuleStyle.surface)
         }
@@ -155,10 +169,20 @@ struct SettingsView: View {
                 Label("Reset Local Sync State", systemImage: "arrow.counterclockwise")
             }
             .disabled(model.operationState.isWorking)
+            .alert("Reset local sync state?", isPresented: $isShowingResetConfirmation) {
+                Button("Reset Local State", role: .destructive) {
+                    Task {
+                        await model.resetLocalState()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "Local anchors, staged records, and retry state will be cleared. Saved day boundaries, stable Drive IDs, and existing files will be kept."
+                )
+            }
         } footer: {
-            Text(
-                "Deleting Drive data is intentionally a separate action and is not available in this version."
-            )
+            Text("Clears local sync progress. Apple Health data and existing Drive exports are kept.")
         }
         .listRowBackground(HealthMuleStyle.surface)
     }

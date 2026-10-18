@@ -174,6 +174,12 @@ Development](https://developer.apple.com/documentation/backgroundtasks/starting-
   no health values, record bodies, raw metadata, OAuth tokens, account details,
   or Drive identifiers.
 - [ ] Disconnecting or resetting local state does not delete existing Drive exports.
+- [ ] With disposable test exports, cancel each destructive Settings confirmation;
+  no remote or local data changes. Confirm Move Drive Exports to Trash separately:
+  only tagged exports move, unrelated files and folders remain, and Google disconnects.
+- [ ] Interrupt cleanup after a partial move and relaunch. Uploads remain paused;
+  explicit sign-in can republish the preserved local records. Never use live health
+  exports for this destructive acceptance check.
 - [ ] Revoking Google access returns the app to a recoverable Reconnect state.
 - [ ] Complete Google sign-in, terminate the app before the pending queue
   resumes, then relaunch. Restored valid credentials must unblock the persisted

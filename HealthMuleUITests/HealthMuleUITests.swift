@@ -312,6 +312,57 @@ final class HealthMuleUITests: XCTestCase {
 
         XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Disconnect Google"].exists)
+        XCTAssertFalse(app.buttons["Move Drive Exports to Trash"].exists)
+    }
+
+    @MainActor
+    func testUnavailableGoogleOffersDisconnectWithoutDriveDeletion() throws {
+        for state in ["--ui-google-unavailable", "--ui-google-reconnect"] {
+            let app = launch(additionalArguments: [state])
+            app.tabBars.buttons["Settings"].tap()
+            XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
+            let disconnect = app.buttons["Disconnect Google"]
+            for _ in 0..<5 where !disconnect.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(disconnect.isHittable)
+            let reset = app.buttons["Reset Local Sync State"]
+            for _ in 0..<3 where !reset.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(reset.isHittable)
+            XCTAssertFalse(app.buttons["Move Drive Exports to Trash"].exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testSettingsDestructiveActionsUseCenteredCancellableAlerts() throws {
+        let app = launch(additionalArguments: ["--ui-ready"])
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
+
+        for (action, title) in [
+            ("Disconnect Google", "Disconnect Google?"),
+            ("Move Drive Exports to Trash", "Move Drive exports to Trash?"),
+            ("Reset Local Sync State", "Reset local sync state?"),
+        ] {
+            let button = app.buttons[action]
+            for _ in 0..<5 where !button.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(button.isHittable)
+            button.tap()
+
+            let alert = app.alerts[title]
+            XCTAssertTrue(alert.waitForExistence(timeout: 5))
+            XCTAssertEqual(alert.frame.midX, app.frame.midX, accuracy: 24)
+            XCTAssertEqual(alert.frame.midY, app.frame.midY, accuracy: 80)
+            capture("settings-\(action)", from: app)
+            alert.buttons["Cancel"].tap()
+            XCTAssertFalse(alert.exists)
+            XCTAssertTrue(app.buttons["Disconnect Google"].exists)
+        }
     }
 
     @MainActor

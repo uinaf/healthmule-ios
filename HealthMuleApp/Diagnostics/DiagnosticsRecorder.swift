@@ -130,6 +130,7 @@ enum DiagnosticInputEvent: Sendable {
     case googleDisconnected
     case googleRestoreFailed(DiagnosticErrorCode)
     case driveFolderVerificationFailed(DiagnosticErrorCode)
+    case driveExportsTrashFailed(DiagnosticErrorCode)
     case syncStarted(SyncTrigger)
     case syncFinished(
         durationMilliseconds: Int,
@@ -185,6 +186,8 @@ enum DiagnosticInputEvent: Sendable {
                 event: "drive-folder-verification-failed",
                 code: code
             )
+        case .driveExportsTrashFailed(let code):
+            .error(category: "authorization", event: "drive-exports-trash-failed", code: code)
         case .syncStarted(let trigger):
             .init(
                 category: "sync",

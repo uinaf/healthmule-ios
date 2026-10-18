@@ -6,6 +6,205 @@ import XCTest
 
 final class DriveAPIClientTests: XCTestCase {
     @MainActor
+    func testTrashExportsDiscoversAllPagesAndPreservesUnrelatedItems() async throws {
+        let suite = "DriveTrash.\(UUID().uuidString)"
+        defer {
+            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+            URLProtocolStub.removeHandler()
+        }
+        let store = try makeMetadataStore(suiteName: suite)
+        let requests = RequestCounter()
+        URLProtocolStub.setHandler { @Sendable request in
+            let index = requests.next()
+            switch index {
+            case 0:
+                XCTAssertEqual(request.httpMethod, "GET")
+                let query = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems
+                let filter = query?.first(where: { $0.name == "q" })?.value ?? ""
+                XCTAssertTrue(filter.contains("'me' in owners"))
+                XCTAssertTrue(filter.contains("healthMuleKind"))
+                return try Self.response(for: request, json: [
+                    "nextPageToken": "second",
+                    "files": [
+                        ["id": "daily", "mimeType": "application/json", "trashed": false, "ownedByMe": true,
+                         "appProperties": ["healthMuleKind": "daily", "healthMuleDate": "2026-10-18"]],
+                        ["id": "unrelated", "mimeType": "application/json", "trashed": false],
+                        ["id": "someone-elses-export", "mimeType": "application/json", "trashed": false,
+                         "ownedByMe": false, "appProperties": ["healthMuleKind": "manifest"]],
+                        ["id": "folder", "mimeType": "application/vnd.google-apps.folder", "trashed": false, "ownedByMe": true,
+                         "appProperties": ["healthMuleKind": "root"]],
+                    ],
+                ])
+            case 1:
+                XCTAssertEqual(request.httpMethod, "GET")
+                XCTAssertTrue(request.url?.query?.contains("pageToken=second") == true)
+                return try Self.response(for: request, json: ["files": [
+                    ["id": "manifest", "mimeType": "application/json", "trashed": false, "ownedByMe": true,
+                     "appProperties": ["healthMuleKind": "manifest"]],
+                ]])
+            case 2, 3:
+                let id = index == 2 ? "daily" : "manifest"
+                XCTAssertEqual(request.httpMethod, "PATCH")
+                XCTAssertEqual(request.url?.lastPathComponent, id)
+                let body = try JSONSerialization.jsonObject(with: Self.requestBody(request)) as? [String: Bool]
+                XCTAssertEqual(body, ["trashed": true])
+                return try Self.response(for: request, json: ["id": id, "trashed": true])
+            default:
+                throw StubError.unexpectedRequest("unexpected trash request")
+            }
+        }
+        let client = Self.makeClient(metadataStore: store)
+        let count = try await client.trashExports(for: "account")
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(requests.count, 4)
+        do {
+            _ = try await client.ensureAppFoldersForActiveAccount()
+            XCTFail("Trashing must leave uploads inactive")
+        } catch DriveAPIError.accountNotReady {}
+    }
+
+    @MainActor
+    func testTrashExportsReportsPartialFailure() async throws {
+        let suite = "DriveTrash.\(UUID().uuidString)"
+        defer {
+            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+            URLProtocolStub.removeHandler()
+        }
+        let store = try makeMetadataStore(suiteName: suite)
+        let requests = RequestCounter()
+        URLProtocolStub.setHandler { @Sendable request in
+            switch requests.next() {
+            case 0:
+                return try Self.response(for: request, json: ["files": ["first", "second"].map {
+                    ["id": $0, "mimeType": "application/json", "trashed": false, "ownedByMe": true,
+                     "appProperties": ["healthMuleKind": "manifest"]] as [String: Any]
+                }])
+            case 1:
+                return try Self.response(for: request, json: ["id": "first", "trashed": true])
+            case 2:
+                return try Self.response(for: request, status: 403, json: ["error": ["errors": [["reason": "insufficientFilePermissions"]]]])
+            default:
+                throw StubError.unexpectedRequest("unexpected retry")
+            }
+        }
+        do {
+            _ = try await Self.makeClient(metadataStore: store).trashExports(for: "account")
+            XCTFail("Expected partial failure")
+        } catch let error as DriveExportTrashFailure {
+            XCTAssertEqual(error.trashedCount, 1)
+            guard let underlying = error.underlying as? DriveAPIError,
+                  case .remote(let status, let reason, _) = underlying else {
+                return XCTFail("Expected the underlying Drive error")
+            }
+            XCTAssertEqual(status, 403)
+            XCTAssertEqual(reason, "insufficientFilePermissions")
+        }
+        XCTAssertEqual(requests.count, 3)
+    }
+
+    @MainActor
+    func testTrashExportsDoesNotMutateBeforeDiscoveryCompletes() async throws {
+        let suite = "DriveTrash.\(UUID().uuidString)"
+        defer {
+            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+            URLProtocolStub.removeHandler()
+        }
+        let store = try makeMetadataStore(suiteName: suite)
+        let requests = RequestCounter()
+        URLProtocolStub.setHandler { @Sendable request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            if requests.next() == 0 {
+                return try Self.response(for: request, json: ["nextPageToken": "second", "files": [
+                    ["id": "first", "mimeType": "application/json", "trashed": false, "ownedByMe": true,
+                     "appProperties": ["healthMuleKind": "manifest"]],
+                ]])
+            }
+            return try Self.response(for: request, status: 503, json: ["error": ["errors": [["reason": "backendError"]]]])
+        }
+        do {
+            _ = try await Self.makeClient(metadataStore: store).trashExports(for: "account")
+            XCTFail("Expected discovery failure")
+        } catch let error as DriveExportTrashFailure {
+            XCTAssertEqual(error.trashedCount, 0)
+        }
+        XCTAssertEqual(requests.count, 2)
+    }
+
+    private nonisolated static func requestBody(_ request: URLRequest) throws -> Data {
+        if let data = request.httpBody { return data }
+        let stream = try XCTUnwrap(request.httpBodyStream)
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 512)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        return data
+    }
+
+    @MainActor
+    func testConnectedAccountCleanupFinishesAfterConnectionStateChanges() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let keys = [
+            "backfill.customStart",
+            "backfill.selectedStart",
+            "sync.driveExportsPaused",
+            "sync.destinationAccountNamespace.v1",
+            "sync.lastSuccessful",
+        ]
+        let previous = keys.map { UserDefaults.standard.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+            try? FileManager.default.removeItem(at: directory)
+            URLProtocolStub.removeHandler()
+        }
+        let metadata = DriveMetadataStore(directoryURL: directory.appendingPathComponent("metadata"))
+        let auth = CleanupGoogleAuth()
+        let requests = RequestCounter()
+        URLProtocolStub.setHandler { @Sendable request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            _ = requests.next()
+            return try Self.response(for: request, json: ["files": []])
+        }
+        let model = AppModel(
+            googleConfiguration: GoogleOAuthConfiguration(
+                clientID: "123-cleanup.apps.googleusercontent.com",
+                redirectScheme: "com.googleusercontent.apps.123-cleanup"
+            ),
+            googleAuth: auth,
+            driveClient: Self.makeClient(metadataStore: metadata),
+            healthKit: HealthKitClient(),
+            diagnostics: DiagnosticsRecorder(exportDirectory: directory.appendingPathComponent("diagnostics")),
+            syncActivityStore: SyncActivityStore(directoryURL: directory.appendingPathComponent("activity")),
+            stagingRoot: directory.appendingPathComponent("staging"),
+            syncCoordinator: nil,
+            syncInitializationError: nil,
+            isUITesting: true
+        )
+        model.googleConnection = .connected(GoogleConnection(
+            account: GoogleAccount(id: "account", email: nil),
+            folderID: "folder",
+            folderName: "Apple Health Sync"
+        ))
+
+        await model.trashDriveExports()
+
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(auth.disconnectCount, 1)
+        XCTAssertEqual(model.googleConnection, .disconnected)
+        guard case .succeeded(.driveDeletion, _) = model.operationState else {
+            return XCTFail("Cleanup must finish rather than retaining a stale working epoch")
+        }
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: "sync.driveExportsPaused"))
+    }
+
+    @MainActor
     func testManagedFolderConnectionUsesCurrentRemoteNameWithinAccount()
         async throws
     {
@@ -4923,4 +5122,13 @@ private final class HandlerStore: @unchecked Sendable {
         }
         return try handler(request)
     }
+}
+
+@MainActor
+private final class CleanupGoogleAuth: GoogleAuthenticating {
+    private(set) var disconnectCount = 0
+    func restore() async throws -> GoogleConnectionState { .disconnected }
+    func connect() async throws -> GoogleConnectionState { .disconnected }
+    func accessToken(for expectedAccountID: String) async throws -> String { "test-token" }
+    func disconnect() async throws { disconnectCount += 1 }
 }
