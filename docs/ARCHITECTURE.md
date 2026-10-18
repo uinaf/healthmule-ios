@@ -417,6 +417,19 @@ and Sync surfaces report a blocking storage error.
 - Previously exported Drive files outside that rebuilt range are intentionally
   not deleted and may no longer appear in the new manifest.
 
+### Move Drive Exports to Trash
+
+- A separate confirmed action discovers all accessible, user-owned JSON files
+  tagged as HealthMule daily exports or manifests before moving any to Trash.
+  It leaves folders and unrelated files alone, including files inside export folders.
+- Uploads drain before deletion. Remote-upload receipts are invalidated durably
+  while staged records, HealthKit anchors, and export preferences stay intact.
+- A persisted upload pause prevents automatic Google restoration after interruption
+  or partial failure. Explicit Google sign-in clears the pause and permits republishing.
+- Successful cleanup disconnects Google. Failures report the completed count and
+  preserve the pause; retry can continue with remaining exports. No broader Drive
+  scope is requested, so files inaccessible to the current OAuth project cannot be removed.
+
 ## Persistence and privacy
 
 | Data | Current storage | Boundary |

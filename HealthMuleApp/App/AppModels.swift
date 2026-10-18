@@ -208,6 +208,7 @@ enum OperationKind: Equatable {
     case sync
     case diagnostics
     case localReset
+    case driveDeletion
 }
 
 enum OperationOrigin: Equatable, Sendable {

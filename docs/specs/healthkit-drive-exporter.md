@@ -247,6 +247,7 @@ product surfaces without giving one-time workflows permanent tab weight:
    - Export diagnostics
    - Disconnect Google
    - Reset local sync state
+   - Move accessible HealthMule Drive exports to Trash, with separate confirmation
 
 Initial loading must reserve the final layout and must not flash a persisted
 failure before bootstrap restores current state. Automatic outcomes remain in

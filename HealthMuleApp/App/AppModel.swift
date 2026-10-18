@@ -609,6 +609,7 @@ final class AppModel {
             else {
                 return
             }
+            UserDefaults.standard.removeObject(forKey: Self.driveExportsPausedKey)
             googleConnection = authorizedConnection
             expectedEpoch = googleTransitionEpoch
             guard try await configureDriveFolders(
@@ -1351,6 +1352,60 @@ final class AppModel {
         }
     }
 
+    private static let driveExportsPausedKey = "sync.driveExportsPaused"
+
+    func trashDriveExports() async {
+        guard !operationState.isWorking, let account = googleConnection.account else { return }
+        let state = OperationState.working(.driveDeletion, "Moving Drive exports to Trash")
+        setOperationState(state, origin: .userInitiated)
+        let operation = operationEpoch
+        let epoch = beginGoogleTransition()
+        if let syncCoordinator { await syncCoordinator.waitUntilIdle() }
+        guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
+        // Survive interruption without silently restoring auth and re-uploading deleted data.
+        UserDefaults.standard.set(true, forKey: Self.driveExportsPausedKey)
+        googleConnection = .driveUnavailable(account)
+        var trashedCount = 0
+        do {
+            try await driveClient.clearActiveAccount()
+            activeDriveActivation = nil
+            let coordinator = if let syncCoordinator {
+                syncCoordinator
+            } else {
+                try makeSyncCoordinator()
+            }
+            syncSummary = try await coordinator.invalidateRemoteUploads()
+            syncCoordinator = coordinator
+            syncInitializationError = nil
+            guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
+            trashedCount = try await driveClient.trashExports(for: account.id)
+            guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
+            try await googleAuth.disconnect()
+            guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
+            googleConnection = .disconnected
+            operationState = .succeeded(
+                .driveDeletion,
+                trashedCount == 0
+                    ? "No accessible HealthMule exports were found. Google disconnected; local data was kept."
+                    : "Moved \(trashedCount) exports to Drive Trash. Google disconnected; local data was kept."
+            )
+        } catch {
+            guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
+            if let failure = error as? DriveExportTrashFailure {
+                trashedCount = failure.trashedCount
+            }
+            operationState = .failed(
+                .driveDeletion,
+                "Moved \(trashedCount) exports to Trash; cleanup did not finish. Uploads are paused. Retry cleanup or reconnect Google to resume syncing."
+            )
+            await diagnostics.record(
+                .driveExportsTrashFailed(
+                    DiagnosticErrorCode(capturing: (error as? DriveExportTrashFailure)?.underlying ?? error)
+                )
+            )
+        }
+    }
+
     func resetLocalState() async {
         setOperationState(
             .working(
@@ -1487,6 +1542,10 @@ final class AppModel {
             activeDriveActivation = nil
         }
         guard googleConfiguration.isConfigured else {
+            return restoringEpoch
+        }
+        if UserDefaults.standard.bool(forKey: Self.driveExportsPausedKey) {
+            googleConnection = .disconnected
             return restoringEpoch
         }
         do {
@@ -1789,6 +1848,7 @@ final class AppModel {
         expectedEpoch: UInt64
     ) async throws -> Bool {
         guard
+            !UserDefaults.standard.bool(forKey: Self.driveExportsPausedKey),
             isGoogleTransitionCurrent(expectedEpoch),
             let expectedAccount = googleConnection.account
         else {

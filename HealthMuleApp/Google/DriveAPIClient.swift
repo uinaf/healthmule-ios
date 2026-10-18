@@ -9,6 +9,7 @@ struct DriveRemoteItem: Decodable, Equatable, Sendable {
     let appProperties: [String: String]?
     let mimeType: String?
     let trashed: Bool?
+    let ownedByMe: Bool?
     let parents: [String]?
 }
 
@@ -78,6 +79,15 @@ enum DriveAPIError: LocalizedError, Sendable {
         case .invalidResponse, .reauthorizationRequired:
             false
         }
+    }
+}
+
+struct DriveExportTrashFailure: LocalizedError {
+    let trashedCount: Int
+    let underlying: any Error
+
+    var errorDescription: String? {
+        "Moved \(trashedCount) exports to Trash, but could not finish. Some exports may remain."
     }
 }
 
@@ -165,6 +175,7 @@ actor DriveAPIClient {
         return URLSession(configuration: configuration)
     }
 
+    private var isTrashingExports = false
     private var activeAccountID: String?
     private var activeFolderConnection: DriveFolderConnection?
     private var activeDestinationScopeID: String?
@@ -198,6 +209,7 @@ actor DriveAPIClient {
         _ accountID: String,
         folders: DriveFolderConnection
     ) async throws -> DriveAccountActivation {
+        guard !isTrashingExports else { throw DriveAPIError.accountNotReady }
         let destinationScopeID = DriveMetadataStore.destinationNamespace(
             for: accountID,
             rootID: folders.rootID,
@@ -249,6 +261,88 @@ actor DriveAPIClient {
             to: nil,
             expectedGeneration: expectedGeneration
         )
+    }
+
+    func trashExports(for accountID: String) async throws -> Int {
+        guard !isTrashingExports else { throw DriveAPIError.accountNotReady }
+        isTrashingExports = true
+        defer { isTrashingExports = false }
+        var trashedCount = 0
+        do {
+            // Drain old background transfers before changing any remote files.
+            try await clearActiveAccount()
+            let generation = activationGeneration
+            let items = try await exportItemsForTrash(accountID: accountID)
+            for item in items {
+                try Task.checkCancellation()
+                guard activationGeneration == generation else {
+                    throw DriveAPIError.accountNotReady
+                }
+                var components = URLComponents(
+                    url: Self.filesBaseURL.appendingPathComponent(item.id),
+                    resolvingAgainstBaseURL: false
+                )!
+                components.queryItems = [URLQueryItem(name: "fields", value: "id,trashed")]
+                do {
+                    let data = try await request(
+                        url: components.url!,
+                        method: "PATCH",
+                        body: Data(#"{"trashed":true}"#.utf8),
+                        contentType: "application/json",
+                        accountID: accountID
+                    )
+                    let result = try JSONDecoder().decode(DriveRemoteItem.self, from: data)
+                    guard result.id == item.id, result.trashed == true else {
+                        throw DriveAPIError.invalidResponse
+                    }
+                    trashedCount += 1
+                } catch DriveAPIError.remote(let status, _, _) where status == 404 {
+                    continue
+                }
+            }
+            return trashedCount
+        } catch {
+            throw DriveExportTrashFailure(trashedCount: trashedCount, underlying: error)
+        }
+    }
+
+    private func exportItemsForTrash(accountID: String) async throws -> [DriveRemoteItem] {
+        var items: [DriveRemoteItem] = []
+        var ids: Set<String> = []
+        var pageToken: String?
+        var seenPageTokens: Set<String> = []
+        // Finish discovery before trashing; mutating pages while listing can skip files.
+        for _ in 0..<Self.maximumDiscoveryPages {
+            try Task.checkCancellation()
+            var components = URLComponents(url: Self.filesBaseURL, resolvingAgainstBaseURL: false)!
+            components.queryItems = [
+                URLQueryItem(name: "q", value: "trashed = false and 'me' in owners and mimeType = 'application/json' and (appProperties has { key='healthMuleKind' and value='daily' } or appProperties has { key='healthMuleKind' and value='manifest' })"),
+                URLQueryItem(name: "spaces", value: "drive"),
+                URLQueryItem(name: "fields", value: "nextPageToken,files(id,mimeType,trashed,ownedByMe,appProperties)"),
+                URLQueryItem(name: "pageSize", value: "1000"),
+            ]
+            if let pageToken {
+                components.queryItems?.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            let data = try await request(url: components.url!, method: "GET", accountID: accountID)
+            let page = try JSONDecoder().decode(FileListResponse.self, from: data)
+            for item in page.files {
+                let kind = item.appProperties?["healthMuleKind"]
+                guard
+                    !item.id.isEmpty,
+                    item.mimeType == "application/json",
+                    item.trashed == false,
+                    item.ownedByMe == true,
+                    kind == "manifest" || (kind == "daily" && item.appProperties?["healthMuleDate"]?.isEmpty == false),
+                    ids.insert(item.id).inserted
+                else { continue }
+                items.append(item)
+            }
+            guard let next = page.nextPageToken, !next.isEmpty else { return items }
+            guard seenPageTokens.insert(next).inserted else { throw DriveAPIError.invalidResponse }
+            pageToken = next
+        }
+        throw DriveAPIError.invalidResponse
     }
 
     func ensureAppFolders(

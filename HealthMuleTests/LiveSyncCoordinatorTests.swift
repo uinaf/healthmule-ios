@@ -64,6 +64,60 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
     }
 
+    func testInvalidatedRemoteUploadsSurviveRelaunchWithoutLosingLocalRecords() async throws {
+        let fixture = try CoordinatorFixture(dayCount: 2)
+        defer { fixture.cleanUp() }
+        let health = CoordinatorHealthChanges(startDate: fixture.startInstant)
+        let provider = CoordinatorRecordProvider(records: fixture.records)
+        let coordinator = try fixture.makeCoordinator(health: health, provider: provider)
+        _ = try await coordinator.prepareDestination(destinationNamespace: "original")
+        let uploaded = try await coordinator.reconcile(
+            trigger: .manual,
+            enabledMetrics: [.stepCount],
+            backfillStart: fixture.dates[0]
+        )
+        XCTAssertEqual(uploaded.summary.pendingUploadCount, 0)
+        XCTAssertNotNil(uploaded.summary.lastSuccessfulSyncAt)
+        let paths = fixture.dates.map {
+            fixture.rootDirectory.appendingPathComponent("daily/\($0.rawValue).json")
+        }
+        let before = try paths.map { try Data(contentsOf: $0) }
+        let metrics = fixture.defaults.stringArray(forKey: "sync.lastStagedMetrics")
+        let boundary = fixture.defaults.string(forKey: "sync.lastStagedBackfillStart")
+
+        let invalidated = try await coordinator.invalidateRemoteUploads()
+
+        XCTAssertEqual(invalidated.pendingUploadCount, fixture.dates.count)
+        XCTAssertEqual(invalidated.latestExportedDate, fixture.dates.last?.rawValue)
+        XCTAssertNil(invalidated.lastSuccessfulSyncAt)
+        XCTAssertNil(fixture.defaults.string(forKey: "sync.destinationAccountNamespace.v1"))
+        XCTAssertNil(fixture.defaults.object(forKey: "sync.lastSuccessful"))
+        XCTAssertEqual(fixture.defaults.stringArray(forKey: "sync.lastStagedMetrics"), metrics)
+        XCTAssertEqual(fixture.defaults.string(forKey: "sync.lastStagedBackfillStart"), boundary)
+        XCTAssertEqual(try paths.map { try Data(contentsOf: $0) }, before)
+        let resetCount = await health.anchorResetCount()
+        XCTAssertEqual(resetCount, 0)
+
+        let events = CoordinatorEventLog()
+        let relaunched = try fixture.makeCoordinator(
+            health: health,
+            provider: provider,
+            destination: CoordinatorDestination(events: events)
+        )
+        try await relaunched.prepare()
+        let restored = try await relaunched.summary()
+        XCTAssertEqual(restored.pendingUploadCount, fixture.dates.count)
+        XCTAssertNil(restored.lastSuccessfulSyncAt)
+        let flushed = try await relaunched.flushPendingUploads()
+        XCTAssertEqual(flushed.summary.pendingUploadCount, 0)
+        let uploads = await events.snapshot().compactMap { event -> ExportArtifactID? in
+            if case .upload(let id) = event { return id }
+            return nil
+        }
+        XCTAssertEqual(Set(uploads), Set(fixture.dates.map(ExportArtifactID.daily) + [.manifest]))
+        XCTAssertEqual(try paths.map { try Data(contentsOf: $0) }, before)
+    }
+
     func testEveryRequestedDateIsDurableBeforeFirstAnchorCommit() async throws {
         let fixture = try CoordinatorFixture()
         defer { fixture.cleanUp() }
@@ -861,6 +915,7 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
     private let expectedStagedDates: Set<LocalDate>
     private let events: CoordinatorEventLog?
     private var commits: [HealthMetric] = []
+    private var resetCount = 0
     private var changes: [HealthMetric] = []
     private var checks: [StagedCheck] = []
     private var shouldBlockFirstChange: Bool
@@ -947,7 +1002,13 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
         await events?.append(.commit(batch.metric))
     }
 
-    func resetAnchors() async {}
+    func resetAnchors() async {
+        resetCount += 1
+    }
+
+    func anchorResetCount() -> Int {
+        resetCount
+    }
 
     func waitUntilFirstChangeStarts() async {
         if firstChangeStarted {

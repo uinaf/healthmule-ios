@@ -349,6 +349,18 @@ actor LiveSyncCoordinator {
         return try await summary()
     }
 
+    func invalidateRemoteUploads() async throws -> SyncSummary {
+        let operationID = try await acquireOperation()
+        defer { releaseOperation(id: operationID) }
+
+        try await runtime.store.resetRemoteUploadState()
+        destinationNamespace = nil
+        defaults.removeObject(forKey: Self.destinationNamespaceKey)
+        lastSuccessfulSyncAt = nil
+        defaults.removeObject(forKey: "sync.lastSuccessful")
+        return try await summary()
+    }
+
     func summary() async throws -> SyncSummary {
         let dates = try await runtime.store.allDailyDates()
         let retryItems = try await runtime.store.retryItems()
