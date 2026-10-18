@@ -3,11 +3,66 @@ import HealthMuleCore
 import OSLog
 
 struct DiagnosticErrorCode: Equatable, Sendable {
-    fileprivate let value: String
+    fileprivate let fields: [String: String]
 
     init(capturing error: any Error) {
-        value = String(reflecting: type(of: error))
+        let code: String
+        switch error {
+        case let error as DriveAPIError:
+            switch error {
+            case .remote(let status, let reason, _):
+                var fields = [
+                    "errorCode": "drive_remote",
+                    "httpStatus": String(status),
+                ]
+                if let reason, Self.driveReasons.contains(reason) {
+                    fields["reason"] = reason
+                }
+                self.fields = fields
+                return
+            case .transport(let urlCode):
+                fields = [
+                    "errorCode": "drive_transport",
+                    "urlErrorCode": String(urlCode.rawValue),
+                ]
+                return
+            case .invalidResponse: code = "drive_invalid_response"
+            case .reauthorizationRequired: code = "drive_reauthorization_required"
+            case .authenticationUnavailable: code = "drive_authentication_unavailable"
+            case .accountNotReady: code = "drive_account_not_ready"
+            case .destinationChanged: code = "drive_destination_changed"
+            }
+        case let error as GoogleAuthError:
+            switch error {
+            case .configurationMissing: code = "google_configuration_missing"
+            case .presenterUnavailable: code = "google_presenter_unavailable"
+            case .signedOut: code = "google_signed_out"
+            case .scopeNotGranted: code = "google_scope_not_granted"
+            case .identityUnavailable: code = "google_identity_unavailable"
+            case .accountChanged: code = "google_account_changed"
+            case .reauthorizationRequired: code = "google_reauthorization_required"
+            case .refreshTemporarilyUnavailable: code = "google_refresh_temporarily_unavailable"
+            }
+        default:
+            code = String(reflecting: type(of: error))
+        }
+        fields = ["errorCode": code]
     }
+
+    private static let driveReasons: Set<String> = [
+        "accessNotConfigured",
+        "appNotAuthorizedToFile",
+        "authError",
+        "backendError",
+        "dailyLimitExceeded",
+        "forbidden",
+        "insufficientFilePermissions",
+        "insufficientPermissions",
+        "notFound",
+        "rateLimitExceeded",
+        "storageQuotaExceeded",
+        "userRateLimitExceeded",
+    ]
 }
 
 enum DiagnosticSyncFailureCode: String, Sendable {
@@ -74,6 +129,7 @@ enum DiagnosticInputEvent: Sendable {
     case googleConnectFailed(DiagnosticErrorCode)
     case googleDisconnected
     case googleRestoreFailed(DiagnosticErrorCode)
+    case driveFolderVerificationFailed(DiagnosticErrorCode)
     case syncStarted(SyncTrigger)
     case syncFinished(
         durationMilliseconds: Int,
@@ -121,6 +177,12 @@ enum DiagnosticInputEvent: Sendable {
             .error(
                 category: "authorization",
                 event: "google-restore-failed",
+                code: code
+            )
+        case .driveFolderVerificationFailed(let code):
+            .error(
+                category: "authorization",
+                event: "drive-folder-verification-failed",
                 code: code
             )
         case .syncStarted(let trigger):
@@ -264,7 +326,7 @@ private struct PersistedDiagnosticInput {
         .init(
             category: category,
             event: event,
-            fields: ["errorCode": code.value]
+            fields: code.fields
         )
     }
 }

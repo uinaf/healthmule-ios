@@ -103,6 +103,51 @@ final class DiagnosticsRecorderTests: XCTestCase {
         )
     }
 
+    func testConnectionErrorsRetainSafeFailureDetails() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let recorder = DiagnosticsRecorder(exportDirectory: directory)
+        let privateReason = "sentinel-account-file-token"
+        let failures: [any Error] = [
+            DriveAPIError.remote(
+                status: 403,
+                reason: "appNotAuthorizedToFile",
+                retryable: false
+            ),
+            DriveAPIError.remote(
+                status: 404,
+                reason: privateReason,
+                retryable: false
+            ),
+            DriveAPIError.transport(code: .timedOut),
+            GoogleAuthError.scopeNotGranted,
+        ]
+        for error in failures {
+            await recorder.record(
+                .driveFolderVerificationFailed(DiagnosticErrorCode(capturing: error))
+            )
+        }
+
+        let data = try Data(contentsOf: await recorder.export())
+        let export = try decodeExport(data)
+        XCTAssertEqual(
+            Set(export.events.map(\.event)),
+            ["drive-folder-verification-failed"]
+        )
+        XCTAssertEqual(export.events.map(\.fields), [
+            [
+                "errorCode": "drive_remote",
+                "httpStatus": "403",
+                "reason": "appNotAuthorizedToFile",
+            ],
+            ["errorCode": "drive_remote", "httpStatus": "404"],
+            ["errorCode": "drive_transport", "urlErrorCode": "-1001"],
+            ["errorCode": "google_scope_not_granted"],
+        ])
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains(privateReason))
+    }
+
     func testExportEvictsOldestEventAtTwoHundred() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

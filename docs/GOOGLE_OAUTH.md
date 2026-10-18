@@ -161,6 +161,12 @@ connectivity and the Drive API configuration have been checked. The app remains
 unable to sync until it verifies the managed root and `daily` folders; it does
 not treat OAuth alone as Connected.
 
+If folder verification fails, use Settings → Diagnostics → Prepare Diagnostics
+and share the export. Connection failures include typed error codes, HTTP status,
+known Drive reason codes, and URL transport codes. Unknown server reasons and
+error descriptions are excluded; tokens, file IDs, and record contents are never
+included.
+
 ### The folder was moved
 
 Drive file IDs remain stable when names or locations change. The app continues
