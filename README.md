@@ -70,6 +70,20 @@ request expectations live in [Contributing](CONTRIBUTING.md).
 Builds reach TestFlight only through the manual `Upload TestFlight` workflow,
 never from a developer Mac.
 
+## Website
+
+The public [website](https://healthmule.uinaf.dev),
+[privacy policy](https://healthmule.uinaf.dev/privacy/), and
+[terms](https://healthmule.uinaf.dev/terms/) are static files in `website/`.
+There is no build step or application server. Preview with
+`python3 -m http.server 8765 --directory website`.
+
+`wrangler.jsonc` deploys the assets as the `healthmule` Cloudflare Worker.
+Use the uinaf product-deployment credential through the vault and run
+`npx --yes wrangler@4.151.1 deploy`. The hostname binding belongs to
+[`uinaf/infra`](https://github.com/uinaf/infra); keep it out of this Worker's
+deployment configuration.
+
 ## Privacy boundary
 
 - HealthKit access is read-only and limited to the types in the product spec.
