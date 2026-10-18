@@ -1776,6 +1776,11 @@ final class AppModel {
                     origin: operationOrigin
                 )
             }
+            await diagnostics.record(
+                .driveFolderVerificationFailed(
+                    DiagnosticErrorCode(capturing: error)
+                )
+            )
             return false
         }
     }

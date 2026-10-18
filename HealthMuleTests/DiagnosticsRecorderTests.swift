@@ -125,12 +125,16 @@ final class DiagnosticsRecorderTests: XCTestCase {
         ]
         for error in failures {
             await recorder.record(
-                .googleConnectFailed(DiagnosticErrorCode(capturing: error))
+                .driveFolderVerificationFailed(DiagnosticErrorCode(capturing: error))
             )
         }
 
         let data = try Data(contentsOf: await recorder.export())
         let export = try decodeExport(data)
+        XCTAssertEqual(
+            Set(export.events.map(\.event)),
+            ["drive-folder-verification-failed"]
+        )
         XCTAssertEqual(export.events.map(\.fields), [
             [
                 "errorCode": "drive_remote",
