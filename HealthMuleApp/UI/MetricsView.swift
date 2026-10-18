@@ -18,7 +18,7 @@ struct MetricsView: View {
 
                             if index < model.metricStatuses.count - 1 {
                                 Divider()
-                                    .padding(.leading, 64)
+                                    .padding(.leading, 56)
                             }
                         }
                     }
@@ -107,21 +107,21 @@ private extension HealthMetric {
     var systemImage: String {
         switch self {
         case .bodyMass:
-            "scalemass.fill"
+            "scalemass"
         case .stepCount:
             "figure.walk"
         case .activeEnergy:
-            "flame.fill"
+            "flame"
         case .restingEnergy:
-            "bolt.heart.fill"
+            "bolt.heart"
         case .restingHeartRate:
-            "heart.fill"
+            "heart"
         case .hrvSDNN:
             "waveform.path.ecg"
         case .vo2Max:
-            "lungs.fill"
+            "lungs"
         case .sleep:
-            "bed.double.fill"
+            "bed.double"
         case .workouts:
             "figure.run"
         }

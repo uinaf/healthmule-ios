@@ -539,6 +539,7 @@ private struct SyncPresentation {
 }
 
 private struct SyncActionRow: View {
+    @ScaledMetric(relativeTo: .subheadline) private var iconWidth = HealthMuleStyle.rowIconSize
     let title: String
     let subtitle: String
     let systemImage: String
@@ -549,14 +550,15 @@ private struct SyncActionRow: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: systemImage)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                    .font(HealthMuleStyle.Text.cardTitle)
+                    .foregroundStyle(.secondary)
+                    .frame(width: iconWidth)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.headline)
+                        .font(HealthMuleStyle.Text.cardTitle)
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(HealthMuleStyle.Text.cardBody)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                 }

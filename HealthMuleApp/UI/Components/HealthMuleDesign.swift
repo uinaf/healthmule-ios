@@ -3,22 +3,22 @@ import SwiftUI
 enum HealthMuleStyle {
     static let contentWidth: CGFloat = 720
     static let pagePadding: CGFloat = 20
-    static let cardRadius: CGFloat = 20
-    static let sectionSpacing: CGFloat = 24
-    static let rowIconSize: CGFloat = 36
+    static let cardRadius: CGFloat = 18
+    static let sectionSpacing: CGFloat = 28
+    static let rowIconSize: CGFloat = 28
 
     /// One canonical scale so screens cannot drift apart. Card titles and body
     /// copy sit a step below the system defaults, which read oversized in a
     /// dense status app.
     enum Text {
-        static let heroTitle = Font.title3.weight(.semibold)
-        static let heroMessage = Font.callout
-        static let sectionTitle = Font.headline
+        static let heroTitle = Font.title2.weight(.semibold)
+        static let heroMessage = Font.subheadline
+        static let sectionTitle = Font.subheadline.weight(.semibold)
         static let sectionSubtitle = Font.footnote
         static let cardTitle = Font.subheadline.weight(.semibold)
         static let cardBody = Font.footnote
         static let factLabel = Font.caption2.weight(.medium)
-        static let factValue = Font.subheadline.weight(.semibold)
+        static let factValue = Font.subheadline.weight(.medium)
     }
 
     static var canvas: Color {
@@ -34,11 +34,11 @@ enum HealthMuleStyle {
     }
 
     static var hairline: Color {
-        Color.primary.opacity(0.07)
+        Color.primary.opacity(0.05)
     }
 
     static var inset: Color {
-        Color.primary.opacity(0.055)
+        Color.primary.opacity(0.04)
     }
 }
 
@@ -56,7 +56,7 @@ enum StatusTone: Equatable {
         case .accent:
             .primary
         case .success:
-            .green
+            .secondary
         case .warning:
             .orange
         case .danger:
@@ -101,13 +101,13 @@ struct StatusGlyph: View {
     let systemImage: String
     var tone: StatusTone = .neutral
     var size = HealthMuleStyle.rowIconSize
+    @ScaledMetric(relativeTo: .body) private var iconScale: CGFloat = 1
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.subheadline.weight(.semibold))
+            .font(.body.weight(.regular))
             .foregroundStyle(tone.color)
-            .frame(width: size, height: size)
-            .background(tone.color.opacity(0.1), in: Circle())
+            .frame(width: size * iconScale, height: size * iconScale)
             .accessibilityHidden(true)
     }
 }
@@ -187,16 +187,13 @@ struct StatusBadge: View {
         HStack(spacing: 6) {
             Circle()
                 .fill(tone.color)
-                .frame(width: 7, height: 7)
+                .frame(width: 5, height: 5)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.08), in: Capsule())
         .accessibilityElement(children: .combine)
     }
 }
@@ -243,28 +240,33 @@ struct StatusHero<Action: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             StatusBadge(title: badge, tone: tone)
                 .accessibilityIdentifier("status-hero-badge")
-            Text(title)
-                .font(HealthMuleStyle.Text.heroTitle)
-                .accessibilityIdentifier("status-hero-title")
-            Text(message)
-                .font(HealthMuleStyle.Text.heroMessage)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("status-hero-message")
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(HealthMuleStyle.Text.heroTitle)
+                    .accessibilityIdentifier("status-hero-title")
+                Text(message)
+                    .font(HealthMuleStyle.Text.heroMessage)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("status-hero-message")
+            }
 
             if let progress, progress.totalUnits > 0 {
                 SyncDayProgressView(progress: progress)
             }
 
             if showsActionPlaceholder {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(HealthMuleStyle.inset)
                     .frame(height: 52)
                     .accessibilityHidden(true)
             } else {
                 action()
                     .frame(maxWidth: .infinity)
+                    .font(HealthMuleStyle.Text.cardTitle)
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: 12))
                     .tint(HealthMuleStyle.tint)
+                    .foregroundStyle(HealthMuleStyle.canvas)
                     .controlSize(.large)
             }
         }
@@ -336,7 +338,7 @@ struct SyncFactsRow: View {
             Text(fact.label)
                 .font(HealthMuleStyle.Text.factLabel)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(compact ? 1 : nil)
             Text(shown)
                 .font(HealthMuleStyle.Text.factValue)
                 .monospacedDigit()
