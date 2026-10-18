@@ -107,6 +107,52 @@ final class ProtectedStorageTests: XCTestCase {
         )
     }
 
+    func testStorageAssertionRejectsMismatchedProtection() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        var fileURL = directory.appendingPathComponent("protected.txt")
+        try Data("test".utf8).write(
+            to: fileURL,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try fileURL.setResourceValues(values)
+        fileURL.removeAllCachedResourceValues()
+
+        XCTAssertEqual(
+            try fileURL.resourceValues(forKeys: [.fileProtectionKey])
+                .fileProtection,
+            .completeUntilFirstUserAuthentication
+        )
+        let assertionLine: UInt = #line
+        let options = XCTExpectedFailure.Options()
+        options.isStrict = true
+        options.issueMatcher = { issue in
+            issue.type == .assertionFailure
+                && issue.sourceCodeContext.location?.lineNumber == Int(assertionLine)
+                && issue.compactDescription.hasPrefix("XCTAssertEqual failed")
+                && issue.compactDescription.contains("NSURLFileProtection")
+        }
+        try XCTExpectFailure(
+            "The storage assertion must reject a different requested protection class.",
+            options: options
+        ) {
+            XCTAssertNoThrow(
+                try PersistedStorageAssertions.assertProtectedAndExcludedFromBackup(
+                    fileURL,
+                    expectedProtection: .complete,
+                    file: #filePath,
+                    line: assertionLine
+                )
+            )
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(
             "healthmule-protection-\(UUID().uuidString)",
