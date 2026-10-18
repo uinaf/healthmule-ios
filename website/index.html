@@ -4,81 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HealthMule — Apple Health, in your own files</title>
-  <meta name="description" content="Export a small, read-only selection of Apple Health metrics as daily JSON files in your own Google Drive. No developer backend, ads, or analytics.">
+  <meta name="description" content="Export selected Apple Health metrics as daily JSON files in your own Google Drive. Read-only access. No developer backend, ads, or analytics.">
   <link rel="canonical" href="https://healthmule.uinaf.dev/">
   <link rel="icon" href="/assets/icon.png" type="image/png">
   <link rel="stylesheet" href="/styles.css">
-  <meta name="theme-color" content="#11120f">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
   <header class="header wrap">
     <a class="brand" href="/" aria-label="HealthMule home"><img src="/assets/icon.png" alt="" width="40" height="40">HealthMule</a>
-    <nav class="nav" aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="/privacy/">Privacy</a><a class="source" href="https://github.com/uinaf/healthmule-ios">Source ↗</a></nav>
+    <nav class="nav" aria-label="Main navigation"><a href="/privacy/">Privacy</a><a href="https://github.com/uinaf/healthmule-ios">Source ↗</a></nav>
   </header>
   <main id="main" class="wrap">
     <section class="hero" aria-labelledby="hero-title">
-      <div>
-        <p class="eyebrow">Apple Health → your Google Drive</p>
-        <h1 id="hero-title">Your health.<br>Your files.<br><span>Your call.</span></h1>
-        <p class="intro">A small selection of Apple Health metrics, exported as daily JSON. Ready for your own tools, in a Drive folder you control.</p>
-        <div class="actions"><a class="button" href="#demo">Explore the app <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/uinaf/healthmule-ios">Explore the source</a></div>
-        <p class="availability">Built for iPhone, with an Apple Watch companion. App Store release in preparation.</p>
+      <h1 id="hero-title">Apple Health to Google Drive.</h1>
+      <p class="intro">Daily JSON exports of the metrics you choose. <br>Read-only HealthKit access, with no developer backend.</p>
+      <p class="availability">For iPhone and Apple Watch. App Store release in preparation.</p>
+    </section>
+    <section class="app-preview" aria-label="Explore HealthMule" aria-describedby="preview-note">
+      <fieldset class="preview-controls">
+        <legend class="visually-hidden">Choose an app screen</legend>
+        <label><input type="radio" name="preview" id="preview-home"><span>Home</span></label>
+        <label><input type="radio" name="preview" id="preview-settings" checked><span>Settings</span></label>
+        <label><input type="radio" name="preview" id="preview-sync"><span>Sync</span></label>
+      </fieldset>
+      <div class="screens">
+        <figure class="preview-home"><img src="/assets/home-dark.webp" width="660" height="1435" alt="HealthMule Home in dark mode, ready for the first sync, with a sync summary and connection status." loading="lazy"><figcaption>Check connections and sync status.</figcaption></figure>
+        <figure class="preview-settings"><img src="/assets/settings.webp" width="660" height="1435" alt="HealthMule Settings with the nine supported health metric toggles enabled." fetchpriority="high"><figcaption>Choose which health metrics to include.</figcaption></figure>
+        <figure class="preview-sync"><img src="/assets/sync-in-progress.webp" width="660" height="1435" alt="HealthMule sync progress, showing Processing 12 of 30 days." loading="lazy"><figcaption>Follow daily records as they are prepared.</figcaption></figure>
       </div>
-      <figure class="hero-preview">
-        <div class="phone-frame"><img src="/assets/home-dark.jpg" width="660" height="1435" alt="HealthMule Home in dark mode, showing Ready for the first sync, a sync summary, and connection status." fetchpriority="high"></div>
-        <figcaption>APP PREVIEW · SIMULATOR<br><span>Sample state, not a live account.</span></figcaption>
-      </figure>
+      <p class="preview-note" id="preview-note">Simulator previews with sample states, not live Drive uploads.</p>
     </section>
-    <div class="principles" aria-label="Privacy principles"><div><b>Read-only HealthKit.</b><span>No changes to your health records.</span></div><div><b>Your own Google Drive.</b><span>No developer backend.</span></div><div><b>Open source.</b><span>No ads, analytics, or telemetry.</span></div></div>
-    <section class="section" id="demo" aria-labelledby="demo-title">
-      <div class="section-head"><div><p class="eyebrow">Take a look around</p><h2 id="demo-title">A small app.<br>A clear view of the work.</h2></div><p>Open a step to explore HealthMule. These Simulator screenshots show sample states, not live Drive uploads.</p></div>
-      <div class="walkthrough">
-        <details name="app-demo" open>
-          <summary><span class="demo-number">01</span><span>Choose your metrics</span><span class="demo-toggle" aria-hidden="true">+</span></summary>
-          <div class="demo-content"><div class="demo-copy"><p class="eyebrow">Settings / sample state</p><h3>Only what you choose.</h3><p>Review the supported types and decide which to include. HealthMule requests read access for the types you enable, without permission to write to Apple Health.</p><p class="demo-note">Sample preferences: all nine types enabled.</p><a class="text-link" href="/assets/settings.jpg">View full screenshot ↗</a></div><figure class="demo-screen"><img src="/assets/settings.jpg" width="660" height="1435" alt="HealthMule Settings with toggles for body mass, steps, active energy, resting energy, resting heart rate, heart-rate variability, VO₂ max, sleep, and workouts." loading="lazy"><figcaption>Simulator · sample preferences</figcaption></figure></div>
-        </details>
-        <details name="app-demo">
-          <summary><span class="demo-number">02</span><span>Review your connections</span><span class="demo-toggle" aria-hidden="true">+</span></summary>
-          <div class="demo-content"><div class="demo-copy"><p class="eyebrow">Home / sample state</p><h3>Know when you’re ready.</h3><p>Home brings Apple Health access, Google Drive connection status, and the sync summary together. Start a sync from the same screen when setup is ready.</p><p class="demo-note">Sample account and connection status.</p><a class="text-link" href="/assets/home-dark.jpg">View full screenshot ↗</a></div><figure class="demo-screen"><img src="/assets/home-dark.jpg" width="660" height="1435" alt="HealthMule Home in dark mode, ready for the first sync, with Apple Health and Google Drive connection rows." loading="lazy"><figcaption>Simulator · sample connections</figcaption></figure></div>
-        </details>
-        <details name="app-demo">
-          <summary><span class="demo-number">03</span><span>Follow the sync</span><span class="demo-toggle" aria-hidden="true">+</span></summary>
-          <div class="demo-content"><div class="demo-copy"><p class="eyebrow">Sync / sample state</p><h3>See progress as it happens.</h3><p>HealthMule prepares daily records locally before uploading them. The sync card shows progress through that work, with a summary below.</p><p class="demo-note">Sample progress: processing 12 of 30 days.</p><a class="text-link" href="/assets/sync-in-progress.jpg">View full screenshot ↗</a></div><figure class="demo-screen"><img src="/assets/sync-in-progress.jpg" width="660" height="1435" alt="HealthMule showing Syncing your latest changes and a progress bar labeled Processing 12 of 30 days." loading="lazy"><figcaption>Simulator · simulated sync progress</figcaption></figure></div>
-        </details>
-      </div>
+    <section class="facts" aria-label="Export and privacy">
+      <div><h2>Read-only HealthKit.</h2><p>Select from nine supported health types. HealthMule never writes to your Apple Health records.</p></div>
+      <div><h2>Your Drive, your copy.</h2><p>Daily JSON and a manifest in <code>Apple Health Sync/</code>. Access is limited to files created by or shared with the app.</p></div>
+      <div><h2>No ads. No analytics.</h2><p>Your iPhone sends exports directly to Google Drive. Disconnecting leaves your existing files in place.</p></div>
     </section>
-    <section class="section" id="how-it-works" aria-labelledby="how-title">
-      <div class="section-head"><div><p class="eyebrow">A short route out</p><h2 id="how-title">From Health to files.<br>Without the detour.</h2></div><p>Your iPhone reads the metrics you enable, prepares daily summaries, and uploads them directly to Google Drive. Your health data never passes through a HealthMule server.</p></div>
-      <div class="steps">
-        <div><span class="step-number">01 / SELECT</span><h3>Choose what comes along.</h3><p>Enable only the supported metrics you want to export, then grant read access in Apple Health. HealthMule never requests permission to write health data.</p></div>
-        <div><span class="step-number">02 / CONNECT</span><h3>Give it a small corner of Drive.</h3><p>Sign in with Google. HealthMule uses per-file access to create and manage its exports, without permission to browse your whole Drive.</p></div>
-        <div><span class="step-number">03 / EXPORT</span><h3>Keep a daily record.</h3><p>Daily JSON files and a manifest live in Apple Health Sync. Updated days are reconciled there. Use the files with the tools you choose.</p></div>
-      </div>
-    </section>
-    <section class="section export-section" aria-labelledby="files-title"><div><p class="eyebrow">The result is yours</p><h2 id="files-title">Ordinary files.<br>Plenty of possibilities.</h2><p class="section-copy">One JSON record per local calendar day, plus a manifest. Bring the exports into your own spreadsheet, dashboard, or other trusted tools.</p><p class="demo-note">Illustrative folder structure.</p></div>
-      <div class="export" aria-label="Illustrative export folder structure">
-        <div class="export-top"><span>YOUR GOOGLE DRIVE</span><span class="status"><span class="dot" aria-hidden="true"></span>Daily JSON</span></div>
-        <pre class="file-tree"><strong>Apple Health Sync/</strong>
-├── manifest.json
-└── <strong>daily/</strong>
-    ├── 2026-10-16.json
-    ├── 2026-10-17.json
-    └── 2026-10-18.json</pre>
-        <p class="export-note">One file per local calendar day. Stable records.<br>Plain JSON you can take anywhere.</p>
-      </div>
-    </section>
-    <section class="section" aria-labelledby="metrics-title">
-      <p class="eyebrow">A deliberate selection</p><h2 id="metrics-title">Useful daily summaries.<br>Not your entire medical history.</h2>
-      <p class="section-copy">HealthMule supports these Apple Health types. You choose which to enable. Missing or unreadable measurements stay empty in the export; they are never turned into a made-up zero.</p>
-      <ul class="metric-list"><li>Body mass</li><li>Steps</li><li>Active energy</li><li>Resting energy</li><li>Resting heart rate</li><li>Heart-rate variability</li><li>VO₂ max</li><li>Sleep</li><li>Workouts</li></ul>
-    </section>
-    <section class="section privacy-block" aria-labelledby="privacy-title">
-      <div><p class="eyebrow">Fewer places for your data to go</p><h2 id="privacy-title">Your phone does the work.<br>Your Drive keeps the copy.</h2><p class="section-copy">No HealthMule account. No developer database of health records. No advertising or tracking SDKs.</p><a class="text-link" href="/privacy/">Read the privacy policy</a></div>
-      <ul class="privacy-points"><li>Protected on your iPhone.<span>Local export staging uses file protection and is excluded from device backups. Google sign-in credentials stay in Keychain.</span></li><li>A lightweight Watch companion.<span>The Watch shows sync status and can request a sync when your iPhone is reachable. It does not receive health values.</span></li><li>You stay in control.<span>Disconnect Google at any time. Existing exports remain in your Drive until you delete them yourself.</span></li></ul>
-    </section>
-    <section class="section support" aria-labelledby="support-title"><div><p class="eyebrow">A small practical note</p><h2 id="support-title">Sync follows iOS’s schedule.</h2><p>Background activity is controlled by iOS. Open the app to review status or start a sync.</p></div><a class="text-link" href="mailto:dev@uinaf.dev">Contact support ↗</a></section>
+    <p class="platform-note">The Watch shows sync status. iOS controls background timing; open the iPhone app to start a sync.</p>
   </main>
-  <footer class="footer wrap"><span>HealthMule by <a href="https://uinaf.dev">uinaf</a></span><div class="footer-links"><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="mailto:dev@uinaf.dev">Support</a><a href="https://github.com/uinaf/healthmule-ios">Source</a></div></footer>
+  <footer class="footer wrap"><span>Made by <a href="https://uinaf.dev">uinaf</a></span><div class="footer-links"><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="mailto:dev@uinaf.dev">Support</a></div></footer>
 </body>
 </html>
