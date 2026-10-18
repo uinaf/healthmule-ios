@@ -146,6 +146,59 @@ final class DriveAPIClientTests: XCTestCase {
     }
 
     @MainActor
+    func testConnectedAccountCleanupFinishesAfterConnectionStateChanges() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let keys = ["backfill.customStart", "backfill.selectedStart", "sync.driveExportsPaused"]
+        let previous = keys.map { UserDefaults.standard.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+            try? FileManager.default.removeItem(at: directory)
+            URLProtocolStub.removeHandler()
+        }
+        let metadata = DriveMetadataStore(directoryURL: directory.appendingPathComponent("metadata"))
+        let auth = CleanupGoogleAuth()
+        let requests = RequestCounter()
+        URLProtocolStub.setHandler { @Sendable request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            _ = requests.next()
+            return try Self.response(for: request, json: ["files": []])
+        }
+        let model = AppModel(
+            googleConfiguration: GoogleOAuthConfiguration(
+                clientID: "123-cleanup.apps.googleusercontent.com",
+                redirectScheme: "com.googleusercontent.apps.123-cleanup"
+            ),
+            googleAuth: auth,
+            driveClient: Self.makeClient(metadataStore: metadata),
+            healthKit: HealthKitClient(),
+            diagnostics: DiagnosticsRecorder(exportDirectory: directory.appendingPathComponent("diagnostics")),
+            syncActivityStore: SyncActivityStore(directoryURL: directory.appendingPathComponent("activity")),
+            stagingRoot: directory.appendingPathComponent("staging"),
+            syncCoordinator: nil,
+            syncInitializationError: nil,
+            isUITesting: true
+        )
+        model.googleConnection = .connected(GoogleConnection(
+            account: GoogleAccount(id: "account", email: nil),
+            folderID: "folder",
+            folderName: "Apple Health Sync"
+        ))
+
+        await model.trashDriveExports()
+
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(auth.disconnectCount, 1)
+        XCTAssertEqual(model.googleConnection, .disconnected)
+        guard case .succeeded(.driveDeletion, _) = model.operationState else {
+            return XCTFail("Cleanup must finish rather than retaining a stale working epoch")
+        }
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: "sync.driveExportsPaused"))
+    }
+
+    @MainActor
     func testManagedFolderConnectionUsesCurrentRemoteNameWithinAccount()
         async throws
     {
@@ -5063,4 +5116,13 @@ private final class HandlerStore: @unchecked Sendable {
         }
         return try handler(request)
     }
+}
+
+@MainActor
+private final class CleanupGoogleAuth: GoogleAuthenticating {
+    private(set) var disconnectCount = 0
+    func restore() async throws -> GoogleConnectionState { .disconnected }
+    func connect() async throws -> GoogleConnectionState { .disconnected }
+    func accessToken(for expectedAccountID: String) async throws -> String { "test-token" }
+    func disconnect() async throws { disconnectCount += 1 }
 }

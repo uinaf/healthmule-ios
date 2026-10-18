@@ -91,7 +91,7 @@ final class AppModel {
         )
     }
 
-    private let googleAuth: GoogleAuthService
+    private let googleAuth: any GoogleAuthenticating
     private let driveClient: DriveAPIClient
     private let healthKit: HealthKitClient
     private let diagnostics: DiagnosticsRecorder
@@ -120,9 +120,9 @@ final class AppModel {
         CheckedContinuation<SyncTrigger, Never>
     ] = []
 
-    private init(
+    init(
         googleConfiguration: GoogleOAuthConfiguration,
-        googleAuth: GoogleAuthService,
+        googleAuth: any GoogleAuthenticating,
         driveClient: DriveAPIClient,
         healthKit: HealthKitClient,
         diagnostics: DiagnosticsRecorder,
@@ -1359,12 +1359,13 @@ final class AppModel {
         let state = OperationState.working(.driveDeletion, "Moving Drive exports to Trash")
         setOperationState(state, origin: .userInitiated)
         let operation = operationEpoch
-        let epoch = beginGoogleTransition()
+        let preparingEpoch = beginGoogleTransition()
         if let syncCoordinator { await syncCoordinator.waitUntilIdle() }
-        guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
+        guard operationEpoch == operation, isGoogleTransitionCurrent(preparingEpoch) else { return }
         // Survive interruption without silently restoring auth and re-uploading deleted data.
         UserDefaults.standard.set(true, forKey: Self.driveExportsPausedKey)
         googleConnection = .driveUnavailable(account)
+        let epoch = googleTransitionEpoch
         var trashedCount = 0
         do {
             try await driveClient.clearActiveAccount()

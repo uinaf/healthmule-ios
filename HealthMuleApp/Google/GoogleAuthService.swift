@@ -34,7 +34,15 @@ enum GoogleAuthError: LocalizedError, Equatable, Sendable {
 }
 
 @MainActor
-final class GoogleAuthService {
+protocol GoogleAuthenticating {
+    func restore() async throws -> GoogleConnectionState
+    func connect() async throws -> GoogleConnectionState
+    func accessToken(for expectedAccountID: String) async throws -> String
+    func disconnect() async throws
+}
+
+@MainActor
+final class GoogleAuthService: GoogleAuthenticating {
     static let driveFileScope = "https://www.googleapis.com/auth/drive.file"
 
     private let configuration: GoogleOAuthConfiguration

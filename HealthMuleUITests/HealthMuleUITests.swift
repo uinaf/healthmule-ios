@@ -316,6 +316,27 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testUnavailableGoogleOffersDisconnectWithoutDriveDeletion() throws {
+        for state in ["--ui-google-unavailable", "--ui-google-reconnect"] {
+            let app = launch(additionalArguments: [state])
+            app.tabBars.buttons["Settings"].tap()
+            XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
+            let disconnect = app.buttons["Disconnect Google"]
+            for _ in 0..<5 where !disconnect.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(disconnect.isHittable)
+            let reset = app.buttons["Reset Local Sync State"]
+            for _ in 0..<3 where !reset.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(reset.isHittable)
+            XCTAssertFalse(app.buttons["Move Drive Exports to Trash"].exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testSettingsDestructiveActionsUseCenteredCancellableAlerts() throws {
         let app = launch(additionalArguments: ["--ui-ready"])
         app.tabBars.buttons["Settings"].tap()

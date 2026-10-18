@@ -134,7 +134,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var driveExportsSection: some View {
-        if model.googleConnection.canDisconnect {
+        if model.googleConnection.account != nil {
             Section {
                 Button(role: .destructive) {
                     isShowingTrashConfirmation = true
