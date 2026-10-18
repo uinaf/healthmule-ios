@@ -104,8 +104,6 @@ struct SyncView: View {
                     await model.reconcile(trigger: .manual)
                 }
             } label: {
-                // The spinning glyph carries "in progress" so the label does
-                // not have to restate a badge that already says Syncing.
                 Label(syncActionLabel, systemImage: "arrow.triangle.2.circlepath")
                     .symbolEffect(
                         .rotate,

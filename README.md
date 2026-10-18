@@ -10,12 +10,10 @@ Google Drive.
   while the phone is reachable.
 - There is no developer backend, analytics, ads, or telemetry.
 
-**Implemented:** the complete sync path, covered by deterministic core tests,
-Watch presentation-contract tests, and Simulator checks.
-
-**Unproven:** HealthKit background delivery, real Drive uploads, and
-process-interruption recovery. Prove them with a signed build against the
-[physical-device checklist](docs/DEVICE_TESTING.md).
+Simulator fixtures cover app presentation and deterministic contracts. Use the
+[physical-device checklist](docs/DEVICE_TESTING.md) for HealthKit, real Drive
+uploads, background execution, and paired-Watch delivery. Release acceptance
+status lives in [Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
 
 ## Quick start
 
@@ -25,10 +23,8 @@ Requirements:
 - Matching iOS and watchOS Simulator runtimes for app builds and launches
 - Swift 6
 
-[XcodeGen](https://github.com/yonaskolb/XcodeGen) needs no separate install.
-`make project` downloads the official release pinned in
-`scripts/install-xcodegen.sh`, verifies its published SHA-256 digest, and keeps
-it under `.artifacts/toolchain`.
+`make project` provisions the pinned [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+under `.artifacts/toolchain`; do not install it separately.
 
 Generate the project and launch the phone app in the first available iPhone
 Simulator. Xcode also builds and embeds the Watch companion:
@@ -44,22 +40,17 @@ Set `SIMULATOR_UDID` to target a specific available simulator:
 SIMULATOR_UDID=<simulator-udid> make run
 ```
 
-Run the unattended agent harness to boot a compatible iPhone Simulator,
-exercise the critical loading, sync, failure, and automatic-activity states,
-and retain screenshots plus a machine-readable test summary:
+Capture deterministic UI states and a test summary:
 
 ```sh
 make harness
 ```
 
-- Each run writes a new directory under `.artifacts/agent-harness`.
-- Set `HEALTHMULE_HARNESS_OUTPUT` to place those artifacts elsewhere.
-- The fixtures are deterministic development data. They prove neither real
-  HealthKit background delivery nor real Drive uploads.
+Artifacts go under `.artifacts/agent-harness`. Set `HEALTHMULE_HARNESS_OUTPUT`
+to choose another directory.
 
-The default build intentionally has no Google credentials. The UI and automated
-tests work in that state. Follow [Google OAuth setup](docs/GOOGLE_OAUTH.md) when
-you are ready to connect a Drive account.
+Google credentials are optional for the default build and automated tests.
+Follow [Google OAuth setup](docs/GOOGLE_OAUTH.md) to connect a Drive account.
 
 ## Develop and validate
 
@@ -67,8 +58,8 @@ Run `make verify` for the fast required gate. App and UI changes also need an
 appropriate Xcode or Simulator check. The complete command matrix and pull
 request expectations live in [Contributing](CONTRIBUTING.md).
 
-Builds reach TestFlight only through the manual `Upload TestFlight` workflow,
-never from a developer Mac.
+Release setup and TestFlight operations live in
+[Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
 
 ## Website
 
@@ -78,16 +69,13 @@ The public [website](https://healthmule.uinaf.dev),
 There is no build step or application server. Preview with
 `python3 -m http.server 8765 --directory website`.
 
-`wrangler.jsonc` deploys the assets as the `healthmule` Cloudflare Worker.
-Use the uinaf product-deployment credential through the vault and run
-`npx --yes wrangler@4.151.1 deploy`. The hostname binding belongs to
-[`uinaf/infra`](https://github.com/uinaf/infra); keep it out of this Worker's
-deployment configuration.
+[wrangler.jsonc](wrangler.jsonc) owns the Worker asset configuration.
+Deployment credentials and hostname ownership live in the
+[website runbook](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
 
 ## Privacy boundary
 
 - HealthKit access is read-only and limited to the types in the product spec.
-- The app has no developer backend, analytics, ads, or telemetry.
 - Google access uses the narrow `drive.file` scope.
 - Health values, OAuth tokens, exported records, and raw HealthKit metadata must
   never appear in logs or diagnostics.
@@ -101,11 +89,6 @@ deployment configuration.
 - [Architecture and privacy boundaries](docs/ARCHITECTURE.md)
 - [Product and export contract](docs/specs/healthkit-drive-exporter.md)
 - [Security reporting](https://github.com/uinaf/.github/blob/main/SECURITY.md)
-
-## Contributing
-
-Issues and pull requests are welcome. See [Contributing](CONTRIBUTING.md) for
-the development setup, validation commands, and privacy requirements.
 
 ## License
 

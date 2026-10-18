@@ -121,8 +121,6 @@ struct StatusView: View {
                     await model.reconcile(trigger: .manual)
                 }
             } label: {
-                // The spinning glyph carries "in progress" so the label does
-                // not have to restate a badge that already says Syncing.
                 Label(title, systemImage: "arrow.triangle.2.circlepath")
                     .symbolEffect(
                         .rotate,
@@ -853,9 +851,6 @@ private struct ConnectionCard: View {
         HStack(alignment: .center, spacing: 12) {
             connectionIcon
             VStack(alignment: .leading, spacing: 4) {
-                // iOS states a row's value as trailing text rather than a
-                // badge; the capsule is reserved for the hero, where the state
-                // is the headline.
                 LabeledContent {
                     Text(badge)
                         .font(.subheadline)

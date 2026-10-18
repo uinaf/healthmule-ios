@@ -143,7 +143,7 @@ public actor FileSyncStore {
                         contentData: normalizedPriorContents
                     )
                 {
-                    try writeArtifactFirst(normalizedPriorContents, to: url)
+                    try writeProtectedFile(normalizedPriorContents, to: url)
                     return .unchanged(
                         id,
                         revision: existing.localRevision
@@ -159,7 +159,7 @@ public actor FileSyncStore {
             ?? DailyHealthRecordCodec.encode(record)
         let semanticData = try DailyHealthRecordCodec.semanticData(for: record)
         let nextRevision = (state.artifacts[id.key]?.localRevision ?? 0) + 1
-        try writeArtifactFirst(contents, to: url)
+        try writeProtectedFile(contents, to: url)
 
         var nextState = state
         let uploadedRevision = nextState.artifacts[id.key]?.uploadedRevision ?? 0
@@ -223,7 +223,7 @@ public actor FileSyncStore {
         }
 
         let nextRevision = (state.artifacts[id.key]?.localRevision ?? 0) + 1
-        try writeArtifactFirst(contents, to: url)
+        try writeProtectedFile(contents, to: url)
 
         var nextState = state
         let uploadedRevision = nextState.artifacts[id.key]?.uploadedRevision ?? 0
@@ -267,7 +267,7 @@ public actor FileSyncStore {
         let manifest = candidate.preservingUnknownFields(from: prior)
         let contents = try ExportManifestCodec.encode(manifest)
         try Task.checkCancellation()
-        try writeArtifactFirst(contents, to: url)
+        try writeProtectedFile(contents, to: url)
 
         var nextState = state
         nextState.artifacts[id.key] = makeArtifactState(
@@ -592,7 +592,7 @@ public actor FileSyncStore {
                 throw FileSyncStoreError.invalidArtifact(url.lastPathComponent)
             }
             if storedContents != contents {
-                try writeArtifactFirst(contents, to: url)
+                try writeProtectedFile(contents, to: url)
             }
             let semanticData = try DailyHealthRecordCodec.semanticData(for: record)
             if let existing = nextState.artifacts[id.key] {
@@ -670,7 +670,7 @@ public actor FileSyncStore {
         let manifest = try ExportManifestCodec.decode(artifactContents)
         let contents = try ExportManifestCodec.encode(manifest)
         if artifactContents != contents {
-            try writeArtifactFirst(contents, to: url)
+            try writeProtectedFile(contents, to: url)
         }
 
         if let existing = nextState.artifacts[id.key] {
@@ -759,7 +759,7 @@ public actor FileSyncStore {
         nextState.retryQueue.append(item)
     }
 
-    private func writeArtifactFirst(_ contents: Data, to url: URL) throws {
+    private func writeProtectedFile(_ contents: Data, to url: URL) throws {
         #if os(iOS)
         try contents.write(
             to: url,
@@ -868,7 +868,7 @@ public actor FileSyncStore {
         guard !FileManager.default.fileExists(atPath: v1BackupFile.path) else {
             return
         }
-        try writeProtectedState(data, to: v1BackupFile)
+        try writeProtectedFile(data, to: v1BackupFile)
     }
 
     private func discardPartialV2Index() {
@@ -925,21 +925,6 @@ public actor FileSyncStore {
         existing.contentByteCount == contentData.count
             && existing.contentDigest == SHA256Digest.hexString(of: contentData)
             && existing.semanticDigest == SHA256Digest.hexString(of: semanticData)
-    }
-
-    private func writeProtectedState(_ data: Data, to url: URL) throws {
-        #if os(iOS)
-        try data.write(
-            to: url,
-            options: [
-                .atomic,
-                .completeFileProtectionUntilFirstUserAuthentication,
-            ]
-        )
-        try Self.protectAndExcludeFromBackup(url)
-        #else
-        try data.write(to: url, options: [.atomic])
-        #endif
     }
 
     #if os(iOS)

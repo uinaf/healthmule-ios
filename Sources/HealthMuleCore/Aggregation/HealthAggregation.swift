@@ -394,9 +394,4 @@ public enum DailyHealthRecordAggregator {
     private static func normalizedZero(_ value: Double) -> Double {
         value == 0 ? 0 : value
     }
-
-    private static func normalizedZero(_ value: Double?) -> Double? {
-        value.map(normalizedZero)
-    }
-
 }

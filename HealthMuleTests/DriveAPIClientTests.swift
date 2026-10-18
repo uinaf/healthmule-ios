@@ -51,28 +51,10 @@ final class DriveAPIClientTests: XCTestCase {
                 )
             }
 
-            let response = try XCTUnwrap(
-                HTTPURLResponse(
-                    url: try XCTUnwrap(request.url),
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
-            )
-            return (response, try JSONSerialization.data(withJSONObject: item))
+            return try Self.response(for: request, json: item)
         }
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [URLProtocolStub.self]
-        let session = URLSession(configuration: configuration)
-        let client = DriveAPIClient(
-            tokenProvider: { _ in "test-token" },
-            metadataStore: metadataStore,
-            session: session,
-            uploadTransport: TestSessionDriveUploadTransport(
-                session: session
-            )
-        )
+        let client = Self.makeClient(metadataStore: metadataStore)
 
         let connection = try await client.ensureAppFolders(for: accountID)
 
@@ -211,7 +193,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await second.value
             XCTFail("Expected the second caller to cancel promptly")
         } catch is CancellationError {
-            // The shared folder setup remains owned by the first caller.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -287,15 +268,7 @@ final class DriveAPIClientTests: XCTestCase {
                 )
             }
 
-            let response = try XCTUnwrap(
-                HTTPURLResponse(
-                    url: try XCTUnwrap(request.url),
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
-            )
-            return (response, try JSONSerialization.data(withJSONObject: item))
+            return try Self.response(for: request, json: item)
         }
 
         let client = Self.makeClient(metadataStore: metadataStore)
@@ -1591,18 +1564,10 @@ final class DriveAPIClientTests: XCTestCase {
             guard request.httpMethod == "PATCH" else {
                 throw StubError.unexpectedRequest(request.httpMethod ?? "nil")
             }
-            let response = try XCTUnwrap(
-                HTTPURLResponse(
-                    url: try XCTUnwrap(request.url),
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
+            return try Self.response(
+                for: request,
+                json: ["id": itemID, "name": "manifest.json"]
             )
-            let data = try JSONSerialization.data(
-                withJSONObject: ["id": itemID, "name": "manifest.json"]
-            )
-            return (response, data)
         }
 
         let client = Self.makeClient(metadataStore: metadataStore)
@@ -1715,7 +1680,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await activation.value
             XCTFail("Expected activation cancellation")
         } catch is CancellationError {
-            // Cancellation won before the destination could be published.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -1730,7 +1694,6 @@ final class DriveAPIClientTests: XCTestCase {
             )
             XCTFail("Expected the cancelled destination to remain inactive")
         } catch DriveAPIError.accountNotReady {
-            // The activation did not commit.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -2748,7 +2711,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await second.value
             XCTFail("Expected the queued upsert to cancel promptly")
         } catch is CancellationError {
-            // Its reserved worker remains queued only long enough to unwind.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -2832,7 +2794,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await staleUpsert.value
             XCTFail("Expected the old destination upload to be invalidated")
         } catch DriveAPIError.accountNotReady {
-            // The new activation won the race.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -2916,7 +2877,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await staleUpsert.value
             XCTFail("Expected the stale metadata completion to be rejected")
         } catch DriveAPIError.accountNotReady {
-            // The post-write activation check rejected the stale success.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -3081,7 +3041,6 @@ final class DriveAPIClientTests: XCTestCase {
             try await waiter.value
             XCTFail("Expected finished-event waiter cancellation")
         } catch is CancellationError {
-            // Cancellation won the gate before a finish event arrived.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -3193,7 +3152,6 @@ final class DriveAPIClientTests: XCTestCase {
             try await waiter.value
             XCTFail("Expected registration-race waiter cancellation")
         } catch is CancellationError {
-            // The canceled gate cannot consume the pending event.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -3534,7 +3492,6 @@ final class DriveAPIClientTests: XCTestCase {
             try await transition.value
             XCTFail("Expected stale-scope drain cancellation")
         } catch is CancellationError {
-            // Caller cancellation must not be mistaken for task completion.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -3702,7 +3659,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await second.value
             XCTFail("Expected the joined caller to cancel promptly")
         } catch is CancellationError {
-            // The first caller still owns the shared transfer.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -3808,7 +3764,6 @@ final class DriveAPIClientTests: XCTestCase {
             _ = try await second.value
             XCTFail("Expected queued upload cancellation")
         } catch is CancellationError {
-            // Its worker is cancelled before it may start a URLSession task.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -4329,9 +4284,7 @@ final class DriveAPIClientTests: XCTestCase {
 
     private nonisolated static func cachedArtifactValidationSession(
         fileID: String,
-        parentID: String,
-        kind: String = "manifest",
-        date: String? = nil
+        parentID: String
     ) -> URLSession {
         URLProtocolStub.setHandler { request in
             guard
@@ -4342,19 +4295,15 @@ final class DriveAPIClientTests: XCTestCase {
                     request.url?.absoluteString ?? "nil"
                 )
             }
-            var appProperties = ["healthMuleKind": kind]
-            if let date {
-                appProperties["healthMuleDate"] = date
-            }
             return try Self.response(
                 for: request,
                 json: [
                     "id": fileID,
-                    "name": date.map { "\($0).json" } ?? "manifest.json",
+                    "name": "manifest.json",
                     "mimeType": "application/json",
                     "trashed": false,
                     "parents": [parentID],
-                    "appProperties": appProperties,
+                    "appProperties": ["healthMuleKind": "manifest"],
                 ]
             )
         }
@@ -4558,38 +4507,6 @@ private actor SuspendingTransitionDriveUploadTransport:
 
     func releaseTransition() {
         transitionReleased = true
-        let releaseWaiters = releaseWaiters
-        self.releaseWaiters.removeAll()
-        releaseWaiters.forEach { $0.resume() }
-    }
-}
-
-private actor AsyncSuspensionGate {
-    private var isSuspended = false
-    private var isReleased = false
-    private var suspensionWaiters: [CheckedContinuation<Void, Never>] = []
-    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
-
-    func suspend() async {
-        isSuspended = true
-        let suspensionWaiters = suspensionWaiters
-        self.suspensionWaiters.removeAll()
-        suspensionWaiters.forEach { $0.resume() }
-        guard !isReleased else { return }
-        await withCheckedContinuation { continuation in
-            releaseWaiters.append(continuation)
-        }
-    }
-
-    func waitUntilSuspended() async {
-        guard !isSuspended else { return }
-        await withCheckedContinuation { continuation in
-            suspensionWaiters.append(continuation)
-        }
-    }
-
-    func release() {
-        isReleased = true
         let releaseWaiters = releaseWaiters
         self.releaseWaiters.removeAll()
         releaseWaiters.forEach { $0.resume() }

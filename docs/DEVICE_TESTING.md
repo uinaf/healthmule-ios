@@ -6,30 +6,10 @@ background Watch Connectivity delivery. Simulator checks remain useful for both
 app shells and deterministic contracts, but they do not prove those delivery
 boundaries.
 
-`make harness` is the unattended Simulator lane for agents and CI-capable Macs.
-
-- It boots its selected iPhone Simulator and launches the app through critical
-  loading, sync, failure, and automatic-activity fixtures.
-- It asserts their visible contracts and exports screenshots with an xcresult
-  summary under `.artifacts/agent-harness`.
-- The fixtures contain no personal health data or Google credentials.
-- They complement, never replace, the physical-device checks in this document.
-
-## Current readiness
-
-| Surface | Status |
-| --- | --- |
-| Signed install and adaptive Home/Settings shell | Implemented |
-| Read-only HealthKit authorization and status display | Implemented |
-| Google sign-in and managed Drive-folder discovery or creation | Implemented |
-| Daily aggregation, initial backfill, and manual sync | Implemented; signed-device and real-Drive proof pending |
-| HealthKit observer changes flowing into staged daily records | Implemented; physical background-delivery proof pending |
-| File-backed background upload and relaunch recovery | Implemented; physical interruption proof pending |
-| Bounded automatic-activity receipts and schedule status | Implemented; physical cadence proof pending |
-| Watch status and reachable sync requests | Implemented; paired-device proof pending |
-
-Implemented rows describe live code paths, not completed platform acceptance.
-They still require the signed-device scenarios below.
+Use `make harness` for deterministic Simulator screenshots and assertions;
+see [Contributing](../CONTRIBUTING.md#validation). Track completed release
+acceptance in [Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c),
+with evidence tied to the tested build.
 
 ## Proof matrix
 
@@ -43,9 +23,6 @@ They still require the signed-device scenarios below.
 | Lock-state protected files, process-surviving uploads | no | required | n/a |
 | Reachable Watch sync request | `canRequestSync` is false | n/a | required |
 | Background application-context and user-info snapshot | no | n/a | required |
-
-Simulator gates never claim real `HKHealthStore`-to-Drive proof or Watch
-Connectivity delivery.
 
 ## Prerequisites
 
@@ -115,10 +92,6 @@ failure-injection scenarios.
 
 ## Foreground sync acceptance
 
-The daily provider, app-to-core reconciliation, protected staging, and Drive
-destination are implemented. Run these checks on a signed physical build with a
-configured OAuth client and integration Drive account.
-
 - [ ] An initial 30-day backfill creates one deterministic daily JSON object per calendar date and a manifest.
 - [ ] During that backfill the progress bar advances through both phases: it
   counts days while staging, then counts files while uploading. It must not sit
@@ -159,12 +132,6 @@ configured OAuth client and integration Drive account.
 
 ## Background acceptance
 
-HealthKit observer staging, `BGAppRefreshTask` reconciliation, and protected
-file-backed Drive transfer are implemented but still require physical-device
-proof. The app reconnects its background `URLSession` on a matching system
-launch event and reconciles completed or interrupted work through the durable
-queue.
-
 - [ ] With the app backgrounded, add a relevant Health sample and confirm the affected daily record is eventually updated.
 - [ ] Trigger an app-refresh task and confirm the Sync screen records one
   Background refresh receipt with its outcome. Confirm the schedule row reports
@@ -192,9 +159,8 @@ For development-only task simulation, attach LLDB to the running app and use App
 e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"dev.uinaf.healthmule.refresh"]
 ```
 
-The current handler runs the integrated reconciliation and in-process queue
-flush while iOS grants execution time. It does not prove HealthKit observer
-delivery, a process-surviving upload, or relaunch recovery. See Apple’s
+Task simulation does not prove observer delivery, process-surviving uploads,
+or relaunch recovery. See Apple’s
 [Starting and Terminating Tasks During
 Development](https://developer.apple.com/documentation/backgroundtasks/starting-and-terminating-tasks-during-development).
 
