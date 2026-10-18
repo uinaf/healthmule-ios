@@ -109,7 +109,7 @@ struct SettingsView: View {
     private var googleSection: some View {
         if model.googleConnection.canDisconnect {
             Section {
-                Button(role: .destructive) {
+                Button {
                     isShowingDisconnectConfirmation = true
                 } label: {
                     Label("Disconnect Google", systemImage: "link")
@@ -136,7 +136,7 @@ struct SettingsView: View {
     private var driveExportsSection: some View {
         if model.googleConnection.account != nil {
             Section {
-                Button(role: .destructive) {
+                Button {
                     isShowingTrashConfirmation = true
                 } label: {
                     Label("Move Drive Exports to Trash", systemImage: "trash")
@@ -163,7 +163,7 @@ struct SettingsView: View {
 
     private var resetSection: some View {
         Section {
-            Button(role: .destructive) {
+            Button {
                 isShowingResetConfirmation = true
             } label: {
                 Label("Reset Local Sync State", systemImage: "arrow.counterclockwise")
