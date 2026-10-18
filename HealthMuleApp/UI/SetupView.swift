@@ -216,8 +216,10 @@ struct SetupView: View {
                     systemImage: "heart.fill"
                 )
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 12))
             .tint(HealthMuleStyle.tint)
             .controlSize(.large)
             .disabled(!model.isHealthKitAvailable || model.operationState.isWorking)
@@ -568,12 +570,11 @@ private struct SetupStepHeader: View {
     private var stepTitle: some View {
         HStack(alignment: .center, spacing: 10) {
             Text(number.formatted())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 30, height: 30)
-                .background(HealthMuleStyle.inset, in: Circle())
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 20, alignment: .leading)
             Text(title)
-                .font(.headline)
+                .font(HealthMuleStyle.Text.cardTitle)
         }
     }
 }

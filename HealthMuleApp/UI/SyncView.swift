@@ -82,6 +82,7 @@ struct SyncView: View {
                 ShareLink(item: diagnosticsURL) {
                     Label("Share Diagnostics", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
+                        .healthMulePrimaryActionLabel()
                 }
                 .accessibilityIdentifier("sync-diagnostics-action")
             } else {
@@ -92,6 +93,7 @@ struct SyncView: View {
                 } label: {
                     Label("Prepare Diagnostics", systemImage: "doc.badge.gearshape")
                         .frame(maxWidth: .infinity)
+                        .healthMulePrimaryActionLabel()
                 }
                 .disabled(model.operationState.isWorking)
                 .accessibilityIdentifier("sync-diagnostics-action")
@@ -111,6 +113,7 @@ struct SyncView: View {
                         isActive: model.operationState.isWorking(.sync)
                     )
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("sync-now-action")
@@ -118,6 +121,7 @@ struct SyncView: View {
             NavigationLink(value: HomeRoute.setup) {
                 Label(setupActionLabel, systemImage: "arrow.right")
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .accessibilityIdentifier("sync-setup-action")
         }
@@ -539,6 +543,7 @@ private struct SyncPresentation {
 }
 
 private struct SyncActionRow: View {
+    @ScaledMetric(relativeTo: .subheadline) private var iconWidth = HealthMuleStyle.rowIconSize
     let title: String
     let subtitle: String
     let systemImage: String
@@ -549,14 +554,15 @@ private struct SyncActionRow: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: systemImage)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                    .font(HealthMuleStyle.Text.cardTitle)
+                    .foregroundStyle(.secondary)
+                    .frame(width: iconWidth)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.headline)
+                        .font(HealthMuleStyle.Text.cardTitle)
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(HealthMuleStyle.Text.cardBody)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                 }

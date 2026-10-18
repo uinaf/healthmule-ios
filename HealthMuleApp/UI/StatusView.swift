@@ -39,9 +39,7 @@ struct StatusView: View {
         }
         .background(HealthMuleStyle.canvas)
         .navigationTitle("HealthMule")
-        .navigationBarTitleDisplayMode(
-            dynamicTypeSize.isAccessibilitySize ? .inline : .large
-        )
+        .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("home-screen")
         .refreshable {
             await model.applicationDidBecomeActive()
@@ -114,6 +112,7 @@ struct StatusView: View {
             NavigationLink(value: HomeRoute.setup) {
                 Label(title, systemImage: "arrow.right")
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .accessibilityIdentifier("open-setup-action")
         case .sync(let title):
@@ -131,6 +130,7 @@ struct StatusView: View {
                         isActive: model.operationState.isWorking(.sync)
                     )
                     .frame(maxWidth: .infinity)
+                    .healthMulePrimaryActionLabel()
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-sync-action")
@@ -145,6 +145,7 @@ struct StatusView: View {
                     systemImage: "arrow.clockwise"
                 )
                 .frame(maxWidth: .infinity)
+                .healthMulePrimaryActionLabel()
             }
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("home-retry-action")
@@ -153,6 +154,7 @@ struct StatusView: View {
                 ShareLink(item: diagnosticsURL) {
                     Label("Share Diagnostics", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
+                        .healthMulePrimaryActionLabel()
                 }
                 .accessibilityIdentifier("home-diagnostics-action")
             } else {
@@ -163,6 +165,7 @@ struct StatusView: View {
                 } label: {
                     Label("Prepare Diagnostics", systemImage: "doc.badge.gearshape")
                         .frame(maxWidth: .infinity)
+                        .healthMulePrimaryActionLabel()
                 }
                 .disabled(model.operationState.isWorking)
                 .accessibilityIdentifier("home-diagnostics-action")
@@ -174,7 +177,7 @@ struct StatusView: View {
         VStack(spacing: 0) {
             healthConnectionCard
             Divider()
-                .padding(.leading, 52)
+                .padding(.leading, 56)
             googleConnectionCard
         }
         .healthMuleCard(padding: 0)
@@ -185,7 +188,7 @@ struct StatusView: View {
             ConnectionCard(
                 title: "Apple Health",
                 detail: healthConnectionDetail,
-                systemImage: "heart.fill",
+                systemImage: "heart",
                 badge: healthConnectionBadge,
                 tone: healthConnectionTone
             )
@@ -199,7 +202,7 @@ struct StatusView: View {
             ConnectionCard(
                 title: "Google Drive",
                 detail: googleConnectionDetail,
-                systemImage: "externaldrive.fill",
+                systemImage: "externaldrive",
                 badge: googleConnectionBadge,
                 tone: googleConnectionTone
             )
@@ -283,7 +286,7 @@ struct StatusView: View {
             StatusGlyph(
                 systemImage: "clock.arrow.circlepath",
                 tone: tone,
-                size: 34
+                size: HealthMuleStyle.rowIconSize
             )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -323,7 +326,7 @@ struct StatusView: View {
             StatusGlyph(
                 systemImage: "clock.arrow.circlepath",
                 tone: .neutral,
-                size: 34
+                size: HealthMuleStyle.rowIconSize
             )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -840,14 +843,14 @@ private struct ConnectionCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
+        .padding(16)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens setup.")
     }
 
     private var standardLayout: some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .center, spacing: 12) {
             connectionIcon
             VStack(alignment: .leading, spacing: 4) {
                 // iOS states a row's value as trailing text rather than a

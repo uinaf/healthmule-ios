@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @ScaledMetric(relativeTo: .subheadline) private var metricIconWidth: CGFloat = 22
     @State private var isShowingResetConfirmation = false
     @State private var isShowingDisconnectConfirmation = false
 
@@ -18,8 +19,9 @@ struct SettingsView: View {
                 .listRowSeparator(.hidden)
         }
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .formStyle(.grouped)
-        .listSectionSpacing(20)
+        .listSectionSpacing(24)
         .contentMargins(.top, 12, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .background(HealthMuleStyle.canvas)
@@ -56,25 +58,20 @@ struct SettingsView: View {
 
     private var overviewSection: some View {
         Section {
-            HStack(alignment: .top, spacing: 12) {
-                StatusGlyph(
-                    systemImage: "slider.horizontal.3",
-                    tone: .accent
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Export preferences")
+                    .font(HealthMuleStyle.Text.sectionTitle)
+                Text(
+                    "\(model.enabledMetrics.count) of \(HealthMetric.allCases.count) health data types included"
                 )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Export preferences")
-                        .font(HealthMuleStyle.Text.cardTitle)
-                    Text(
-                        "\(model.enabledMetrics.count) of \(HealthMetric.allCases.count) health data types included"
-                    )
-                    .font(HealthMuleStyle.Text.cardBody)
-                    .foregroundStyle(.secondary)
-                }
+                .font(HealthMuleStyle.Text.cardBody)
+                .foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
             .accessibilityElement(children: .combine)
         }
-        .listRowBackground(HealthMuleStyle.surface)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
     }
 
     private var metricsSection: some View {
@@ -84,7 +81,15 @@ struct SettingsView: View {
                     get: { model.enabledMetrics.contains(metric) },
                     set: { model.setMetric(metric, enabled: $0) }
                 )) {
-                    Label(metric.title, systemImage: metric.settingsSystemImage)
+                    Label {
+                        Text(metric.title)
+                            .font(.subheadline)
+                    } icon: {
+                        Image(systemName: metric.settingsSystemImage)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(width: metricIconWidth)
+                    }
                 }
                 .disabled(model.operationState.isWorking)
             }
