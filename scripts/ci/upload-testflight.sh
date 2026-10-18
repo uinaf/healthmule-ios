@@ -18,12 +18,18 @@ fi
 : "${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}"
 : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY is required}"
 : "${HEALTHMULE_APPLE_TEAM_ID:?HEALTHMULE_APPLE_TEAM_ID is required}"
+: "${HEALTHMULE_SIGNING_KEYCHAIN_PATH:?Signing keychain is required}"
+: "${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1:?Development certificate fingerprint is required}"
 : "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH:?HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH is required}"
 : "${HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID:?HEALTHMULE_APP_STORE_CONNECT_ISSUER_ID is required}"
 : "${HEALTHMULE_APP_STORE_CONNECT_KEY_ID:?HEALTHMULE_APP_STORE_CONNECT_KEY_ID is required}"
 
 [[ -s "${HEALTHMULE_APP_STORE_CONNECT_API_KEY_PATH}" ]] ||
   fail "The App Store Connect private key file is missing."
+
+security find-identity -v -p codesigning "${HEALTHMULE_SIGNING_KEYCHAIN_PATH}" | \
+  grep -Eq "^[[:space:]]*[0-9]+\\) ${HEALTHMULE_APPLE_DEVELOPMENT_CERTIFICATE_SHA1} \"Apple Development:" ||
+  fail "The reusable development signing identity is unavailable; refusing to create a replacement."
 
 archive_path="${RUNNER_TEMP}/HealthMule.xcarchive"
 export_path="${RUNNER_TEMP}/HealthMuleExport"
