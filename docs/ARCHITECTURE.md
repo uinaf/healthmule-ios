@@ -252,6 +252,16 @@ Reported independently for each metric once a request has been made:
 
 The UI never presents readable-type counts as permission progress.
 
+Passive foreground refresh keeps the last known Health authorization and metric
+results visible until the new results arrive. It does not expand completed setup
+cards or replace known results with loading placeholders.
+
+Operation banners share one presentation policy across screens: active work and
+user-initiated results remain visible; terminal automatic results stay in activity
+history. Setup shows Google connection progress and failures inside the Drive
+card, outside its collapsible details. A failed user retry keeps its specific
+error instead of replacing it with a generic setup message.
+
 ### Metric selection
 
 - UI metric switches control the app's request, query, observer, and export

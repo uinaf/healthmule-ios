@@ -598,6 +598,91 @@ final class AppConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testForegroundRefreshKeepsKnownHealthPresentationWhileChecking() async throws {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw XCTSkip("HealthKit is unavailable on this test device.")
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "HealthMuleTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.set(true, forKey: "health.authorization.requested")
+        defaults.set([String](), forKey: "health.authorization.requestedMetrics")
+        let changedKeys = ["backfill.customStart", "backfill.selectedStart"]
+        let previous = changedKeys.map { UserDefaults.standard.object(forKey: $0) }
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            for (key, value) in zip(changedKeys, previous) {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let requested = expectation(description: "Passive Health status request started")
+        let gate = PassiveHealthStatusGate(requested: requested)
+        let health = HealthKitClient(
+            store: PassiveHealthStatusStore(gate: gate),
+            anchorDirectoryURL: directory.appendingPathComponent("anchors"),
+            dayBoundaryDirectoryURL: directory.appendingPathComponent("boundaries"),
+            defaultsSuiteName: suiteName
+        )
+        let configuration = GoogleOAuthConfiguration(clientID: "", redirectScheme: "")
+        let drive = DriveAPIClient(
+            tokenProvider: { _ in throw GoogleAuthError.configurationMissing },
+            metadataStore: DriveMetadataStore(
+                directoryURL: directory.appendingPathComponent("drive")
+            ),
+            uploadTransport: UnexpectedPassiveRefreshUploadTransport()
+        )
+        let diagnostics = DiagnosticsRecorder(
+            exportDirectory: directory.appendingPathComponent("diagnostics")
+        )
+        let coordinator = try LiveSyncCoordinator(
+            rootDirectory: directory.appendingPathComponent("staging"),
+            healthKit: health,
+            recordProvider: HealthKitDailyRecordProvider(healthKit: health),
+            destination: DriveArtifactDestination(driveClient: drive),
+            diagnostics: diagnostics,
+            defaultsSuiteName: suiteName
+        )
+        let model = AppModel(
+            googleConfiguration: configuration,
+            googleAuth: GoogleAuthService(configuration: configuration),
+            driveClient: drive,
+            healthKit: health,
+            diagnostics: diagnostics,
+            syncActivityStore: SyncActivityStore(
+                directoryURL: directory.appendingPathComponent("activity")
+            ),
+            stagingRoot: directory.appendingPathComponent("staging"),
+            syncCoordinator: coordinator,
+            syncInitializationError: nil,
+            isUITesting: false
+        )
+        model.enabledMetrics = []
+        await model.bootstrap()
+        XCTAssertEqual(model.healthAuthorizationState, .requestCompleted)
+
+        model.enabledMetrics = [.stepCount]
+        let knownStatuses = HealthMetric.allCases.map {
+            MetricStatus(
+                metric: $0,
+                state: $0 == .stepCount ? .noReadableData : .notIncluded
+            )
+        }
+        model.metricStatuses = knownStatuses
+        let refresh = Task { @MainActor in
+            await model.applicationDidBecomeActive()
+        }
+        await fulfillment(of: [requested], timeout: 5)
+        XCTAssertEqual(model.healthAuthorizationState, .requestCompleted)
+        XCTAssertEqual(model.metricStatuses, knownStatuses)
+        await gate.release()
+        await refresh.value
+    }
+
+    @MainActor
     func testHealthStatusResolvesBeforeCredentialReplayCanSuspend() async {
         var healthState = HealthAuthorizationState.checking
         let replayGate = AsyncSuspensionGate()
@@ -939,5 +1024,82 @@ final class AppConfigurationTests: XCTestCase {
             BackfillDateCodec.string(from: date, timeZone: timeZone),
             "2026-07-23"
         )
+    }
+}
+
+private actor PassiveHealthStatusGate {
+    typealias Completion = @Sendable (HKAuthorizationRequestStatus, Error?) -> Void
+    private let requested: XCTestExpectation
+    private var completion: Completion?
+    private var released = false
+
+    init(requested: XCTestExpectation) {
+        self.requested = requested
+    }
+
+    func hold(_ completion: @escaping Completion) {
+        self.completion = completion
+        requested.fulfill()
+        if released { finish() }
+    }
+
+    func release() {
+        released = true
+        finish()
+    }
+
+    private func finish() {
+        let callback = completion
+        completion = nil
+        callback?(.unknown, NSError(domain: "HealthMuleTests", code: 1))
+    }
+}
+
+private final class PassiveHealthStatusStore: HKHealthStore, @unchecked Sendable {
+    private let gate: PassiveHealthStatusGate
+
+    init(gate: PassiveHealthStatusGate) {
+        self.gate = gate
+        super.init()
+    }
+
+    override func getRequestStatusForAuthorization(
+        toShare typesToShare: Set<HKSampleType>,
+        read typesToRead: Set<HKObjectType>,
+        completion: @escaping @Sendable (HKAuthorizationRequestStatus, Error?) -> Void
+    ) {
+        Task { await gate.hold(completion) }
+    }
+
+    override func execute(_ query: HKQuery) {}
+    override func stop(_ query: HKQuery) {}
+
+    override func enableBackgroundDelivery(
+        for type: HKObjectType,
+        frequency: HKUpdateFrequency,
+        withCompletion completion: @escaping @Sendable (Bool, Error?) -> Void
+    ) {
+        completion(true, nil)
+    }
+
+    override func disableBackgroundDelivery(
+        for type: HKObjectType,
+        withCompletion completion: @escaping @Sendable (Bool, Error?) -> Void
+    ) {
+        completion(true, nil)
+    }
+}
+
+private struct UnexpectedPassiveRefreshUploadTransport: DriveUploadTransport {
+    func transition(toDestinationScopeID destinationScopeID: String?) async throws {}
+
+    func upload(
+        request: URLRequest,
+        body: Data,
+        operationID: String,
+        destinationScopeID: String
+    ) async throws -> DriveUploadResponse {
+        XCTFail("Passive Health refresh must not upload while Google is unconfigured.")
+        throw GoogleAuthError.configurationMissing
     }
 }
