@@ -189,13 +189,6 @@ actor DriveMetadataStore {
         return true
     }
 
-    func removeFileID(for key: String, accountID: String) {
-        var state = state(for: accountID)
-        state.fileIDs.removeValue(forKey: key)
-        state.fileIDStatuses?.removeValue(forKey: key)
-        persist(state, for: accountID)
-    }
-
     @discardableResult
     func removeFileID(
         for key: String,

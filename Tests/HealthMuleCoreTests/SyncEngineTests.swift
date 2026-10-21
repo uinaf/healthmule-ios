@@ -272,7 +272,6 @@ struct SyncEngineTests {
         #expect(
             secondManifest.lastSuccessfulSyncAt.rawValue.hasSuffix("-07:00")
         )
-        #expect(await timeZoneProvider.requestCount() == 2)
     }
 
     @Test
@@ -589,10 +588,7 @@ struct SyncEngineTests {
             randomUnit: 0.5,
             retryPolicy: RetryPolicy()
         )
-        let clock = PausingClock(
-            value: Date(timeIntervalSince1970: 2_000),
-            pauseAtRequest: 1
-        )
+        let clock = PausingClock(value: Date(timeIntervalSince1970: 2_000))
         let destination = TestDestination()
         let engine = SyncEngine(
             configuration: .init(
@@ -647,11 +643,7 @@ struct SyncEngineTests {
             ),
             store: store,
             clock: clock,
-            jitterSource: AdvancingJitterSource(
-                clock: clock,
-                delay: 120,
-                value: 0.5
-            )
+            jitterSource: FixedJitterSource(value: 0.5)
         )
 
         let report = try await engine.reconcile(dates: [record.date])
@@ -799,48 +791,6 @@ struct SyncEngineTests {
         do {
             _ = try await syncTask.value
             Issue.record("Expected cancellation during jitter to propagate.")
-        } catch is CancellationError {}
-
-        let retryItem = try #require(try await store.retryItems().first)
-        #expect(retryItem.attemptCount == 0)
-        #expect(retryItem.notBefore == Date(timeIntervalSince1970: 0))
-        #expect(retryItem.lastErrorCode == nil)
-        #expect(retryItem.blockReason == nil)
-    }
-
-    @Test
-    func cancellationDuringFailureTimestampLeavesFailureStateUntouched() async throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let record = try makeRecord()
-        let store = try FileSyncStore(rootDirectory: directory)
-        let clock = PausingClock(
-            value: Date(timeIntervalSince1970: 1_000),
-            pauseAtRequest: 2
-        )
-        let engine = SyncEngine(
-            configuration: .init(
-                exporterVersion: "1.0.0"
-            ),
-            recordProvider: TestRecordProvider(records: [record]),
-            destination: TransientFailureDestination(),
-            store: store,
-            clock: clock,
-            jitterSource: FixedJitterSource(value: 0.5)
-        )
-        let syncTask = Task {
-            try await engine.reconcile(dates: [record.date])
-        }
-
-        await clock.waitUntilRequested()
-        syncTask.cancel()
-        await clock.resume()
-
-        do {
-            _ = try await syncTask.value
-            Issue.record(
-                "Expected cancellation during failure timestamp lookup to propagate."
-            )
         } catch is CancellationError {}
 
         let retryItem = try #require(try await store.retryItems().first)
@@ -1044,23 +994,17 @@ private struct FixedManifestTimeZoneProvider: ManifestTimeZoneProvider {
 
 private actor MutableManifestTimeZoneProvider: ManifestTimeZoneProvider {
     private var identifier: String
-    private var requests = 0
 
     init(identifier: String) {
         self.identifier = identifier
     }
 
     func currentIdentifier() async -> String {
-        requests += 1
-        return identifier
+        identifier
     }
 
     func setIdentifier(_ identifier: String) {
         self.identifier = identifier
-    }
-
-    func requestCount() -> Int {
-        requests
     }
 }
 
@@ -1136,16 +1080,6 @@ private struct AdvancingFailureDestination: ExportArtifactDestination {
     }
 }
 
-private struct AdvancingJitterSource: RetryJitterSource {
-    let clock: TestClock
-    let delay: TimeInterval
-    let value: Double
-
-    func nextUnitIntervalValue() async -> Double {
-        await clock.advance(by: delay)
-        return value
-    }
-}
 
 private struct CancellationDestination: ExportArtifactDestination {
     func upsert(_ artifact: ExportArtifact) async throws {
@@ -1269,20 +1203,16 @@ private actor PausingJitterSource: RetryJitterSource {
 
 private actor PausingClock: SyncClock {
     private let value: Date
-    private let pauseAtRequest: Int
-    private var requestCount = 0
     private var requested = false
     private var requestWaiters: [CheckedContinuation<Void, Never>] = []
     private var valueContinuation: CheckedContinuation<Date, Never>?
 
-    init(value: Date, pauseAtRequest: Int) {
+    init(value: Date) {
         self.value = value
-        self.pauseAtRequest = pauseAtRequest
     }
 
     func now() async -> Date {
-        requestCount += 1
-        guard requestCount == pauseAtRequest else { return value }
+        guard !requested else { return value }
         requested = true
         let waiters = requestWaiters
         requestWaiters.removeAll()

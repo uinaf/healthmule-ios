@@ -100,6 +100,7 @@ failure-injection scenarios.
 - [ ] Running sync again without source changes creates no duplicate file and no semantic rewrite.
 - [ ] Adding or editing a workout updates only affected dates and the manifest.
 - [ ] Missing or unreadable values are encoded as explicit `null` values rather than omitted fields.
+- [ ] Steps recorded by both iPhone and Watch are not double-counted.
 - [ ] Sleep intervals are unioned without double-counting overlaps.
 - [ ] Workouts are deduplicated and totals are deterministic.
 - [ ] Exported data contains no raw routes, heart-rate samples, or other unapproved health fields.

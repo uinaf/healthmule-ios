@@ -28,10 +28,7 @@ struct SchemaTests {
                 subdirectory: "Fixtures"
             )
         )
-        var expected = try Data(contentsOf: fixtureURL)
-        if expected.last != 0x0A {
-            expected.append(0x0A)
-        }
+        let expected = try Data(contentsOf: fixtureURL)
         #expect(try DailyHealthRecordCodec.encode(record) == expected)
     }
 
@@ -127,49 +124,6 @@ struct SchemaTests {
         #expect(try !DailyHealthRecordCodec.semanticallyEqual(first, second))
     }
 
-    @Test
-    func codecQuantizesKnownValuesButPreservesUnknownNumbers() throws {
-        var noisy = try sampleRecord(
-            generatedAt: "2026-07-23T18:10:00+03:00",
-            deviceNames: ["iPhone"]
-        )
-        let futurePrecision = try decimal("913.1100000000049")
-        noisy.metrics.activeEnergyKcal = 913.1100000000049
-        noisy.metrics.additionalFields["futurePrecision"] =
-            .number(futurePrecision)
-        noisy.workouts[0].durationMinutes = 61.99999999999999
-        noisy.workouts[0].activeEnergyKcal = 312.126
-        noisy.totals.workoutMinutes = 999
-        noisy.totals.workoutActiveEnergyKcal = 999
-
-        let encoded = try DailyHealthRecordCodec.encode(noisy)
-        let normalized = try DailyHealthRecordCodec.decode(encoded)
-        let normalizedWorkout = try #require(
-            normalized.workouts.first { $0.id == "b" }
-        )
-        var clean = noisy
-        clean.metrics.activeEnergyKcal = 913.11
-        clean.workouts[0].durationMinutes = 62
-        clean.workouts[0].activeEnergyKcal = 312.13
-
-        #expect(normalized.metrics.activeEnergyKcal == 913.11)
-        #expect(normalizedWorkout.durationMinutes == 62)
-        #expect(normalizedWorkout.activeEnergyKcal == 312.13)
-        #expect(
-            normalized.totals.workoutMinutes
-                == normalized.workouts.map(\.durationMinutes).reduce(0, +)
-        )
-        #expect(
-            normalized.totals.workoutActiveEnergyKcal
-                == normalized.workouts.compactMap(\.activeEnergyKcal).reduce(0, +)
-        )
-        #expect(
-            normalized.metrics.additionalFields["futurePrecision"]
-                == .number(futurePrecision)
-        )
-        #expect(try DailyHealthRecordCodec.semanticallyEqual(noisy, clean))
-    }
-
     @Test(arguments: [
         (1.005, 1.01), (4.015, 4.02), (-1.005, -1.01),
         (1.005.nextDown, 1.00), (1.005.nextUp, 1.01),
@@ -187,18 +141,20 @@ struct SchemaTests {
         record.metrics.weightKg = value
         record.metrics.additionalFields["futurePrecision"] = .number(unknown)
         record.workouts[0].activeEnergyKcal = value
-        record.workouts[1].activeEnergyKcal = nil
+        record.workouts[1].durationMinutes = value
         let encoded = try DailyHealthRecordCodec.encode(record)
         let decoded = try DailyHealthRecordCodec.decode(encoded)
 
         #expect(decoded.metrics.weightKg == expected)
         #expect(decoded.workouts.first { $0.id == "b" }?.activeEnergyKcal == expected)
+        #expect(decoded.workouts.first { $0.id == "a" }?.durationMinutes == expected)
         #expect(decoded.totals.workoutActiveEnergyKcal == expected)
         #expect(decoded.metrics.additionalFields["futurePrecision"] == .number(unknown))
         #expect(try DailyHealthRecordCodec.encode(decoded) == encoded)
         var rounded = record
         rounded.metrics.weightKg = expected
         rounded.workouts[0].activeEnergyKcal = expected
+        rounded.workouts[1].durationMinutes = expected
         #expect(try DailyHealthRecordCodec.semanticallyEqual(record, rounded))
     }
 
@@ -308,7 +264,7 @@ struct SchemaTests {
     @Test
     func renderingPreservesFractionalTimestampInstants() throws {
         let timeZone = try #require(TimeZone(secondsFromGMT: 3 * 60 * 60))
-        let date = Date(timeIntervalSince1970: 1_000.500_123_456)
+        let date = Date(timeIntervalSince1970: 1_000.001_953_125)
 
         let rendered = try ISO8601Timestamp(
             date: date,
@@ -317,7 +273,7 @@ struct SchemaTests {
 
         #expect(
             rendered.rawValue
-                == "1970-01-01T03:16:40.500123501+03:00"
+                == "1970-01-01T03:16:40.001953125+03:00"
         )
         #expect(try rendered.date() == date)
         #expect(

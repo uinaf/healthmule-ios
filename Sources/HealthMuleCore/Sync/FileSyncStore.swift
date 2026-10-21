@@ -328,7 +328,7 @@ public actor FileSyncStore {
     func hasDueArtifact(
         kind: ExportArtifactID.Kind,
         at date: Date,
-        includeDeferred: Bool = false
+        includeDeferred: Bool
     ) throws -> Bool {
         try ensureRecovered()
         return state.retryQueue.contains { item in

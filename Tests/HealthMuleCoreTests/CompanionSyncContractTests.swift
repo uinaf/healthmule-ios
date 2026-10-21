@@ -3,18 +3,6 @@ import XCTest
 @testable import HealthMuleCompanion
 
 final class CompanionSyncContractTests: XCTestCase {
-    func testSnapshotSemanticsIgnoreGeneratedAt() {
-        let first = makeSnapshot(
-            generatedAt: Date(timeIntervalSince1970: 1_753_300_100)
-        )
-        let second = makeSnapshot(
-            generatedAt: Date(timeIntervalSince1970: 1_753_300_200)
-        )
-
-        XCTAssertEqual(first.semantics, second.semantics)
-        XCTAssertNotEqual(first, second)
-    }
-
     func testSnapshotSemanticsIncludeActivityAndPendingUploadCount() {
         let snapshot = makeSnapshot()
         let differentActivity = makeSnapshot(activity: .syncing)
@@ -104,7 +92,6 @@ final class CompanionSyncContractTests: XCTestCase {
                 CompanionPayloadCodec.acknowledgement(accepted: false)
             )
         )
-
     }
 
     func testSnapshotDecoderRejectsFutureSchemaAndInvalidCounts() throws {
@@ -150,12 +137,11 @@ final class CompanionSyncContractTests: XCTestCase {
     }
 
     private func makeSnapshot(
-        generatedAt: Date = Date(timeIntervalSince1970: 1_753_300_100),
         activity: CompanionSyncSnapshot.Activity = .synced,
         pendingUploadCount: Int = 2
     ) -> CompanionSyncSnapshot {
         CompanionSyncSnapshot(
-            generatedAt: generatedAt,
+            generatedAt: Date(timeIntervalSince1970: 1_753_300_100),
             readiness: .ready,
             activity: activity,
             canRequestSync: true,

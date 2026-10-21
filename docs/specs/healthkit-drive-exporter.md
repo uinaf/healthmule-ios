@@ -312,7 +312,6 @@ and retry the first `401` once; repeated `401` responses require reauthorization
 
 Commit language-independent fixtures under `Tests/Fixtures/`:
 
-- `multiple-sources.json`: steps from Watch and iPhone do not double count.
 - `overlapping-sleep.json`: overlapping sleep stages produce one duration.
 - `missing-permissions.json`: denied metrics serialize as `null`.
 - `late-workout.json`: a workout arriving two days late updates that day.

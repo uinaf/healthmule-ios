@@ -24,7 +24,7 @@ final class FixtureContractTests: XCTestCase {
         )
         var fallbackCalendar = Calendar(identifier: .gregorian)
         fallbackCalendar.timeZone = try XCTUnwrap(
-            TimeZone(identifier: "America/New_York")
+            TimeZone(identifier: "America/Los_Angeles")
         )
 
         let affectedDates = try store.dateKeys(

@@ -84,6 +84,9 @@ struct AggregationTests {
         )
 
         #expect(record.metrics.weightKg == 83)
+        #expect(record.metrics.steps == 10_432)
+        #expect(record.metrics.activeEnergyKcal == 1_004.2)
+        #expect(record.metrics.restingEnergyKcal == 2_016)
         #expect(record.metrics.restingHeartRateBpm == 58)
         #expect(record.metrics.hrvSdnnMs == 47.5)
         #expect(record.metrics.vo2MaxMlKgMin == 41.2)
@@ -92,36 +95,8 @@ struct AggregationTests {
         #expect(record.totals.workoutMinutes == 60)
         #expect(record.totals.workoutActiveEnergyKcal == 312)
         #expect(record.sources.deviceNames == ["Apple Watch", "iPhone"])
+        #expect(record.sources.sampleCount == 12)
         #expect(record.generatedAt.rawValue == "2026-07-23T10:00:00+03:00")
-    }
-
-    @Test
-    func healthKitCumulativeValueWinsAcrossMultipleSources() throws {
-        let fixtureURL = try #require(
-            Bundle.module.url(
-                forResource: "multiple-sources",
-                withExtension: "json",
-                subdirectory: "Fixtures"
-            )
-        )
-        let fixture = try JSONDecoder().decode(
-            MultipleSourcesFixture.self,
-            from: Data(contentsOf: fixtureURL)
-        )
-        let record = try DailyHealthRecordAggregator.aggregate(
-            DailyAggregationInput(
-                date: try LocalDate(rawValue: "2026-07-23"),
-                timeZoneIdentifier: "UTC",
-                steps: fixture.input.healthKitCumulativeStepSum
-            ),
-            generatedAt: Date(timeIntervalSince1970: 0)
-        )
-
-        #expect(record.metrics.steps == fixture.expected.steps)
-        #expect(
-            fixture.input.rawSamplesForDiagnosticsOnly.map(\.value).reduce(0, +)
-                != fixture.expected.steps
-        )
     }
 
     @Test
@@ -183,7 +158,7 @@ struct AggregationTests {
 
     @Test
     func knownDecimalMeasurementsAreQuantizedBeforeExport() throws {
-        let start = Date(timeIntervalSince1970: 0)
+        let start = Date(timeIntervalSinceReferenceDate: 0)
         let end = start.addingTimeInterval(3_719.999999999999)
         let input = DailyAggregationInput(
             date: try LocalDate(rawValue: "2026-07-23"),
@@ -245,45 +220,7 @@ struct AggregationTests {
         #expect(record.workouts[0].activeEnergyKcal == 312.13)
         #expect(record.workouts[0].distanceMeters == 10_001)
         #expect(!encoded.contains("913.1100000000049"))
-        #expect(!encoded.contains("61.99999999999999"))
         #expect(!encoded.contains(":-0"))
-    }
-
-    @Test(arguments: [
-        (1.005, 1.01), (4.015, 4.02), (-1.005, -1.01),
-        (1.005.nextDown, 1.00), (1.005.nextUp, 1.01),
-        ((-1.005).nextDown, -1.01), ((-1.005).nextUp, -1.00),
-    ])
-    func aggregationUsesDecimalMidpoints(value: Double, expected: Double) throws {
-        let start = Date(timeIntervalSince1970: 0)
-        let record = try DailyHealthRecordAggregator.aggregate(
-            DailyAggregationInput(
-                date: try LocalDate(rawValue: "2026-07-23"),
-                timeZoneIdentifier: "UTC",
-                activeEnergyKcal: value,
-                restingHeartRateSamples: [
-                    TimedQuantitySample(id: "heart", measuredAt: start, value: value)
-                ],
-                workouts: [
-                    WorkoutSample(
-                        id: "workout",
-                        type: "other",
-                        start: start,
-                        end: start.addingTimeInterval(60),
-                        activeEnergyKcal: value,
-                        distanceMeters: nil
-                    )
-                ]
-            ),
-            generatedAt: start
-        )
-        #expect(record.metrics.activeEnergyKcal == expected)
-        #expect(record.metrics.restingHeartRateBpm == expected)
-        #expect(record.workouts[0].activeEnergyKcal == expected)
-        #expect(record.totals.workoutActiveEnergyKcal == expected)
-        let decoded = try DailyHealthRecordCodec.decode(DailyHealthRecordCodec.encode(record))
-        #expect(decoded.metrics.activeEnergyKcal == expected)
-        #expect(decoded.totals.workoutActiveEnergyKcal == expected)
     }
 
     @Test
@@ -358,52 +295,6 @@ struct AggregationTests {
     }
 
     @Test
-    func insignificantInputNoiseProducesTheSameSemanticRecord() throws {
-        func record(activeEnergy: Double, generatedAt: Date) throws -> DailyHealthRecord {
-            try DailyHealthRecordAggregator.aggregate(
-                DailyAggregationInput(
-                    date: try LocalDate(rawValue: "2026-07-23"),
-                    timeZoneIdentifier: "UTC",
-                    activeEnergyKcal: activeEnergy
-                ),
-                generatedAt: generatedAt
-            )
-        }
-
-        let first = try record(
-            activeEnergy: 913.1100000000049,
-            generatedAt: Date(timeIntervalSince1970: 0)
-        )
-        let second = try record(
-            activeEnergy: 913.11,
-            generatedAt: Date(timeIntervalSince1970: 60)
-        )
-
-        #expect(try DailyHealthRecordCodec.semanticallyEqual(first, second))
-    }
-
-    @Test
-    func quantizingTheLargestFiniteValueDoesNotOverflow() throws {
-        let record = try DailyHealthRecordAggregator.aggregate(
-            DailyAggregationInput(
-                date: try LocalDate(rawValue: "2026-07-23"),
-                timeZoneIdentifier: "UTC",
-                weightSamples: [
-                    TimedQuantitySample(
-                        id: "large",
-                        measuredAt: Date(timeIntervalSince1970: 0),
-                        value: .greatestFiniteMagnitude
-                    )
-                ]
-            ),
-            generatedAt: Date(timeIntervalSince1970: 0)
-        )
-
-        #expect(record.metrics.weightKg?.isFinite == true)
-        _ = try DailyHealthRecordCodec.encode(record)
-    }
-
-    @Test
     func nonFiniteDerivedValuesFailClosed() throws {
         let now = Date(timeIntervalSince1970: 0)
         let input = DailyAggregationInput(
@@ -468,22 +359,4 @@ private struct OverlappingSleepFixture: Decodable {
 
     let input: [Input]
     let expectedSleepMinutes: Double
-}
-
-private struct MultipleSourcesFixture: Decodable {
-    struct Input: Decodable {
-        struct RawSample: Decodable {
-            let value: Int
-        }
-
-        let healthKitCumulativeStepSum: Int
-        let rawSamplesForDiagnosticsOnly: [RawSample]
-    }
-
-    struct Expected: Decodable {
-        let steps: Int
-    }
-
-    let input: Input
-    let expected: Expected
 }

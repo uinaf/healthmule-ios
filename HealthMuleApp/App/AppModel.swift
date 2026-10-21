@@ -365,19 +365,14 @@ final class AppModel {
         if let syncCoordinator {
             syncSummary = (try? await syncCoordinator.summary()) ?? .empty
         }
-        await Self.refreshHealthBeforeCredentialReplay(
-            refreshHealth: { [self] in
-                await refreshHealthConnectionState(
-                    publishingCheckingState: !operationState.isWorking
-                )
-            },
-            resumeDrive: { [self] in
-                guard let credentialRestoreEpoch else { return }
-                await resumeCredentialReplay(
-                    expectedEpoch: credentialRestoreEpoch
-                )
-            }
+        await refreshHealthConnectionState(
+            publishingCheckingState: !operationState.isWorking
         )
+        if let credentialRestoreEpoch {
+            await resumeCredentialReplay(
+                expectedEpoch: credentialRestoreEpoch
+            )
+        }
 
         let reconciliationTrigger = bootstrapRequestedTrigger
             ?? requestedTrigger
@@ -439,19 +434,14 @@ final class AppModel {
                 credentialRestoreEpoch = googleTransitionEpoch
             }
         }
-        await Self.refreshHealthBeforeCredentialReplay(
-            refreshHealth: { [self] in
-                await refreshHealthConnectionState(
-                    publishingCheckingState: false
-                )
-            },
-            resumeDrive: { [self] in
-                guard let credentialRestoreEpoch else { return }
-                await resumeCredentialReplay(
-                    expectedEpoch: credentialRestoreEpoch
-                )
-            }
+        await refreshHealthConnectionState(
+            publishingCheckingState: false
         )
+        if let credentialRestoreEpoch {
+            await resumeCredentialReplay(
+                expectedEpoch: credentialRestoreEpoch
+            )
+        }
         await reconcile(trigger: .foreground)
         await scheduleBackgroundRefresh()
     }
@@ -1493,14 +1483,6 @@ final class AppModel {
         }
     }
 
-    static func refreshHealthBeforeCredentialReplay(
-        refreshHealth: @MainActor () async -> Void,
-        resumeDrive: @MainActor () async -> Void
-    ) async {
-        await refreshHealth()
-        await resumeDrive()
-    }
-
     private func refreshHealthConnectionState(
         publishingCheckingState: Bool
     ) async {
@@ -2453,23 +2435,13 @@ final class AppModel {
             googleConnection = .temporarilyUnavailable
         } else if arguments.contains("--ui-google-reconnect") {
             googleConnection = .reauthorizationRequired
-        } else if arguments.contains("--ui-google-disconnected") {
-            googleConnection = .disconnected
         } else {
             googleConnection = .notConfigured
         }
 
-        isHealthKitAvailable = !arguments.contains("--ui-health-unavailable")
-        if !isHealthKitAvailable {
-            healthAuthorizationState = .unavailable
-        } else if arguments.contains("--ui-health-checking") {
+        isHealthKitAvailable = true
+        if arguments.contains("--ui-health-checking") {
             healthAuthorizationState = .checking
-        } else if arguments.contains("--ui-health-status-unavailable") {
-            healthAuthorizationState = .statusUnavailable(
-                previouslyRequested: arguments.contains(
-                    "--ui-health-previously-requested"
-                )
-            )
         } else if arguments.contains("--ui-health-review") {
             healthAuthorizationState = .reviewRequired
         } else if arguments.contains("--ui-ready")
@@ -2510,42 +2482,10 @@ final class AppModel {
                 retryableUploadCount: 0,
                 permanentFailureCount: 1
             )
-        } else if arguments.contains("--ui-synced") {
-            syncSummary = SyncSummary(
-                lastSuccessfulSyncAt: Date(
-                    timeIntervalSince1970: 1_753_300_000
-                ),
-                latestExportedDate: "2026-07-23",
-                pendingUploadCount: 0,
-                retryableUploadCount: 0,
-                permanentFailureCount: 0
-            )
         } else {
             syncSummary = .empty
         }
         let activityTime = Date(timeIntervalSince1970: 1_753_300_000)
-        let backgroundReceipt = SyncActivityReceipt(
-            id: UUID(),
-            startedAt: activityTime.addingTimeInterval(-120),
-            finishedAt: activityTime.addingTimeInterval(-90),
-            trigger: .backgroundRefresh,
-            outcome: arguments.contains("--ui-activity-pending")
-                ? .pending
-                : arguments.contains("--ui-activity-skipped")
-                    ? .skipped
-                    : .succeeded,
-            reason: arguments.contains("--ui-activity-skipped")
-                ? .driveNotReady
-                : nil,
-            counts: arguments.contains("--ui-activity-pending")
-                ? SyncActivityCounts(
-                    staged: 1,
-                    uploaded: 0,
-                    pending: 1,
-                    failed: 0
-                )
-                : .zero
-        )
         if arguments.contains("--ui-activity-success") {
             syncActivitySummary = SyncActivitySummary(
                 receipts: [
@@ -2556,21 +2496,17 @@ final class AppModel {
                         trigger: .foreground,
                         outcome: .succeeded
                     ),
-                    backgroundReceipt,
+                    SyncActivityReceipt(
+                        id: UUID(),
+                        startedAt: activityTime.addingTimeInterval(-120),
+                        finishedAt: activityTime.addingTimeInterval(-90),
+                        trigger: .backgroundRefresh,
+                        outcome: .succeeded
+                    ),
                 ],
                 schedule: BackgroundRefreshScheduleReceipt(
                     attemptedAt: activityTime,
                     result: .submitted
-                )
-            )
-        } else if arguments.contains("--ui-activity-pending")
-            || arguments.contains("--ui-activity-skipped")
-        {
-            syncActivitySummary = SyncActivitySummary(
-                receipts: [backgroundReceipt],
-                schedule: BackgroundRefreshScheduleReceipt(
-                    attemptedAt: activityTime,
-                    result: .existingRequestKept
                 )
             )
         } else {

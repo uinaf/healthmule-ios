@@ -16,7 +16,7 @@ enum BackgroundRefreshCoordinator {
                 )
             }
         }
-        guard shouldSubmit(hasExistingRequest: hasExistingRequest) else {
+        guard !hasExistingRequest else {
             return .existingRequestKept
         }
         let request = BGAppRefreshTaskRequest(identifier: identifier)
@@ -30,10 +30,6 @@ enum BackgroundRefreshCoordinator {
                 scheduleFailure(domain: nsError.domain, code: nsError.code)
             )
         }
-    }
-
-    static func shouldSubmit(hasExistingRequest: Bool) -> Bool {
-        !hasExistingRequest
     }
 
     static func scheduleFailure(

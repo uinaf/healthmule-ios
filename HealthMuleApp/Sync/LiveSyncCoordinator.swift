@@ -34,7 +34,6 @@ actor LiveSyncCoordinator {
     private let calendar: @Sendable () -> Calendar
     private let now: @Sendable () -> Date
     private let operationQueued: (@Sendable (Int) -> Void)?
-    private let recordStaged: (@Sendable (LocalDate) async -> Void)?
     private var runtime: Runtime
     private var lastSuccessfulSyncAt: Date?
     private var lastStagedMetrics: Set<HealthMetric>?
@@ -55,8 +54,7 @@ actor LiveSyncCoordinator {
             LocalDayCalendar.current
         },
         now: @escaping @Sendable () -> Date = { .now },
-        operationQueued: (@Sendable (Int) -> Void)? = nil,
-        recordStaged: (@Sendable (LocalDate) async -> Void)? = nil
+        operationQueued: (@Sendable (Int) -> Void)? = nil
     ) throws {
         let defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:))
             ?? .standard
@@ -69,7 +67,6 @@ actor LiveSyncCoordinator {
         self.calendar = calendar
         self.now = now
         self.operationQueued = operationQueued
-        self.recordStaged = recordStaged
         lastSuccessfulSyncAt = defaults.object(
             forKey: "sync.lastSuccessful"
         ) as? Date
@@ -445,7 +442,6 @@ actor LiveSyncCoordinator {
                     currentDate: date
                 )
             )
-            await recordStaged?(date)
         }
         report.pendingUploadCount = try await runtime.store.pendingUploadCount()
         return report
