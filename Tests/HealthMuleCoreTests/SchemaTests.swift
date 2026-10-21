@@ -264,7 +264,7 @@ struct SchemaTests {
     @Test
     func renderingPreservesFractionalTimestampInstants() throws {
         let timeZone = try #require(TimeZone(secondsFromGMT: 3 * 60 * 60))
-        let date = Date(timeIntervalSince1970: 1_000.125)
+        let date = Date(timeIntervalSince1970: 1_000.001_953_125)
 
         let rendered = try ISO8601Timestamp(
             date: date,
@@ -273,7 +273,7 @@ struct SchemaTests {
 
         #expect(
             rendered.rawValue
-                == "1970-01-01T03:16:40.125+03:00"
+                == "1970-01-01T03:16:40.001953125+03:00"
         )
         #expect(try rendered.date() == date)
         #expect(
