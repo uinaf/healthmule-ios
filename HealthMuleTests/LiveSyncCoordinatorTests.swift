@@ -33,7 +33,9 @@ final class LiveSyncCoordinatorTests: XCTestCase {
 
         let committedMetrics = await health.committedMetrics()
         let progress = await progressLog.snapshot()
+        let queriedBeforeRecovery = await health.didQueryBeforeRecovery()
         XCTAssertTrue(committedMetrics.isEmpty)
+        XCTAssertFalse(queriedBeforeRecovery)
         XCTAssertEqual(
             progress,
             [
@@ -706,6 +708,8 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
     private let expectedStagedDates: Set<LocalDate>
     private var commits: [HealthMetric] = []
     private var resetCount = 0
+    private var recovered = false
+    private var queriedBeforeRecovery = false
     private var changes: [HealthMetric] = []
     private var checks: [StagedCheck] = []
     private var shouldBlockFirstChange: Bool
@@ -728,14 +732,16 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
     func recoverAuxiliaryState(
         from _: [DailyHealthRecord]
     ) async throws -> HealthAuxiliaryRecoverySummary {
-        HealthAuxiliaryRecoverySummary(
+        recovered = true
+        return HealthAuxiliaryRecoverySummary(
             resetAnchors: false,
             rebuiltBoundaryCount: 0
         )
     }
 
     func startDate(for _: LocalDate) async throws -> Date {
-        queryStart
+        queriedBeforeRecovery = queriedBeforeRecovery || !recovered
+        return queryStart
     }
 
     func changedDates(
@@ -743,6 +749,7 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
         calendar _: Calendar,
         notBefore _: Date
     ) async throws -> HealthAnchoredChangeBatch {
+        queriedBeforeRecovery = queriedBeforeRecovery || !recovered
         changes.append(metric)
         if shouldBlockFirstChange {
             shouldBlockFirstChange = false
@@ -810,6 +817,10 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
 
     func committedMetrics() -> [HealthMetric] {
         commits
+    }
+
+    func didQueryBeforeRecovery() -> Bool {
+        queriedBeforeRecovery
     }
 
     func changedMetrics() -> [HealthMetric] {
