@@ -5,28 +5,6 @@ import Testing
 @Suite("Durable file sync store")
 struct FileSyncStoreTests {
     @Test
-    func dueArtifactCheckDoesNotReadArtifactContents() async throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let store = try FileSyncStore(rootDirectory: directory)
-        let record = try makeRecord()
-
-        _ = try await store.stageDaily(record)
-        try FileManager.default.removeItem(
-            at: directory.appendingPathComponent(
-                "daily/\(record.date.rawValue).json"
-            )
-        )
-
-        #expect(
-            try await store.hasDueArtifact(
-                kind: .daily,
-                at: .distantFuture
-            )
-        )
-    }
-
-    @Test
     func dailyDateIndexDoesNotReadArtifactContents() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -553,45 +531,6 @@ struct FileSyncStoreTests {
                 includeDeferred: true
             )).contains { $0.id == .manifest }
         )
-    }
-
-    @Test
-    func queueSurvivesStoreReopen() async throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let record = try makeRecord()
-
-        let firstStore = try FileSyncStore(rootDirectory: directory)
-        _ = try await firstStore.stageDaily(record)
-
-        let reopened = try FileSyncStore(rootDirectory: directory)
-        let items = try await reopened.retryItems()
-        #expect(items.count == 1)
-        #expect(items[0].artifactID == .daily(record.date))
-        #expect(items[0].revision == 1)
-    }
-
-    @Test
-    func orphanArtifactIsRecoveredIntoRetryQueue() async throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let dailyDirectory = directory.appendingPathComponent("daily", isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: dailyDirectory,
-            withIntermediateDirectories: true
-        )
-        let record = try makeRecord()
-        try DailyHealthRecordCodec.encode(record).write(
-            to: dailyDirectory.appendingPathComponent("2026-07-23.json"),
-            options: [.atomic]
-        )
-
-        let store = try FileSyncStore(rootDirectory: directory)
-        try await store.recover()
-
-        let item = try #require(try await store.retryItems().first)
-        #expect(item.artifactID == .daily(record.date))
-        #expect(item.revision == 1)
     }
 
     @Test

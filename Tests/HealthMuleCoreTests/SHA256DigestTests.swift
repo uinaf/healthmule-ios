@@ -11,6 +11,11 @@ struct SHA256DigestTests {
             "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
             "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
         ),
+        (
+            "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
+                + "ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
+            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+        ),
     ])
     func matchesPublishedVectors(input: String, digest: String) {
         #expect(SHA256Digest.hexString(of: Data(input.utf8)) == digest)

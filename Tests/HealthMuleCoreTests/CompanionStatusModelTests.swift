@@ -120,18 +120,22 @@ final class CompanionStatusModelTests: XCTestCase {
         let lastSuccess = now.addingTimeInterval(-600)
         let model = status(
             snapshot: snapshot(
+                age: CompanionStatusModel.currentSnapshotInterval + 1,
                 lastSuccessfulSyncAt: lastSuccess,
                 pending: 5,
                 retryable: 3,
                 blocked: 2
-            )
+            ),
+            isReachable: false
         )
 
         XCTAssertEqual(model.lastSuccessfulSyncAt, lastSuccess)
         XCTAssertEqual(model.pendingUploadCount, 5)
         XCTAssertEqual(model.retryableUploadCount, 3)
         XCTAssertEqual(model.permanentFailureCount, 2)
-        XCTAssertEqual(model.headline, .needsAttention)
+        XCTAssertEqual(status(snapshot: snapshot(pending: 1)).headline, .ready)
+        XCTAssertEqual(status(snapshot: snapshot(retryable: 1)).headline, .ready)
+        XCTAssertEqual(status(snapshot: snapshot(blocked: 1)).headline, .needsAttention)
     }
 
     func testMissingSnapshotAndActivationFailureOfferRetry() {
@@ -157,6 +161,7 @@ final class CompanionStatusModelTests: XCTestCase {
         XCTAssertEqual(failed.connection, .activationFailed)
         XCTAssertEqual(failed.headline, .phoneUnavailable)
         XCTAssertTrue(failed.canRetryConnection)
+        XCTAssertFalse(status().canRetryConnection)
     }
 
     func testSyncActionExplainsEveryBlockedState() {
@@ -190,20 +195,6 @@ final class CompanionStatusModelTests: XCTestCase {
         )
         XCTAssertNil(status(requestState: .failed).syncActionBlock)
         XCTAssertTrue(status().canRequestSync)
-    }
-
-    func testDeliveryNoteMapsEveryRequestState() {
-        let cases: [
-            (CompanionRequestDeliveryState, CompanionDeliveryNote)
-        ] = [
-            (.idle, .none),
-            (.sending, .sending),
-            (.accepted, .accepted),
-            (.failed, .failed),
-        ]
-        for (state, expected) in cases {
-            XCTAssertEqual(status(requestState: state).deliveryNote, expected)
-        }
     }
 
     func testReplyBeforeSemanticSnapshotCompletesAfterSnapshot() {

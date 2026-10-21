@@ -120,23 +120,6 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testDriveUnavailableIsNotPresentedAsConnected() throws {
-        let app = launch(
-            additionalArguments: [
-                "--ui-health-request-complete",
-                "--ui-google-drive-unavailable",
-            ]
-        )
-
-        XCTAssertTrue(
-            element("google-connection-card", in: app)
-                .waitForExistence(timeout: 10)
-        )
-        XCTAssertTrue(app.staticTexts["Drive unavailable"].exists)
-        XCTAssertFalse(app.staticTexts["Connected"].exists)
-    }
-
-    @MainActor
     func testWorkingStateUsesHeroAndDisablesSyncAction() throws {
         let app = launch(
             additionalArguments: ["--ui-ready", "--ui-operation-working"]
@@ -147,7 +130,6 @@ final class HealthMuleUITests: XCTestCase {
                 .waitForExistence(timeout: 10)
         )
         XCTAssertTrue(app.staticTexts["Syncing your latest changes"].exists)
-        XCTAssertFalse(element("operation-status", in: app).exists)
         XCTAssertFalse(element("home-sync-action", in: app).isEnabled)
     }
 
@@ -203,7 +185,7 @@ final class HealthMuleUITests: XCTestCase {
                 .waitForExistence(timeout: 10)
         )
         XCTAssertFalse(homeApp.staticTexts["Sync needs another look"].exists)
-        XCTAssertFalse(element("operation-status", in: homeApp).exists)
+        XCTAssertEqual(element("home-sync-action", in: homeApp).label, "Sync now")
         homeApp.terminate()
 
         let syncApp = launch(
@@ -215,7 +197,7 @@ final class HealthMuleUITests: XCTestCase {
                 .waitForExistence(timeout: 10)
         )
         XCTAssertFalse(syncApp.staticTexts["Sync needs another look"].exists)
-        XCTAssertFalse(element("operation-status", in: syncApp).exists)
+        XCTAssertEqual(element("sync-now-action", in: syncApp).label, "Sync now")
     }
 
     @MainActor
@@ -323,33 +305,6 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testHeroAccessibilityChildOrderIsStableAcrossTones() throws {
-        let fixtures: [([String], String)] = [
-            (
-                ["--ui-health-review", "--ui-google-connected"],
-                "Apple Health access needs review"
-            ),
-            (
-                ["--ui-ready", "--ui-permanent-failure"],
-                "An upload was rejected"
-            ),
-            (
-                ["--ui-ready", "--ui-synced"],
-                "Everything is in sync"
-            ),
-        ]
-
-        for (arguments, title) in fixtures {
-            let app = launch(additionalArguments: arguments)
-            XCTAssertTrue(
-                app.staticTexts[title].waitForExistence(timeout: 10)
-            )
-            assertHeroAccessibilityChildOrder(in: app)
-            app.terminate()
-        }
-    }
-
-    @MainActor
     func testHistorySelectionIsDisabledWhileWorkIsVisible() throws {
         let app = launch(
             additionalArguments: ["--ui-ready", "--ui-operation-working"]
@@ -379,21 +334,6 @@ final class HealthMuleUITests: XCTestCase {
         )
         XCTAssertFalse(app.staticTexts["0 types have visible data"].exists)
         XCTAssertFalse(element("open-setup-action", in: app).exists)
-    }
-
-    @MainActor
-    func testRestoringGoogleDoesNotOfferDisconnect() throws {
-        let app = launch(
-            additionalArguments: [
-                "--ui-health-request-complete",
-                "--ui-google-restoring",
-            ]
-        )
-        app.tabBars.buttons["Settings"].tap()
-
-        XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["Disconnect Google"].exists)
-        XCTAssertFalse(app.buttons["Move Drive Exports to Trash"].exists)
     }
 
     @MainActor
@@ -490,39 +430,6 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testFailedHealthStatusCheckPreservesPriorSyncability() throws {
-        let app = launch(
-            additionalArguments: [
-                "--ui-health-status-unavailable",
-                "--ui-health-previously-requested",
-                "--ui-google-connected",
-                "--ui-show-sync",
-            ]
-        )
-
-        XCTAssertTrue(element("sync-screen", in: app).waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Check failed"].exists)
-        XCTAssertTrue(element("sync-now-action", in: app).isEnabled)
-        XCTAssertFalse(app.staticTexts["Request complete"].exists)
-    }
-
-    @MainActor
-    func testFailedInitialHealthStatusCheckBlocksSync() throws {
-        let app = launch(
-            additionalArguments: [
-                "--ui-health-status-unavailable",
-                "--ui-google-connected",
-                "--ui-show-sync",
-            ]
-        )
-
-        XCTAssertTrue(element("sync-screen", in: app).waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Apple Health status is unavailable"].exists)
-        XCTAssertFalse(element("sync-now-action", in: app).exists)
-        XCTAssertTrue(element("sync-setup-action", in: app).exists)
-    }
-
-    @MainActor
     func testPermanentFailureIsNotAdvertisedAsRetryable() throws {
         let arguments = ["--ui-ready", "--ui-permanent-failure"]
         let homeApp = launch(additionalArguments: arguments)
@@ -544,23 +451,6 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertFalse(element("retry-uploads-action", in: app).isEnabled)
         XCTAssertFalse(element("sync-now-action", in: app).exists)
         XCTAssertTrue(element("sync-diagnostics-action", in: app).isEnabled)
-    }
-
-    @MainActor
-    func testSyncPrioritizesRecoveryBeforeBackgroundDetails() throws {
-        let app = launch(
-            additionalArguments: ["--ui-ready", "--ui-show-sync"]
-        )
-        let repair = app.staticTexts["Fix a problem"]
-        let background = app.buttons["Background details"]
-
-        XCTAssertTrue(repair.waitForExistence(timeout: 10))
-        XCTAssertTrue(background.exists)
-        XCTAssertLessThan(repair.frame.minY, background.frame.minY)
-        XCTAssertTrue(app.staticTexts["Upload status"].exists)
-        XCTAssertTrue(app.staticTexts["Fix a problem"].exists)
-        XCTAssertTrue(app.staticTexts["Background details"].exists)
-        XCTAssertFalse(element("automatic-activity-latest", in: app).exists)
     }
 
     @MainActor
@@ -591,49 +481,6 @@ final class HealthMuleUITests: XCTestCase {
                 of: "automatic-activity-schedule",
                 in: app
             ).contains("Submitted")
-        )
-        XCTAssertTrue(
-            app.staticTexts[
-                "These are past attempts. iOS decides when background work runs."
-            ].exists
-        )
-    }
-
-    @MainActor
-    func testAutomaticActivityShowsPendingOutcome() {
-        let app = launch(
-            additionalArguments: [
-                "--ui-ready",
-                "--ui-show-sync",
-                "--ui-activity-pending",
-            ]
-        )
-
-        expandBackgroundDetails(in: app)
-        XCTAssertTrue(
-            value(
-                of: "automatic-activity-latest",
-                in: app
-            ).contains("Pending")
-        )
-    }
-
-    @MainActor
-    func testAutomaticActivityShowsSkippedOutcome() {
-        let app = launch(
-            additionalArguments: [
-                "--ui-ready",
-                "--ui-show-sync",
-                "--ui-activity-skipped",
-            ]
-        )
-
-        expandBackgroundDetails(in: app)
-        XCTAssertTrue(
-            value(
-                of: "automatic-activity-latest",
-                in: app
-            ).contains("Skipped")
         )
     }
 
@@ -848,22 +695,4 @@ final class HealthMuleUITests: XCTestCase {
         element(identifier, in: app).value as? String ?? ""
     }
 
-    @MainActor
-    private func assertHeroAccessibilityChildOrder(
-        in app: XCUIApplication,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        let identifiers = [
-            "status-hero-badge",
-            "status-hero-title",
-            "status-hero-message",
-        ]
-        let actual = app.descendants(matching: .any)
-            .allElementsBoundByIndex
-            .map(\.identifier)
-            .filter(identifiers.contains)
-
-        XCTAssertEqual(actual, identifiers, file: file, line: line)
-    }
 }

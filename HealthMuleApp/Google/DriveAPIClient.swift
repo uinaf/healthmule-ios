@@ -823,7 +823,6 @@ actor DriveAPIClient {
                     return item
                 }
             } catch DriveAPIError.remote(let status, _, _) where status == 404 {
-                // Retry the same pre-generated ID below before choosing a new one.
                 do {
                     let item = try await createFolder(
                         id: cachedID,
