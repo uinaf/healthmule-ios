@@ -132,9 +132,6 @@ final class SleepSessionSelectorTests: XCTestCase {
             ),
             ["2024-02-29", "2024-03-01"]
         )
-    }
-
-    func testNonSleepChangeKeepsOnlyDirectlyAffectedDates() throws {
         XCTAssertEqual(
             try HealthChangeDateMapper.reconciliationDates(
                 for: .stepCount,

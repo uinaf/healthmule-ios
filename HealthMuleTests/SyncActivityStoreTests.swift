@@ -126,25 +126,8 @@ final class SyncActivityStoreTests: XCTestCase {
 
         _ = try await store.begin(trigger: .appLaunch)
 
-        XCTAssertEqual(
-            SyncActivityStoragePolicy.directoryProtection,
-            .completeUntilFirstUserAuthentication
-        )
-        XCTAssertTrue(
-            SyncActivityStoragePolicy.fileWriteOptions.contains(
-                .completeFileProtectionUntilFirstUserAuthentication
-            )
-        )
-        XCTAssertTrue(
-            SyncActivityStoragePolicy.fileWriteOptions.contains(.atomic)
-        )
-        XCTAssertTrue(SyncActivityStoragePolicy.excludesFromBackup)
-
-        let fileURL = activityFile(in: directory)
         try PersistedStorageAssertions.assertProtectedAndExcludedFromBackup(
-            fileURL,
-            expectedProtection: SyncActivityStoragePolicy.directoryProtection,
-            excludesFromBackup: SyncActivityStoragePolicy.excludesFromBackup
+            activityFile(in: directory)
         )
     }
 

@@ -365,19 +365,14 @@ final class AppModel {
         if let syncCoordinator {
             syncSummary = (try? await syncCoordinator.summary()) ?? .empty
         }
-        await Self.refreshHealthBeforeCredentialReplay(
-            refreshHealth: { [self] in
-                await refreshHealthConnectionState(
-                    publishingCheckingState: !operationState.isWorking
-                )
-            },
-            resumeDrive: { [self] in
-                guard let credentialRestoreEpoch else { return }
-                await resumeCredentialReplay(
-                    expectedEpoch: credentialRestoreEpoch
-                )
-            }
+        await refreshHealthConnectionState(
+            publishingCheckingState: !operationState.isWorking
         )
+        if let credentialRestoreEpoch {
+            await resumeCredentialReplay(
+                expectedEpoch: credentialRestoreEpoch
+            )
+        }
 
         let reconciliationTrigger = bootstrapRequestedTrigger
             ?? requestedTrigger
@@ -439,19 +434,14 @@ final class AppModel {
                 credentialRestoreEpoch = googleTransitionEpoch
             }
         }
-        await Self.refreshHealthBeforeCredentialReplay(
-            refreshHealth: { [self] in
-                await refreshHealthConnectionState(
-                    publishingCheckingState: false
-                )
-            },
-            resumeDrive: { [self] in
-                guard let credentialRestoreEpoch else { return }
-                await resumeCredentialReplay(
-                    expectedEpoch: credentialRestoreEpoch
-                )
-            }
+        await refreshHealthConnectionState(
+            publishingCheckingState: false
         )
+        if let credentialRestoreEpoch {
+            await resumeCredentialReplay(
+                expectedEpoch: credentialRestoreEpoch
+            )
+        }
         await reconcile(trigger: .foreground)
         await scheduleBackgroundRefresh()
     }
@@ -1491,14 +1481,6 @@ final class AppModel {
         if metricStatuses != refreshedStatuses {
             metricStatuses = refreshedStatuses
         }
-    }
-
-    static func refreshHealthBeforeCredentialReplay(
-        refreshHealth: @MainActor () async -> Void,
-        resumeDrive: @MainActor () async -> Void
-    ) async {
-        await refreshHealth()
-        await resumeDrive()
     }
 
     private func refreshHealthConnectionState(

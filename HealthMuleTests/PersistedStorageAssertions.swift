@@ -6,7 +6,6 @@ enum PersistedStorageAssertions {
         _ url: URL,
         expectedProtection: FileProtectionType =
             .completeUntilFirstUserAuthentication,
-        excludesFromBackup: Bool = true,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
@@ -15,7 +14,7 @@ enum PersistedStorageAssertions {
         )
         XCTAssertEqual(
             values.isExcludedFromBackup,
-            excludesFromBackup,
+            true,
             file: file,
             line: line
         )

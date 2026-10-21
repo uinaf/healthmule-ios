@@ -134,7 +134,7 @@ enum SyncActivityStoreError: Error, Equatable, Sendable {
     case writeFailed
 }
 
-enum SyncActivityStoragePolicy {
+private enum SyncActivityStoragePolicy {
     static let directoryProtection =
         FileProtectionType.completeUntilFirstUserAuthentication
     static let fileWriteOptions: Data.WritingOptions = [

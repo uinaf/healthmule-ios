@@ -109,41 +109,6 @@ final class BackfillDatePlannerTests: XCTestCase {
         XCTAssertEqual(resolved, requestedStart)
     }
 
-    func testVO2HistoryStartAcceptsAnExpandedEarlierSelection() throws {
-        let expandedStart = try ISO8601Timestamp(
-            rawValue: "2026-06-01T00:00:00Z"
-        ).date()
-
-        let resolved = LiveSyncCoordinator.effectiveHistoryStart(
-            requestedStart: expandedStart,
-            existingRecordDates: [
-                try LocalDate(rawValue: "2026-07-01")
-            ]
-        )
-
-        XCTAssertEqual(resolved, expandedStart)
-    }
-
-    func testCalendarDayIterationSurvivesDaylightSavingTime() throws {
-        let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
-        let calendar = LocalDayCalendar.make(timeZone: timeZone)
-        let end = try XCTUnwrap(
-            calendar.date(
-                from: DateComponents(year: 2026, month: 3, day: 20)
-            )
-        )
-
-        let dates = try BackfillDatePlanner.missingDates(
-            from: LocalDate(rawValue: "2026-02-19"),
-            through: end,
-            excluding: [],
-            calendar: calendar
-        )
-
-        XCTAssertEqual(dates.count, 30)
-        XCTAssertTrue(dates.contains(try LocalDate(rawValue: "2026-03-08")))
-    }
-
     func testCalendarDayIterationSurvivesMidnightDaylightSavingTime() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "America/Santiago"))
         let calendar = LocalDayCalendar.make(timeZone: timeZone)

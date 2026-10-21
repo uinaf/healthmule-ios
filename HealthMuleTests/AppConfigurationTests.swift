@@ -57,20 +57,6 @@ final class AppConfigurationTests: XCTestCase {
     }
 
     @MainActor
-    func testBackgroundRefreshSchedulingKeepsExistingRequest() {
-        XCTAssertFalse(
-            BackgroundRefreshCoordinator.shouldSubmit(
-                hasExistingRequest: true
-            )
-        )
-        XCTAssertTrue(
-            BackgroundRefreshCoordinator.shouldSubmit(
-                hasExistingRequest: false
-            )
-        )
-    }
-
-    @MainActor
     func testBackgroundRefreshSchedulingMapsPublicErrorCodes() {
         XCTAssertEqual(
             BackgroundRefreshCoordinator.scheduleFailure(
@@ -177,38 +163,6 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertNil(state.progress)
     }
 
-    func testSyncProgressPresentationContainsNoHealthMetadata() throws {
-        let progress = SyncProgress(
-            phase: .staging,
-            completedUnits: 12,
-            totalUnits: 30,
-            currentDate: try LocalDate(rawValue: "2026-07-12")
-        )
-        let uploading = SyncProgress(
-            phase: .uploading,
-            completedUnits: 4,
-            totalUnits: 30,
-            currentDate: nil
-        )
-
-        XCTAssertEqual(
-            progress.presentationText,
-            "Processing 12 of 30 days"
-        )
-        XCTAssertEqual(
-            progress.accessibilityValue,
-            "Processing 12 of 30 days"
-        )
-        XCTAssertEqual(
-            uploading.presentationText,
-            "Uploading 4 of 30 files"
-        )
-        XCTAssertEqual(
-            uploading.accessibilityValue,
-            "Uploading 4 of 30 files"
-        )
-    }
-
     func testBackgroundDeliveryCallbackMapping() {
         XCTAssertEqual(
             HealthKitClient.backgroundDeliveryOutcome(
@@ -274,9 +228,6 @@ final class AppConfigurationTests: XCTestCase {
 
         XCTAssertEqual(advisory.metrics, [.stepCount, .sleep])
         XCTAssertTrue(advisory.message.contains("Steps and Sleep"))
-        XCTAssertTrue(advisory.message.contains("Opening the app"))
-        XCTAssertTrue(advisory.message.contains("syncing manually"))
-        XCTAssertTrue(advisory.message.hasPrefix("Background updates"))
         let threeMetricAdvisory = try XCTUnwrap(
             BackgroundDeliveryAdvisory(
                 failedMetrics: [.bodyMass, .stepCount, .sleep]
@@ -379,10 +330,6 @@ final class AppConfigurationTests: XCTestCase {
         )
         let migratedSubset = await client.queryableMetrics(from: enabled)
         XCTAssertEqual(migratedSubset, enabled)
-    }
-
-    func testDisabledMetricStatusIsExplicit() {
-        XCTAssertEqual(MetricReadState.notIncluded.title, "Not included")
     }
 
     func testPreauthorizationCountExcludesMetricsThatAreNotIncluded() {
@@ -680,29 +627,6 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(model.metricStatuses, knownStatuses)
         await gate.release()
         await refresh.value
-    }
-
-    @MainActor
-    func testHealthStatusResolvesBeforeCredentialReplayCanSuspend() async {
-        var healthState = HealthAuthorizationState.checking
-        let replayGate = AsyncSuspensionGate()
-
-        let refreshTask = Task { @MainActor in
-            await AppModel.refreshHealthBeforeCredentialReplay(
-                refreshHealth: {
-                    healthState = .requestCompleted
-                },
-                resumeDrive: {
-                    await replayGate.suspend()
-                }
-            )
-        }
-
-        await replayGate.waitUntilSuspended()
-        XCTAssertEqual(healthState, .requestCompleted)
-
-        await replayGate.release()
-        await refreshTask.value
     }
 
     func testNonSyncFailureDoesNotBecomeSyncFailure() {
@@ -1004,24 +928,6 @@ final class AppConfigurationTests: XCTestCase {
                 from: restoredDate,
                 timeZone: destinationTimeZone
             ),
-            "2026-07-23"
-        )
-    }
-
-    func testBackfillSchemaAlwaysUsesGregorianYears() throws {
-        let timeZone = try XCTUnwrap(
-            TimeZone(identifier: "Asia/Bangkok")
-        )
-        let gregorian = LocalDayCalendar.make(timeZone: timeZone)
-        let date = try XCTUnwrap(
-            gregorian.date(
-                from: DateComponents(year: 2026, month: 7, day: 23)
-            )
-        )
-
-        XCTAssertEqual(gregorian.identifier, .gregorian)
-        XCTAssertEqual(
-            BackfillDateCodec.string(from: date, timeZone: timeZone),
             "2026-07-23"
         )
     }

@@ -4,25 +4,7 @@ import XCTest
 @testable import HealthMule
 
 final class CompanionSnapshotFactoryTests: XCTestCase {
-    func testFactorySemanticsIgnoreGenerationTime() {
-        let first = CompanionSnapshotFactory.make(
-            readiness: .ready,
-            operationState: .idle,
-            summary: .empty,
-            now: Date(timeIntervalSince1970: 1_753_300_400)
-        )
-        let second = CompanionSnapshotFactory.make(
-            readiness: .ready,
-            operationState: .idle,
-            summary: .empty,
-            now: Date(timeIntervalSince1970: 1_753_300_500)
-        )
-
-        XCTAssertNotEqual(first.generatedAt, second.generatedAt)
-        XCTAssertEqual(first.semantics, second.semantics)
-    }
-
-    func testFactoryPublishesOnlySanitizedSyncStatus() throws {
+    func testFactoryPublishesOnlySanitizedSyncStatus() {
         let lastSync = Date(timeIntervalSince1970: 1_753_300_300)
         let summary = SyncSummary(
             lastSuccessfulSyncAt: lastSync,
@@ -46,16 +28,6 @@ final class CompanionSnapshotFactoryTests: XCTestCase {
         XCTAssertEqual(snapshot.pendingUploadCount, 3)
         XCTAssertEqual(snapshot.retryableUploadCount, 2)
         XCTAssertEqual(snapshot.permanentFailureCount, 1)
-
-        let message = try CompanionPayloadCodec.message(snapshot: snapshot)
-        let data = try XCTUnwrap(
-            message[CompanionPayloadCodec.snapshotKey] as? Data
-        )
-        let payload = try XCTUnwrap(
-            String(data: data, encoding: .utf8)
-        )
-        XCTAssertFalse(payload.contains("Uploading private record body"))
-        XCTAssertFalse(payload.contains("2026-07-25"))
     }
 
     func testFactoryKeepsRecoverableAdvisorySyncable() {

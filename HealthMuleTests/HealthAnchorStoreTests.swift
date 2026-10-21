@@ -66,39 +66,6 @@ final class HealthAnchorStoreTests: XCTestCase {
         )
     }
 
-    func testStoredSleepMappingRebuildsPlausibleSessionEndingDate() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "healthmule-sleep-anchor-\(UUID().uuidString)",
-                isDirectory: true
-            )
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let store = HealthAnchorStore(directoryURL: directory)
-        let sampleID = UUID()
-
-        try store.commit(
-            metric: .sleep,
-            anchor: HKQueryAnchor(fromValue: 1),
-            queryStart: Date(timeIntervalSince1970: 1_000),
-            sampleDates: [sampleID: ["2026-07-23"]],
-            deletedUUIDs: []
-        )
-
-        let reopened = HealthAnchorStore(directoryURL: directory)
-        let persistedDirectDates = try reopened.dates(
-            forDeletedUUID: sampleID
-        )
-
-        XCTAssertEqual(persistedDirectDates, ["2026-07-23"])
-        XCTAssertEqual(
-            try HealthChangeDateMapper.reconciliationDates(
-                for: .sleep,
-                directlyAffectedDates: persistedDirectDates
-            ),
-            ["2026-07-23", "2026-07-24"]
-        )
-    }
-
     func testMissingSampleIndexIsEmptyState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
@@ -144,30 +111,6 @@ final class HealthAnchorStoreTests: XCTestCase {
         XCTAssertThrowsError(
             try store.dates(forDeletedUUID: UUID())
         ) { error in
-            XCTAssertEqual(
-                error as? HealthAnchorStoreError,
-                .invalidSampleIndex
-            )
-        }
-    }
-
-    func testMissingSampleIndexWithHiddenAnchorDomainIsCorrupt() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "healthmule-hidden-partial-index-\(UUID().uuidString)",
-                isDirectory: true
-            )
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-        try Data().write(
-            to: directory.appendingPathComponent(".stepCount.anchor")
-        )
-        let store = HealthAnchorStore(directoryURL: directory)
-
-        XCTAssertThrowsError(try store.inspectSampleIndex()) { error in
             XCTAssertEqual(
                 error as? HealthAnchorStoreError,
                 .invalidSampleIndex

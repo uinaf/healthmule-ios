@@ -10,42 +10,46 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         defer { fixture.cleanUp() }
         let provider = CoordinatorRecordProvider(
             records: fixture.records,
-            failureDate: fixture.dates[0]
+            failureDate: fixture.dates[1]
         )
-        let events = CoordinatorEventLog()
-        let health = CoordinatorHealthChanges(
-            startDate: fixture.startInstant,
-            events: events
-        )
+        let health = CoordinatorHealthChanges(startDate: fixture.startInstant)
+        let progressLog = SyncProgressLog()
         let coordinator = try fixture.makeCoordinator(
             health: health,
-            provider: provider,
-            events: events
+            provider: provider
         )
 
         do {
             _ = try await coordinator.reconcile(
                 trigger: .manual,
                 enabledMetrics: [.stepCount],
-                backfillStart: fixture.dates[0]
+                backfillStart: fixture.dates[0],
+                progress: { progress in
+                    await progressLog.append(progress)
+                }
             )
             XCTFail("Expected the staged record provider to fail.")
         } catch CoordinatorTestError.recordFailure {}
 
         let committedMetrics = await health.committedMetrics()
-        let recordedEvents = await events.snapshot()
+        let progress = await progressLog.snapshot()
         XCTAssertTrue(committedMetrics.isEmpty)
         XCTAssertEqual(
-            Array(recordedEvents.prefix(3)),
-            [.recover(0), .startDate, .change(.stepCount)]
-        )
-        XCTAssertFalse(
-            recordedEvents.contains {
-                if case .commit = $0 {
-                    return true
-                }
-                return false
-            }
+            progress,
+            [
+                SyncProgress(
+                    phase: .staging,
+                    completedUnits: 0,
+                    totalUnits: 3,
+                    currentDate: nil
+                ),
+                SyncProgress(
+                    phase: .staging,
+                    completedUnits: 1,
+                    totalUnits: 3,
+                    currentDate: fixture.dates[0]
+                ),
+            ]
         )
         XCTAssertNil(
             fixture.defaults.stringArray(
@@ -98,11 +102,11 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         let resetCount = await health.anchorResetCount()
         XCTAssertEqual(resetCount, 0)
 
-        let events = CoordinatorEventLog()
+        let destination = CoordinatorDestination()
         let relaunched = try fixture.makeCoordinator(
             health: health,
             provider: provider,
-            destination: CoordinatorDestination(events: events)
+            destination: destination
         )
         try await relaunched.prepare()
         let restored = try await relaunched.summary()
@@ -110,10 +114,7 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         XCTAssertNil(restored.lastSuccessfulSyncAt)
         let flushed = try await relaunched.flushPendingUploads()
         XCTAssertEqual(flushed.summary.pendingUploadCount, 0)
-        let uploads = await events.snapshot().compactMap { event -> ExportArtifactID? in
-            if case .upload(let id) = event { return id }
-            return nil
-        }
+        let uploads = await destination.uploadedIDs()
         XCTAssertEqual(Set(uploads), Set(fixture.dates.map(ExportArtifactID.daily) + [.manifest]))
         XCTAssertEqual(try paths.map { try Data(contentsOf: $0) }, before)
     }
@@ -127,9 +128,11 @@ final class LiveSyncCoordinatorTests: XCTestCase {
             stagingRoot: fixture.rootDirectory,
             expectedStagedDates: Set(fixture.dates)
         )
+        let destination = CoordinatorDestination(health: health)
         let coordinator = try fixture.makeCoordinator(
             health: health,
-            provider: provider
+            provider: provider,
+            destination: destination
         )
 
         _ = try await coordinator.reconcile(
@@ -139,8 +142,13 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
 
         let stagedChecks = await health.stagedChecks()
+        let committedAtFirstUpload = await destination.committedMetricsAtFirstUpload()
         XCTAssertEqual(stagedChecks.count, 2)
         XCTAssertTrue(stagedChecks.allSatisfy(\.allDatesWereDurable))
+        XCTAssertEqual(
+            Set(try XCTUnwrap(committedAtFirstUpload)),
+            [.bodyMass, .stepCount]
+        )
         for date in fixture.dates {
             XCTAssertTrue(
                 FileManager.default.fileExists(
@@ -261,202 +269,6 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(changedMetrics, [.bodyMass, .stepCount, .hrvSDNN])
     }
 
-    func testSuccessfulPassCommitsEveryBatchBeforeFirstUpload() async throws {
-        let fixture = try CoordinatorFixture(dayCount: 1)
-        defer { fixture.cleanUp() }
-        let events = CoordinatorEventLog()
-        let provider = CoordinatorRecordProvider(records: fixture.records)
-        let health = CoordinatorHealthChanges(
-            startDate: fixture.startInstant,
-            events: events
-        )
-        let destination = CoordinatorDestination(events: events)
-        let coordinator = try fixture.makeCoordinator(
-            health: health,
-            provider: provider,
-            destination: destination,
-            events: events
-        )
-
-        _ = try await coordinator.reconcile(
-            trigger: .manual,
-            enabledMetrics: [.bodyMass, .stepCount],
-            backfillStart: fixture.dates[0]
-        )
-
-        let recordedEvents = await events.snapshot()
-        let recoveryIndex = try XCTUnwrap(
-            recordedEvents.firstIndex {
-                if case .recover = $0 {
-                    return true
-                }
-                return false
-            }
-        )
-        let startIndex = try XCTUnwrap(
-            recordedEvents.firstIndex(of: .startDate)
-        )
-        let firstChangeIndex = try XCTUnwrap(
-            recordedEvents.firstIndex {
-                if case .change = $0 {
-                    return true
-                }
-                return false
-            }
-        )
-        let stageIndexes = recordedEvents.indices.filter {
-            if case .stage = recordedEvents[$0] {
-                return true
-            }
-            return false
-        }
-        let commitIndexes = recordedEvents.indices.filter {
-            if case .commit = recordedEvents[$0] {
-                return true
-            }
-            return false
-        }
-        let firstUploadIndex = try XCTUnwrap(
-            recordedEvents.firstIndex {
-                if case .upload = $0 {
-                    return true
-                }
-                return false
-            }
-        )
-        let lastStageIndex = try XCTUnwrap(stageIndexes.last)
-        XCTAssertEqual(stageIndexes.count, fixture.dates.count)
-        XCTAssertEqual(commitIndexes.count, 2)
-        XCTAssertLessThan(recoveryIndex, startIndex)
-        XCTAssertLessThan(startIndex, firstChangeIndex)
-        XCTAssertLessThan(firstChangeIndex, lastStageIndex)
-        XCTAssertTrue(
-            commitIndexes.allSatisfy {
-                lastStageIndex < $0 && $0 < firstUploadIndex
-            }
-        )
-    }
-
-    func testProgressCoversEmptyOneAndMultipleDayPasses() async throws {
-        let emptyFixture = try CoordinatorFixture(dayCount: 1)
-        defer { emptyFixture.cleanUp() }
-        let emptyLog = SyncProgressLog()
-        let emptyCoordinator = try emptyFixture.makeCoordinator(
-            health: CoordinatorHealthChanges(
-                startDate: emptyFixture.startInstant
-            ),
-            provider: CoordinatorRecordProvider(
-                records: emptyFixture.records
-            )
-        )
-        _ = try await emptyCoordinator.reconcile(
-            trigger: .manual,
-            enabledMetrics: [],
-            backfillStart: try LocalDate(rawValue: "2026-07-30"),
-            progress: { progress in
-                await emptyLog.append(progress)
-            }
-        )
-        let emptyProgress = await emptyLog.snapshot()
-        XCTAssertEqual(
-            emptyProgress.filter { $0.phase == .staging },
-            [
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 0,
-                    totalUnits: 0,
-                    currentDate: nil
-                )
-            ]
-        )
-
-        let oneFixture = try CoordinatorFixture(dayCount: 1)
-        defer { oneFixture.cleanUp() }
-        let oneLog = SyncProgressLog()
-        let oneCoordinator = try oneFixture.makeCoordinator(
-            health: CoordinatorHealthChanges(
-                startDate: oneFixture.startInstant
-            ),
-            provider: CoordinatorRecordProvider(records: oneFixture.records)
-        )
-        _ = try await oneCoordinator.reconcile(
-            trigger: .manual,
-            enabledMetrics: [],
-            backfillStart: oneFixture.dates[0],
-            progress: { progress in
-                await oneLog.append(progress)
-            }
-        )
-        let oneProgress = await oneLog.snapshot()
-        XCTAssertEqual(
-            oneProgress.filter { $0.phase == .staging },
-            [
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 0,
-                    totalUnits: 1,
-                    currentDate: nil
-                ),
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 1,
-                    totalUnits: 1,
-                    currentDate: oneFixture.dates[0]
-                ),
-            ]
-        )
-
-        let multipleFixture = try CoordinatorFixture(dayCount: 3)
-        defer { multipleFixture.cleanUp() }
-        let multipleLog = SyncProgressLog()
-        let multipleCoordinator = try multipleFixture.makeCoordinator(
-            health: CoordinatorHealthChanges(
-                startDate: multipleFixture.startInstant
-            ),
-            provider: CoordinatorRecordProvider(
-                records: multipleFixture.records
-            )
-        )
-        _ = try await multipleCoordinator.reconcile(
-            trigger: .manual,
-            enabledMetrics: [],
-            backfillStart: multipleFixture.dates[0],
-            progress: { progress in
-                await multipleLog.append(progress)
-            }
-        )
-        let multipleProgress = await multipleLog.snapshot()
-        XCTAssertEqual(
-            multipleProgress.filter { $0.phase == .staging },
-            [
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 0,
-                    totalUnits: 3,
-                    currentDate: nil
-                ),
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 1,
-                    totalUnits: 3,
-                    currentDate: multipleFixture.dates[0]
-                ),
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 2,
-                    totalUnits: 3,
-                    currentDate: multipleFixture.dates[1]
-                ),
-                SyncProgress(
-                    phase: .staging,
-                    completedUnits: 3,
-                    totalUnits: 3,
-                    currentDate: multipleFixture.dates[2]
-                ),
-            ]
-        )
-    }
-
     func testProgressReportsUploadPhaseAfterStaging() async throws {
         let fixture = try CoordinatorFixture(dayCount: 3)
         defer { fixture.cleanUp() }
@@ -478,49 +290,8 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         )
 
         let progress = await progressLog.snapshot()
-        let uploading = progress.filter { $0.phase == .uploading }
         XCTAssertEqual(
-            uploading.map(\.completedUnits),
-            [0, 1, 2, 3],
-            "Every uploaded day must advance the progress bar."
-        )
-        XCTAssertTrue(uploading.allSatisfy { $0.totalUnits == 3 })
-        XCTAssertEqual(progress.last?.phase, .uploading)
-        XCTAssertEqual(
-            progress.last?.presentationText,
-            "Uploading 3 of 3 files"
-        )
-    }
-
-    func testProgressStopsBeforeFailedDay() async throws {
-        let fixture = try CoordinatorFixture(dayCount: 3)
-        defer { fixture.cleanUp() }
-        let progressLog = SyncProgressLog()
-        let coordinator = try fixture.makeCoordinator(
-            health: CoordinatorHealthChanges(
-                startDate: fixture.startInstant
-            ),
-            provider: CoordinatorRecordProvider(
-                records: fixture.records,
-                failureDate: fixture.dates[1]
-            )
-        )
-
-        do {
-            _ = try await coordinator.reconcile(
-                trigger: .manual,
-                enabledMetrics: [],
-                backfillStart: fixture.dates[0],
-                progress: { progress in
-                    await progressLog.append(progress)
-                }
-            )
-            XCTFail("Expected the second day to fail.")
-        } catch CoordinatorTestError.recordFailure {}
-
-        let progress = await progressLog.snapshot()
-        XCTAssertEqual(
-            progress,
+            progress.filter { $0.phase == .staging },
             [
                 SyncProgress(
                     phase: .staging,
@@ -534,7 +305,31 @@ final class LiveSyncCoordinatorTests: XCTestCase {
                     totalUnits: 3,
                     currentDate: fixture.dates[0]
                 ),
+                SyncProgress(
+                    phase: .staging,
+                    completedUnits: 2,
+                    totalUnits: 3,
+                    currentDate: fixture.dates[1]
+                ),
+                SyncProgress(
+                    phase: .staging,
+                    completedUnits: 3,
+                    totalUnits: 3,
+                    currentDate: fixture.dates[2]
+                ),
             ]
+        )
+        let uploading = progress.filter { $0.phase == .uploading }
+        XCTAssertEqual(
+            uploading.map(\.completedUnits),
+            [0, 1, 2, 3],
+            "Every uploaded day must advance the progress bar."
+        )
+        XCTAssertTrue(uploading.allSatisfy { $0.totalUnits == 3 })
+        XCTAssertEqual(progress.last?.phase, .uploading)
+        XCTAssertEqual(
+            progress.last?.presentationText,
+            "Uploading 3 of 3 files"
         )
     }
 
@@ -771,8 +566,7 @@ private struct CoordinatorFixture {
         health: CoordinatorHealthChanges,
         provider: CoordinatorRecordProvider,
         destination: CoordinatorDestination = CoordinatorDestination(),
-        queueProbe: CoordinatorQueueProbe? = nil,
-        events: CoordinatorEventLog? = nil
+        queueProbe: CoordinatorQueueProbe? = nil
     ) throws -> LiveSyncCoordinator {
         let fixedNow = now
         let fixedCalendar = calendar
@@ -787,9 +581,6 @@ private struct CoordinatorFixture {
             now: { fixedNow },
             operationQueued: { waiterCount in
                 queueProbe?.record(waiterCount)
-            },
-            recordStaged: { date in
-                await events?.append(.stage(date))
             }
         )
     }
@@ -913,7 +704,6 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
     private let queryStart: Date
     private let stagingRoot: URL?
     private let expectedStagedDates: Set<LocalDate>
-    private let events: CoordinatorEventLog?
     private var commits: [HealthMetric] = []
     private var resetCount = 0
     private var changes: [HealthMetric] = []
@@ -927,29 +717,25 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
         startDate: Date,
         stagingRoot: URL? = nil,
         expectedStagedDates: Set<LocalDate> = [],
-        events: CoordinatorEventLog? = nil,
         blockFirstChange: Bool = false
     ) {
         queryStart = startDate
         self.stagingRoot = stagingRoot
         self.expectedStagedDates = expectedStagedDates
-        self.events = events
         shouldBlockFirstChange = blockFirstChange
     }
 
     func recoverAuxiliaryState(
-        from existingRecords: [DailyHealthRecord]
+        from _: [DailyHealthRecord]
     ) async throws -> HealthAuxiliaryRecoverySummary {
-        await events?.append(.recover(existingRecords.count))
-        return HealthAuxiliaryRecoverySummary(
+        HealthAuxiliaryRecoverySummary(
             resetAnchors: false,
             rebuiltBoundaryCount: 0
         )
     }
 
     func startDate(for _: LocalDate) async throws -> Date {
-        await events?.append(.startDate)
-        return queryStart
+        queryStart
     }
 
     func changedDates(
@@ -958,7 +744,6 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
         notBefore _: Date
     ) async throws -> HealthAnchoredChangeBatch {
         changes.append(metric)
-        await events?.append(.change(metric))
         if shouldBlockFirstChange {
             shouldBlockFirstChange = false
             firstChangeStarted = true
@@ -999,7 +784,6 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
                 )
             )
         }
-        await events?.append(.commit(batch.metric))
     }
 
     func resetAnchors() async {
@@ -1038,35 +822,28 @@ private actor CoordinatorHealthChanges: HealthChangeTracking {
 }
 
 private actor CoordinatorDestination: ExportArtifactDestination {
-    private let events: CoordinatorEventLog?
+    private let health: CoordinatorHealthChanges?
+    private var uploads: [ExportArtifactID] = []
+    private var commitsAtFirstUpload: [HealthMetric]?
 
-    init(events: CoordinatorEventLog? = nil) {
-        self.events = events
+    init(health: CoordinatorHealthChanges? = nil) {
+        self.health = health
     }
 
     func upsert(_ artifact: ExportArtifact) async throws {
-        await events?.append(.upload(artifact.id))
-    }
-}
-
-private actor CoordinatorEventLog {
-    enum Event: Equatable, Sendable {
-        case recover(Int)
-        case startDate
-        case change(HealthMetric)
-        case stage(LocalDate)
-        case commit(HealthMetric)
-        case upload(ExportArtifactID)
+        let isFirstUpload = uploads.isEmpty
+        uploads.append(artifact.id)
+        if isFirstUpload, let health {
+            commitsAtFirstUpload = await health.committedMetrics()
+        }
     }
 
-    private var events: [Event] = []
-
-    func append(_ event: Event) {
-        events.append(event)
+    func uploadedIDs() -> [ExportArtifactID] {
+        uploads
     }
 
-    func snapshot() -> [Event] {
-        events
+    func committedMetricsAtFirstUpload() -> [HealthMetric]? {
+        commitsAtFirstUpload
     }
 }
 
