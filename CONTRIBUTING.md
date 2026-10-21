@@ -35,7 +35,7 @@ Run the fast required gate for every change:
 make verify
 ```
 
-Make runs the infrastructure, Swift syntax, and core-test lanes concurrently.
+Make runs the Swift syntax and core-test lanes concurrently.
 `make verify-full` keeps the fast gate and Simulator suite ordered behind the
 repository's Xcode lock.
 
@@ -44,7 +44,6 @@ Choose additional proof based on the change:
 | Command | Purpose |
 | --- | --- |
 | `make test-core` | Foundation-only export, sync, and companion contracts |
-| `make test-infra` | Xcode, workflow, and toolchain contract checks |
 | `make build` | Unsigned iOS build with the embedded Watch app |
 | `make test` | App unit tests and Simulator UI tests |
 | `make smoke` | App-shell launch smoke test |

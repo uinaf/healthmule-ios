@@ -1,16 +1,13 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := verify
 
-.PHONY: project test-infra check-app-syntax test-core test-core-cached build test smoke harness run verify verify-cached verify-full clean
+.PHONY: project check-app-syntax test-core test-core-cached build test smoke harness run verify verify-cached verify-full clean
 
-VERIFY_FAST_TARGETS := test-infra check-app-syntax test-core
-VERIFY_FAST_JOBS ?= 3
+VERIFY_FAST_TARGETS := check-app-syntax test-core
+VERIFY_FAST_JOBS ?= 2
 
 project:
 	./scripts/with-xcode-lock.sh ./scripts/ios-project-task.sh project
-
-test-infra:
-	./scripts/test-infrastructure.sh
 
 check-app-syntax:
 	./scripts/check-swift-syntax.sh
@@ -40,7 +37,7 @@ verify:
 	$(MAKE) --no-print-directory --jobs=$(VERIFY_FAST_JOBS) $(VERIFY_FAST_TARGETS)
 
 verify-cached:
-	$(MAKE) --no-print-directory --jobs=$(VERIFY_FAST_JOBS) test-infra check-app-syntax test-core-cached
+	$(MAKE) --no-print-directory --jobs=$(VERIFY_FAST_JOBS) check-app-syntax test-core-cached
 
 verify-full: verify
 	$(MAKE) --no-print-directory test

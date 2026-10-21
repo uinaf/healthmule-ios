@@ -33,11 +33,10 @@ daily JSON files in the user's own Google Drive. There is no developer backend.
 
 ## Validation
 
-`make verify` runs the infrastructure contract, a Swift parse of the app and
-iOS tests, and the core tests. Parsing is not type checking, so app, Watch, and
-UI changes also need `make build` or `make smoke`. `make verify-full` adds the
-iOS unit and Simulator UI suites. The full matrix is in
-[Contributing](CONTRIBUTING.md#validation).
+`make verify` runs a Swift parse of the app and iOS tests and the core tests.
+Parsing is not type checking, so app, Watch, and UI changes also need
+`make build` or `make smoke`. `make verify-full` adds the iOS unit and Simulator
+UI suites. The full matrix is in [Contributing](CONTRIBUTING.md#validation).
 
 CI runs `make verify` on Linux for every pull request and push to `main`, plus
 `make build` on macOS when compile inputs change; the path filter lives in
