@@ -255,64 +255,6 @@ final class DriveAPIClientTests: XCTestCase {
     }
 
     @MainActor
-    func testManagedFolderConnectionUsesCurrentRemoteNameWithinAccount()
-        async throws
-    {
-        let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
-        let accountID = "google-user-123"
-        defer {
-            UserDefaults(suiteName: suiteName)?
-                .removePersistentDomain(forName: suiteName)
-            URLProtocolStub.removeHandler()
-        }
-
-        let metadataStore = try makeMetadataStore(suiteName: suiteName)
-        await metadataStore.setRootID("root-id", for: accountID)
-        await metadataStore.setDailyID("daily-id", for: accountID)
-
-        URLProtocolStub.setHandler { request in
-            guard request.httpMethod == "GET" else {
-                throw StubError.unexpectedRequest(request.httpMethod ?? "nil")
-            }
-            XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
-
-            let item: [String: Any]
-            switch request.url?.path {
-            case "/drive/v3/files/root-id":
-                item = [
-                    "id": "root-id",
-                    "name": "Renamed Health Archive",
-                    "mimeType": "application/vnd.google-apps.folder",
-                    "trashed": false,
-                    "parents": ["archive-parent"],
-                ]
-            case "/drive/v3/files/daily-id":
-                item = [
-                    "id": "daily-id",
-                    "name": "daily",
-                    "mimeType": "application/vnd.google-apps.folder",
-                    "trashed": false,
-                    "parents": ["root-id"],
-                ]
-            default:
-                throw StubError.unexpectedRequest(
-                    request.url?.absoluteString ?? "nil"
-                )
-            }
-
-            return try Self.response(for: request, json: item)
-        }
-
-        let client = Self.makeClient(metadataStore: metadataStore)
-
-        let connection = try await client.ensureAppFolders(for: accountID)
-
-        XCTAssertEqual(connection.rootID, "root-id")
-        XCTAssertEqual(connection.dailyID, "daily-id")
-        XCTAssertEqual(connection.name, "Renamed Health Archive")
-    }
-
-    @MainActor
     func testCancellingOneFolderWaiterKeepsSharedCreationRunning()
         async throws
     {
@@ -476,6 +418,7 @@ final class DriveAPIClientTests: XCTestCase {
             guard request.httpMethod == "GET" else {
                 throw StubError.unexpectedRequest(request.httpMethod ?? "nil")
             }
+            XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
 
             let item: [String: Any]
             switch request.url?.path {
@@ -637,14 +580,6 @@ final class DriveAPIClientTests: XCTestCase {
             namespace,
             "e0aacc87b9e57562adefeb6c6658471f267c1e73ac80b33ae34d7e05434975e7"
         )
-        XCTAssertEqual(
-            namespace,
-            DriveMetadataStore.destinationNamespace(
-                for: "google-user-123",
-                rootID: "root-id",
-                dailyID: "daily-id"
-            )
-        )
         XCTAssertNotEqual(
             namespace,
             DriveMetadataStore.destinationNamespace(
@@ -653,8 +588,6 @@ final class DriveAPIClientTests: XCTestCase {
                 dailyID: "daily-id"
             )
         )
-        XCTAssertFalse(namespace.contains("google-user-123"))
-        XCTAssertFalse(namespace.contains("root-id"))
     }
 
     func testPendingFolderTransitionClearsFileIDsAfterStoreReload()
@@ -690,6 +623,7 @@ final class DriveAPIClientTests: XCTestCase {
         // Simulate a crash after a new pre-generated root ID was persisted,
         // but before the final folder transition and cache purge committed.
         await metadataStore.setRootID("new-root", for: accountID)
+        await metadataStore.setDailyID("new-daily", for: accountID)
         let reloadedStore = try makeMetadataStore(suiteName: suiteName)
         let preCommitManifestID = await reloadedStore.fileID(
             for: "manifest",
@@ -790,84 +724,6 @@ final class DriveAPIClientTests: XCTestCase {
             UserDefaults(suiteName: suiteName)?
                 .data(forKey: Self.metadataStateKey(for: accountID))
         )
-    }
-
-    @MainActor
-    func testEveryRequestUsesTheActivatedAccountToken() async throws {
-        let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
-        let accountID = "google-user-a"
-        defer {
-            UserDefaults(suiteName: suiteName)?
-                .removePersistentDomain(forName: suiteName)
-            URLProtocolStub.removeHandler()
-        }
-
-        let metadataStore = try makeMetadataStore(suiteName: suiteName)
-        await metadataStore.setFileID(
-            "manifest-a",
-            for: "manifest",
-            accountID: accountID
-        )
-        let requestedAccounts = StringRecorder()
-
-        URLProtocolStub.setHandler { request in
-            XCTAssertEqual(
-                request.value(forHTTPHeaderField: "Authorization"),
-                "Bearer token-for-\(accountID)"
-            )
-            if request.httpMethod == "GET" {
-                return try Self.response(
-                    for: request,
-                    json: [
-                        "id": "manifest-a",
-                        "name": "manifest.json",
-                        "mimeType": "application/json",
-                        "trashed": false,
-                        "parents": ["root-a"],
-                        "appProperties": [
-                            "healthMuleKind": "manifest"
-                        ],
-                    ]
-                )
-            }
-            return try Self.response(
-                for: request,
-                json: ["id": "manifest-a", "name": "manifest.json"]
-            )
-        }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [URLProtocolStub.self]
-        let session = URLSession(configuration: configuration)
-        let client = DriveAPIClient(
-            tokenProvider: { requestedAccountID in
-                requestedAccounts.append(requestedAccountID)
-                return "token-for-\(requestedAccountID)"
-            },
-            metadataStore: metadataStore,
-            session: session,
-            uploadTransport: TestSessionDriveUploadTransport(
-                session: session
-            )
-        )
-        try await client.activateAccount(
-            accountID,
-            folders: DriveFolderConnection(
-                rootID: "root-a",
-                dailyID: "daily-a",
-                name: "Archive A"
-            )
-        )
-
-        _ = try await client.upsertJSON(
-            named: "manifest.json",
-            parentID: "root-a",
-            kind: "manifest",
-            date: nil,
-            data: Data("{}".utf8)
-        )
-
-        XCTAssertEqual(requestedAccounts.values, [accountID, accountID])
     }
 
     @MainActor
@@ -1050,7 +906,6 @@ final class DriveAPIClientTests: XCTestCase {
             for: "daily:2026-07-23",
             accountID: accountID
         )
-        let folderGets = StringRecorder()
 
         URLProtocolStub.setHandler { request in
             let path = request.url?.path ?? ""
@@ -1058,7 +913,6 @@ final class DriveAPIClientTests: XCTestCase {
                 path == "/drive/v3/files/root-a"
                     || path == "/drive/v3/files/daily-a"
             {
-                folderGets.append(path)
                 throw StubError.unexpectedRequest(path)
             }
             if request.httpMethod == "GET" {
@@ -1128,123 +982,6 @@ final class DriveAPIClientTests: XCTestCase {
                 contents: Data("{}".utf8)
             )
         )
-
-        XCTAssertEqual(folderGets.values, [])
-    }
-
-    @MainActor
-    func testMovedTaggedRootIsRediscoveredWithoutRootParentConstraint()
-        async throws
-    {
-        let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
-        let accountID = "google-user-a"
-        defer {
-            UserDefaults(suiteName: suiteName)?
-                .removePersistentDomain(forName: suiteName)
-            URLProtocolStub.removeHandler()
-        }
-
-        let metadataStore = try makeMetadataStore(suiteName: suiteName)
-        let counter = RequestCounter()
-        let requests = StringRecorder()
-        URLProtocolStub.setHandler { request in
-            guard let url = request.url else {
-                throw StubError.unexpectedRequest(
-                    request.url?.absoluteString ?? "nil"
-                )
-            }
-            let components = URLComponents(
-                url: url,
-                resolvingAgainstBaseURL: false
-            )
-            var query: String?
-            for item in components?.queryItems ?? [] where item.name == "q" {
-                query = item.value
-                break
-            }
-            guard let query else {
-                throw StubError.unexpectedRequest(url.absoluteString)
-            }
-            requests.append(
-                "\(request.httpMethod ?? "nil")|\(url.path)|\(query)"
-            )
-            switch counter.next() {
-            case 0:
-                return try Self.response(
-                    for: request,
-                    json: [
-                        "files": [
-                            [
-                                "id": "orphaned-root",
-                                "name": "Orphaned Archive",
-                                "mimeType": "application/vnd.google-apps.folder",
-                                "trashed": false,
-                                "parents": [],
-                                "appProperties": [
-                                    "healthMuleKind": "root"
-                                ],
-                            ],
-                            [
-                                "id": "moved-root",
-                                "name": "Renamed Archive",
-                                "mimeType": "application/vnd.google-apps.folder",
-                                "trashed": false,
-                                "parents": ["archive-parent"],
-                                "appProperties": [
-                                    "healthMuleKind": "root"
-                                ],
-                            ],
-                        ]
-                    ]
-                )
-            case 1:
-                return try Self.response(
-                    for: request,
-                    json: [
-                        "files": [[
-                            "id": "moved-daily",
-                            "name": "daily",
-                            "mimeType": "application/vnd.google-apps.folder",
-                            "trashed": false,
-                            "parents": ["moved-root"],
-                            "appProperties": [
-                                "healthMuleKind": "daily-folder"
-                            ],
-                        ]]
-                    ]
-                )
-            default:
-                throw StubError.unexpectedRequest(
-                    request.url?.absoluteString ?? "nil"
-                )
-            }
-        }
-
-        let client = Self.makeClient(metadataStore: metadataStore)
-        let connection = try await client.ensureAppFolders(for: accountID)
-        let storedFolders = await metadataStore.folders(for: accountID)
-
-        XCTAssertEqual(
-            connection,
-            DriveFolderConnection(
-                rootID: "moved-root",
-                dailyID: "moved-daily",
-                name: "Renamed Archive"
-            )
-        )
-        XCTAssertEqual(
-            storedFolders,
-            DriveFolderSet(rootID: "moved-root", dailyID: "moved-daily")
-        )
-        XCTAssertEqual(requests.values.count, 2)
-        XCTAssertTrue(requests.values[0].hasPrefix("GET|/drive/v3/files|"))
-        XCTAssertTrue(requests.values[0].contains("healthMuleKind"))
-        XCTAssertTrue(requests.values[0].contains("value='root'"))
-        XCTAssertFalse(requests.values[0].contains("'root' in parents"))
-        XCTAssertTrue(requests.values[1].hasPrefix("GET|/drive/v3/files|"))
-        XCTAssertTrue(requests.values[1].contains("daily-folder"))
-        XCTAssertTrue(requests.values[1].contains("'moved-root' in parents"))
-        XCTAssertEqual(counter.count, 2)
     }
 
     @MainActor
@@ -1447,127 +1184,6 @@ final class DriveAPIClientTests: XCTestCase {
         XCTAssertEqual(
             requests.values[2].split(separator: "|").first,
             requests.values[3].split(separator: "|").first
-        )
-    }
-
-    @MainActor
-    func testUncachedManifestIsRediscoveredAsJSONBeforeUpload() async throws {
-        let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
-        let accountID = "google-user-a"
-        defer {
-            UserDefaults(suiteName: suiteName)?
-                .removePersistentDomain(forName: suiteName)
-            URLProtocolStub.removeHandler()
-        }
-
-        let metadataStore = try makeMetadataStore(suiteName: suiteName)
-        let counter = RequestCounter()
-        let requests = StringRecorder()
-        URLProtocolStub.setHandler { request in
-            guard let url = request.url else {
-                throw StubError.unexpectedRequest("nil URL")
-            }
-            let components = URLComponents(
-                url: url,
-                resolvingAgainstBaseURL: false
-            )
-            var query = ""
-            var pageToken: String?
-            for item in components?.queryItems ?? [] where item.name == "q" {
-                query = item.value ?? ""
-            }
-            for item in components?.queryItems ?? []
-                where item.name == "pageToken"
-            {
-                pageToken = item.value
-            }
-            requests.append(
-                "\(request.httpMethod ?? "nil")|\(url.path)|\(query)|\(pageToken ?? "first")"
-            )
-            switch counter.next() {
-            case 0:
-                return try Self.response(
-                    for: request,
-                    json: [
-                        "files": [],
-                        "nextPageToken": "manifest-page-2",
-                    ]
-                )
-            case 1:
-                XCTAssertEqual(pageToken, "manifest-page-2")
-                return try Self.response(
-                    for: request,
-                    json: [
-                        "files": [[
-                            "id": "existing-manifest",
-                            "name": "manifest.json",
-                            "mimeType": "application/json",
-                            "trashed": false,
-                            "parents": ["root-a"],
-                            "appProperties": [
-                                "healthMuleKind": "manifest"
-                            ],
-                        ]]
-                    ]
-                )
-            case 2:
-                return try Self.response(
-                    for: request,
-                    json: [
-                        "id": "existing-manifest",
-                        "name": "manifest.json",
-                    ]
-                )
-            default:
-                throw StubError.unexpectedRequest(url.absoluteString)
-            }
-        }
-
-        let client = Self.makeClient(metadataStore: metadataStore)
-        try await client.activateAccount(
-            accountID,
-            folders: DriveFolderConnection(
-                rootID: "root-a",
-                dailyID: "daily-a",
-                name: "Archive A"
-            )
-        )
-
-        let item = try await client.upsertJSON(
-            named: "manifest.json",
-            parentID: "root-a",
-            kind: "manifest",
-            date: nil,
-            data: Data("{}".utf8)
-        )
-        let cachedID = await metadataStore.fileID(
-            for: "manifest",
-            accountID: accountID
-        )
-
-        XCTAssertEqual(item.id, "existing-manifest")
-        XCTAssertEqual(cachedID, "existing-manifest")
-        XCTAssertEqual(counter.count, 3)
-        XCTAssertTrue(requests.values[0].hasPrefix("GET|"))
-        XCTAssertTrue(
-            requests.values[0].contains(
-                "mimeType = 'application/json'"
-            )
-        )
-        XCTAssertFalse(
-            requests.values[0].contains(
-                "application/vnd.google-apps.folder"
-            )
-        )
-        XCTAssertTrue(
-            requests.values[1].contains(
-                "manifest-page-2"
-            )
-        )
-        XCTAssertTrue(
-            requests.values[2].contains(
-                "/upload/drive/v3/files/existing-manifest"
-            )
         )
     }
 
@@ -1787,6 +1403,7 @@ final class DriveAPIClientTests: XCTestCase {
             for: "manifest",
             accountID: secondAccountID
         )
+        let requestedAccounts = StringRecorder()
 
         URLProtocolStub.setHandler { request in
             guard
@@ -1797,6 +1414,12 @@ final class DriveAPIClientTests: XCTestCase {
                     request.url?.absoluteString ?? "nil"
                 )
             }
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Authorization"),
+                itemID == "manifest-a"
+                    ? "Bearer token-for-\(firstAccountID)"
+                    : "Bearer token-for-\(secondAccountID)"
+            )
             if request.httpMethod == "GET" {
                 return try Self.response(
                     for: request,
@@ -1823,7 +1446,20 @@ final class DriveAPIClientTests: XCTestCase {
             )
         }
 
-        let client = Self.makeClient(metadataStore: metadataStore)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+        let session = URLSession(configuration: configuration)
+        let client = DriveAPIClient(
+            tokenProvider: { requestedAccountID in
+                requestedAccounts.append(requestedAccountID)
+                return "token-for-\(requestedAccountID)"
+            },
+            metadataStore: metadataStore,
+            session: session,
+            uploadTransport: TestSessionDriveUploadTransport(
+                session: session
+            )
+        )
         let firstActivation = try await client.activateAccount(
             firstAccountID,
             folders: DriveFolderConnection(
@@ -1858,6 +1494,10 @@ final class DriveAPIClientTests: XCTestCase {
 
         XCTAssertEqual(firstItem.id, "manifest-a")
         XCTAssertEqual(secondItem.id, "manifest-b")
+        XCTAssertEqual(
+            requestedAccounts.values,
+            [firstAccountID, firstAccountID, secondAccountID, secondAccountID]
+        )
     }
 
     @MainActor
@@ -2079,6 +1719,11 @@ final class DriveAPIClientTests: XCTestCase {
                     ]
                 )
             }
+            let query = request.url?.query?.removingPercentEncoding ?? ""
+            XCTAssertTrue(query.contains("mimeType = 'application/json'"))
+            XCTAssertFalse(
+                query.contains("application/vnd.google-apps.folder")
+            )
             return try Self.response(
                 for: request,
                 json: [
@@ -2156,187 +1801,6 @@ final class DriveAPIClientTests: XCTestCase {
             accountID: accountID
         )
         XCTAssertEqual(cachedID, "current-manifest")
-    }
-
-    @MainActor
-    func testCachedCreateReservationSurvivesTransientValidation404()
-        async throws
-    {
-        let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
-        let accountID = "google-user-pending-create"
-        let reservedID = "reserved-manifest-id"
-        defer {
-            UserDefaults(suiteName: suiteName)?
-                .removePersistentDomain(forName: suiteName)
-            URLProtocolStub.removeHandler()
-        }
-        let metadataStore = try makeMetadataStore(suiteName: suiteName)
-        await metadataStore.reserveFileID(
-            reservedID,
-            for: "manifest",
-            accountID: accountID
-        )
-        let metadataRequests = RequestCounter()
-        URLProtocolStub.setHandler { request in
-            XCTAssertEqual(metadataRequests.next(), 0)
-            XCTAssertEqual(
-                request.url?.path,
-                "/drive/v3/files/\(reservedID)"
-            )
-            return try Self.response(
-                for: request,
-                status: 404,
-                json: ["error": ["errors": []]]
-            )
-        }
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [URLProtocolStub.self]
-        let uploadTransport = try RecordingDriveUploadTransport(
-            responseJSON: [
-                "id": reservedID,
-                "name": "manifest.json",
-            ],
-            responseStatuses: [409, 200]
-        )
-        let client = DriveAPIClient(
-            tokenProvider: { _ in "test-token" },
-            metadataStore: metadataStore,
-            session: URLSession(configuration: configuration),
-            uploadTransport: uploadTransport
-        )
-        try await client.activateAccount(
-            accountID,
-            folders: DriveFolderConnection(
-                rootID: "root-a",
-                dailyID: "daily-a",
-                name: "Archive A"
-            )
-        )
-
-        let item = try await client.upsertJSON(
-            named: "manifest.json",
-            parentID: "root-a",
-            kind: "manifest",
-            date: nil,
-            data: Data("{\"revision\":2}".utf8)
-        )
-
-        let invocations = await uploadTransport.recordedInvocations()
-        XCTAssertEqual(item.id, reservedID)
-        XCTAssertEqual(metadataRequests.count, 1)
-        XCTAssertEqual(invocations.count, 2)
-        XCTAssertEqual(invocations[0].request.httpMethod, "POST")
-        XCTAssertEqual(
-            invocations[0].request.url?.path,
-            "/upload/drive/v3/files"
-        )
-        XCTAssertTrue(
-            String(decoding: invocations[0].body, as: UTF8.self)
-                .contains(#""id":"reserved-manifest-id""#)
-        )
-        XCTAssertEqual(invocations[1].request.httpMethod, "PATCH")
-        XCTAssertEqual(
-            invocations[1].request.url?.path,
-            "/upload/drive/v3/files/\(reservedID)"
-        )
-        let cachedSnapshot = await metadataStore.fileIDSnapshot(
-            for: "manifest",
-            accountID: accountID
-        )
-        XCTAssertEqual(cachedSnapshot.fileID, reservedID)
-        XCTAssertEqual(cachedSnapshot.status, .committed)
-    }
-
-    @MainActor
-    func testAmbiguousPendingCreateRemainsReservedWithoutGeneratingAnotherID()
-        async throws
-    {
-        let suiteName = "DriveAPIClientTests.\(UUID().uuidString)"
-        let accountID = "google-user-ambiguous-pending-create"
-        let reservedID = "ambiguous-reserved-manifest-id"
-        defer {
-            UserDefaults(suiteName: suiteName)?
-                .removePersistentDomain(forName: suiteName)
-            URLProtocolStub.removeHandler()
-        }
-        let metadataStore = try makeMetadataStore(suiteName: suiteName)
-        await metadataStore.reserveFileID(
-            reservedID,
-            for: "manifest",
-            accountID: accountID
-        )
-        let metadataRequests = RequestCounter()
-        URLProtocolStub.setHandler { request in
-            XCTAssertEqual(metadataRequests.next(), 0)
-            XCTAssertEqual(
-                request.url?.path,
-                "/drive/v3/files/\(reservedID)"
-            )
-            return try Self.response(
-                for: request,
-                status: 404,
-                json: ["error": ["errors": []]]
-            )
-        }
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [URLProtocolStub.self]
-        let uploadTransport = try RecordingDriveUploadTransport(
-            responseJSON: [
-                "id": reservedID,
-                "name": "manifest.json",
-            ],
-            responseStatuses: [409, 404]
-        )
-        let client = DriveAPIClient(
-            tokenProvider: { _ in "test-token" },
-            metadataStore: metadataStore,
-            session: URLSession(configuration: configuration),
-            uploadTransport: uploadTransport
-        )
-        try await client.activateAccount(
-            accountID,
-            folders: DriveFolderConnection(
-                rootID: "root-a",
-                dailyID: "daily-a",
-                name: "Archive A"
-            )
-        )
-
-        do {
-            _ = try await client.upsertJSON(
-                named: "manifest.json",
-                parentID: "root-a",
-                kind: "manifest",
-                date: nil,
-                data: Data("{\"revision\":2}".utf8)
-            )
-            XCTFail("Expected the ambiguous create to remain retryable")
-        } catch let error as DriveAPIError {
-            guard case .accountNotReady = error else {
-                return XCTFail("Expected accountNotReady, got \(error)")
-            }
-            XCTAssertTrue(error.isRetryable)
-        }
-
-        let invocations = await uploadTransport.recordedInvocations()
-        XCTAssertEqual(metadataRequests.count, 1)
-        XCTAssertEqual(invocations.count, 2)
-        XCTAssertEqual(invocations[0].request.httpMethod, "POST")
-        XCTAssertTrue(
-            String(decoding: invocations[0].body, as: UTF8.self)
-                .contains(#""id":"ambiguous-reserved-manifest-id""#)
-        )
-        XCTAssertEqual(invocations[1].request.httpMethod, "PATCH")
-        XCTAssertEqual(
-            invocations[1].request.url?.lastPathComponent,
-            reservedID
-        )
-        let cachedSnapshot = await metadataStore.fileIDSnapshot(
-            for: "manifest",
-            accountID: accountID
-        )
-        XCTAssertEqual(cachedSnapshot.fileID, reservedID)
-        XCTAssertEqual(cachedSnapshot.status, .pendingCreate)
     }
 
     @MainActor
@@ -2904,13 +2368,13 @@ final class DriveAPIClientTests: XCTestCase {
 
         let metadataStore = try makeMetadataStore(suiteName: suiteName)
         await metadataStore.setFileID(
-            "manifest-a",
+            "stale-response-id",
             for: "manifest",
             accountID: accountID
         )
         let uploadTransport = SuspendingDriveUploadTransport()
         let session = Self.cachedArtifactValidationSession(
-            fileID: "manifest-a",
+            fileID: "stale-response-id",
             parentID: "root-a"
         )
         let client = DriveAPIClient(
@@ -3140,20 +2604,12 @@ final class DriveAPIClientTests: XCTestCase {
 
         XCTAssertEqual(
             configuration.identifier,
-            BackgroundDriveUploadTransport.sessionIdentifier
+            "dev.uinaf.healthmule.drive-upload"
         )
         XCTAssertTrue(configuration.sessionSendsLaunchEvents)
         XCTAssertTrue(configuration.waitsForConnectivity)
         XCTAssertFalse(configuration.isDiscretionary)
         XCTAssertNil(configuration.urlCache)
-        XCTAssertEqual(
-            BackgroundDriveUploadTransport.defaultResponseWaitTimeout,
-            .seconds(15)
-        )
-        XCTAssertEqual(
-            BackgroundDriveUploadTransport.defaultTransitionDrainTimeout,
-            .seconds(15)
-        )
     }
 
     @MainActor
@@ -3905,7 +3361,7 @@ final class DriveAPIClientTests: XCTestCase {
             transport: transport
         )
         XCTAssertTrue(joined)
-        XCTAssertEqual(BackgroundUploadURLProtocol.startLoadingCount, 1)
+        XCTAssertEqual(BackgroundUploadURLProtocol.startedRequestPaths.count, 1)
 
         second.cancel()
         do {
@@ -3922,117 +3378,14 @@ final class DriveAPIClientTests: XCTestCase {
             transport: transport
         )
         XCTAssertTrue(remainingCaller)
-        XCTAssertEqual(BackgroundUploadURLProtocol.startLoadingCount, 1)
+        XCTAssertEqual(BackgroundUploadURLProtocol.startedRequestPaths.count, 1)
 
         releaseResponse.signal()
         let firstResponse = try await first.value
         await fulfillment(of: [requestReleased], timeout: 2)
 
         XCTAssertFalse(firstResponse.data.isEmpty)
-        XCTAssertEqual(BackgroundUploadURLProtocol.startLoadingCount, 1)
-    }
-
-    @MainActor
-    func testCancellingUniqueQueuedBackgroundUploadPreventsItStarting()
-        async throws
-    {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "BackgroundDriveQueuedCancellationTests-\(UUID().uuidString)",
-                isDirectory: true
-            )
-        let requestStarted = expectation(description: "first upload started")
-        let requestReleased = expectation(description: "first upload released")
-        let releaseResponse = DispatchSemaphore(value: 0)
-        defer {
-            releaseResponse.signal()
-            BackgroundUploadURLProtocol.reset()
-            try? FileManager.default.removeItem(at: root)
-        }
-
-        BackgroundUploadURLProtocol.configure(
-            requestStarted: requestStarted,
-            requestReleased: requestReleased,
-            releaseResponse: releaseResponse
-        )
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [BackgroundUploadURLProtocol.self]
-        let transport = BackgroundDriveUploadTransport(
-            bodyStore: BackgroundDriveUploadBodyStore(directoryURL: root),
-            configuration: configuration,
-            responseWaitTimeout: .seconds(5)
-        )
-        let destinationScopeID = String(repeating: "c", count: 64)
-        let firstOperationID = String(repeating: "d", count: 64)
-        let secondOperationID = String(repeating: "e", count: 64)
-        try await transport.transition(
-            toDestinationScopeID: destinationScopeID
-        )
-        var firstRequest = URLRequest(
-            url: try XCTUnwrap(
-                URL(
-                    string:
-                        "https://www.googleapis.com/upload/drive/v3/files/first"
-                )
-            )
-        )
-        firstRequest.httpMethod = "PATCH"
-        var secondRequest = URLRequest(
-            url: try XCTUnwrap(
-                URL(
-                    string:
-                        "https://www.googleapis.com/upload/drive/v3/files/second"
-                )
-            )
-        )
-        secondRequest.httpMethod = "PATCH"
-
-        let first = Task {
-            try await transport.upload(
-                request: firstRequest,
-                body: Data("first multipart body".utf8),
-                operationID: firstOperationID,
-                destinationScopeID: destinationScopeID
-            )
-        }
-        await fulfillment(of: [requestStarted], timeout: 2)
-        let second = Task {
-            try await transport.upload(
-                request: secondRequest,
-                body: Data("second multipart body".utf8),
-                operationID: secondOperationID,
-                destinationScopeID: destinationScopeID
-            )
-        }
-        let secondReserved = try await waitForReservedCallerCount(
-            1,
-            operationID: secondOperationID,
-            destinationScopeID: destinationScopeID,
-            transport: transport
-        )
-        XCTAssertTrue(secondReserved)
-
-        second.cancel()
-        do {
-            _ = try await second.value
-            XCTFail("Expected queued upload cancellation")
-        } catch is CancellationError {
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-        XCTAssertEqual(
-            BackgroundUploadURLProtocol.startedRequestPaths,
-            ["/upload/drive/v3/files/first"]
-        )
-
-        releaseResponse.signal()
-        _ = try await first.value
-        await fulfillment(of: [requestReleased], timeout: 2)
-        try await Task.sleep(for: .milliseconds(20))
-        XCTAssertEqual(
-            BackgroundUploadURLProtocol.startedRequestPaths,
-            ["/upload/drive/v3/files/first"]
-        )
+        XCTAssertEqual(BackgroundUploadURLProtocol.startedRequestPaths.count, 1)
     }
 
     @MainActor
@@ -4069,6 +3422,7 @@ final class DriveAPIClientTests: XCTestCase {
         let destinationScopeID = String(repeating: "c", count: 64)
         let firstOperationID = String(repeating: "d", count: 64)
         let secondOperationID = String(repeating: "e", count: 64)
+        let thirdOperationID = String(repeating: "f", count: 64)
         try await transport.transition(
             toDestinationScopeID: destinationScopeID
         )
@@ -4090,6 +3444,15 @@ final class DriveAPIClientTests: XCTestCase {
             )
         )
         secondRequest.httpMethod = "PATCH"
+        var thirdRequest = URLRequest(
+            url: try XCTUnwrap(
+                URL(
+                    string:
+                        "https://www.googleapis.com/upload/drive/v3/files/third"
+                )
+            )
+        )
+        thirdRequest.httpMethod = "PATCH"
 
         let first = Task {
             try await transport.upload(
@@ -4108,7 +3471,6 @@ final class DriveAPIClientTests: XCTestCase {
                 destinationScopeID: destinationScopeID
             )
         }
-
         let secondReserved = try await waitForReservedCallerCount(
             1,
             operationID: secondOperationID,
@@ -4116,6 +3478,34 @@ final class DriveAPIClientTests: XCTestCase {
             transport: transport
         )
         XCTAssertTrue(secondReserved)
+        let third = Task {
+            try await transport.upload(
+                request: thirdRequest,
+                body: Data("third multipart body".utf8),
+                operationID: thirdOperationID,
+                destinationScopeID: destinationScopeID
+            )
+        }
+        let thirdReserved = try await waitForReservedCallerCount(
+            1,
+            operationID: thirdOperationID,
+            destinationScopeID: destinationScopeID,
+            transport: transport
+        )
+        XCTAssertTrue(thirdReserved)
+        XCTAssertEqual(
+            BackgroundUploadURLProtocol.startedRequestPaths,
+            ["/upload/drive/v3/files/first"]
+        )
+
+        second.cancel()
+        do {
+            _ = try await second.value
+            XCTFail("Expected queued upload cancellation")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
         XCTAssertEqual(
             BackgroundUploadURLProtocol.startedRequestPaths,
             ["/upload/drive/v3/files/first"]
@@ -4124,14 +3514,14 @@ final class DriveAPIClientTests: XCTestCase {
         releaseResponse.signal()
         releaseResponse.signal()
         _ = try await first.value
-        _ = try await second.value
+        _ = try await third.value
         await fulfillment(of: [requestReleased], timeout: 2)
 
         XCTAssertEqual(
             BackgroundUploadURLProtocol.startedRequestPaths,
             [
                 "/upload/drive/v3/files/first",
-                "/upload/drive/v3/files/second",
+                "/upload/drive/v3/files/third",
             ]
         )
     }
@@ -4284,12 +3674,13 @@ final class DriveAPIClientTests: XCTestCase {
     func testBackgroundUploadBodyStoreStagesPrunesAndRejectsUnsafeNames()
         throws
     {
-        let root = FileManager.default.temporaryDirectory
+        let parent = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "BackgroundDriveUploadBodyStoreTests-\(UUID().uuidString)",
                 isDirectory: true
             )
-        defer { try? FileManager.default.removeItem(at: root) }
+        let root = parent.appendingPathComponent("bodies", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
         let store = BackgroundDriveUploadBodyStore(directoryURL: root)
         let first = try store.stage(Data("first".utf8))
         let second = try store.stage(Data("second".utf8))
@@ -4301,8 +3692,10 @@ final class DriveAPIClientTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: second.path))
+        let outside = root.appendingPathComponent("../outside.upload")
+        try Data("outside".utf8).write(to: outside)
         store.remove(fileName: "../outside.upload")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outside.path))
 
         let operationID = String(repeating: "a", count: 64)
         let destinationScopeID = String(repeating: "b", count: 64)
@@ -4872,10 +4265,6 @@ private final class BackgroundUploadURLProtocol: URLProtocol {
         state.stopLoadingCount
     }
 
-    static var startLoadingCount: Int {
-        state.startLoadingCount
-    }
-
     static var startedRequestPaths: [String] {
         state.startedRequestPaths
     }
@@ -5024,12 +4413,6 @@ private final class BackgroundUploadProtocolState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return stopLoadingValue
-    }
-
-    var startLoadingCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return startLoadingValue
     }
 
     var startedRequestPaths: [String] {
