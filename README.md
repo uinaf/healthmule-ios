@@ -7,9 +7,6 @@ Health metrics as daily JSON files in your Google Drive.
 - The Watch shows sanitized sync status and can request a sync.
 - No developer backend, analytics, ads, or telemetry.
 
-Release acceptance status:
-[Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
-
 ## Quick start
 
 Requires full Xcode with the iOS 26 and watchOS 26 SDKs and Simulator
@@ -26,8 +23,8 @@ make verify
 
 ## Privacy
 
-- HealthKit access is read-only and limited to the types in the
-  [product spec](docs/specs/healthkit-drive-exporter.md#r1-healthkit-authorization).
+- HealthKit access is read-only and limited to the types in
+  [`HealthMetric`](HealthMuleApp/HealthKit/HealthMetric.swift).
 - Google access uses only the `drive.file` scope.
 - Logs and diagnostics carry no health values, OAuth tokens, exported records,
   or raw HealthKit metadata.
@@ -44,13 +41,8 @@ served by the Worker in [wrangler.jsonc](wrangler.jsonc). Preview:
 python3 -m http.server 8765 --directory website
 ```
 
-Deploy credentials and hostname:
-[website runbook](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
-
 ## Documentation
 
-- [Product spec](docs/specs/healthkit-drive-exporter.md)
-- [Architecture](docs/ARCHITECTURE.md)
 - [Google OAuth setup](docs/GOOGLE_OAUTH.md)
 - [Physical-device checklist](docs/DEVICE_TESTING.md)
 - [Security reporting](https://github.com/uinaf/.github/blob/main/SECURITY.md)

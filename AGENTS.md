@@ -9,12 +9,9 @@ files in the user's own Google Drive. There is no developer backend.
 - `make run` builds and launches in Simulator.
 - `make verify` is the required gate before any push.
 
-| Question | Doc |
-| --- | --- |
-| What the app must do; the JSON contract | [Product spec](docs/specs/healthkit-drive-exporter.md) |
-| Sync, Drive, and privacy invariants | [Architecture](docs/ARCHITECTURE.md) |
-| Connecting a real Drive account | [Google OAuth setup](docs/GOOGLE_OAUTH.md) |
-| What only a signed device can prove | [Physical-device checklist](docs/DEVICE_TESTING.md) |
+Open [Google OAuth setup](docs/GOOGLE_OAUTH.md) to connect a real Drive
+account, and the [physical-device checklist](docs/DEVICE_TESTING.md) for what
+only a signed device can prove.
 
 ## Toolchain
 
@@ -32,16 +29,14 @@ files in the user's own Google Drive. There is no developer backend.
 
 `make verify` only parses app and iOS test sources; it does not type-check
 them. App, Watch, and UI changes also need `make build` or `make smoke`.
-`make verify-full` adds the iOS unit and Simulator UI suites. Other targets:
-[Contributing](CONTRIBUTING.md).
+`make verify-full` adds the iOS unit and Simulator UI suites.
 
 ## Delivery
 
 - Open a pull request; merge after the required `verify` check passes.
 - Merging ships nothing. Upload to TestFlight with
   `gh workflow run testflight.yml --ref main`. External testing and App Store
-  submission are manual. Release setup:
-  [Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c).
+  submission are manual.
 
 ## Repo rules
 
@@ -49,6 +44,9 @@ them. App, Watch, and UI changes also need `make build` or `make smoke`.
 - HealthKit access is read-only: no write types or entitlements.
 - Logs carry no health values, OAuth tokens, record bodies, or raw metadata.
 - Exported records keep explicit JSON `null` values and unknown fields.
+- Older builds cannot read the v2 sync index. To roll back past it, restore
+  the frozen `sync-state.v1.json`, or delete the index and let the app recover
+  from the `daily/<date>.json` files.
 - OAuth config lives in ignored `Config/Secrets.xcconfig`, signing in ignored
   `Config/Signing.xcconfig`, runtime tokens in Keychain.
 - Simulator fixtures prove development behavior only. Background delivery and

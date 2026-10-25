@@ -2,9 +2,7 @@
 
 Simulator runs prove the app shell and deterministic contracts only. Use a real
 iPhone for HealthKit, background, and real Drive behavior, and a paired Watch
-for background Watch Connectivity. Record results in
-[Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c), tied to
-the tested build.
+for background Watch Connectivity.
 
 | Behavior | Simulator | Needs |
 | --- | --- | --- |
