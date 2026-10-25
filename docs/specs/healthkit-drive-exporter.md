@@ -1,9 +1,8 @@
 # HealthMule: Apple Health to Google Drive
 
-HealthMule incrementally exports an allowlist of Apple Health metrics as stable
-daily JSON records in the user's Google Drive. The iPhone owns export and sync;
-the Apple Watch companion shows status and requests sync. Deployment targets and
-dependencies are defined in [project.yml](../../project.yml).
+HealthMule incrementally exports an allowlist of Apple Health metrics as daily
+JSON records in the user's Google Drive. The iPhone owns export and sync; the
+Watch companion shows status and requests sync.
 
 ## Product principles
 
@@ -11,9 +10,9 @@ dependencies are defined in [project.yml](../../project.yml).
   health-data processor.
 - Read-only HealthKit access.
 - Least-privilege Google Drive access.
-- Idempotent incremental sync rather than repeated full exports.
-- A missed background run is recoverable the next time the app opens or runs.
-- The on-disk JSON contract is the product boundary and must remain stable.
+- Idempotent incremental sync, not repeated full exports.
+- A missed background run recovers the next time the app opens or runs.
+- The JSON contract is the product boundary and stays stable.
 
 ## Requirements
 
@@ -31,15 +30,14 @@ Request read access only for:
 - Sleep analysis
 - Workouts
 
-The setup screen must explain each requested type. Request and query only the
-currently enabled subset; enabling a new type must return setup to Health access
-review before that type is queried. The app must still function when any subset
-is denied. It must never request write access.
+The setup screen explains each requested type. Request and query only the
+enabled subset; enabling a type returns setup to Health access review before
+that type is queried. The app works with any subset denied. It never requests
+write access.
 
 ### R2: Google Drive authorization
 
-Use Google OAuth with the `drive.file` scope. Do not request unrestricted Drive
-access.
+Use Google OAuth with only the `drive.file` scope.
 
 On first setup:
 
@@ -49,11 +47,10 @@ On first setup:
 4. Tell the user they may move that folder anywhere in their Drive; uploads
    continue by folder ID.
 
-If the local ID cache is unavailable, rediscover an app-tagged root across My
-Drive without assuming it remains directly under `root`. Accept only a live
-folder that still has a My Drive parent, then recover its `daily` child by the
-root's immutable ID. Do not create a duplicate tree while that tagged folder is
-discoverable.
+Without the local ID cache, rediscover an app-tagged root anywhere in My Drive,
+not only under `root`. Accept only a live folder with a My Drive parent, then
+recover its `daily` child by the root's ID. Never create a duplicate tree while
+the tagged folder is discoverable.
 
 Store OAuth credentials in Keychain. Provide explicit Disconnect and Reconnect
 actions.
@@ -70,7 +67,7 @@ Apple Health Sync/
     └── 2026-07-24.json
 ```
 
-Each daily file must conform to this schema:
+Each daily file conforms to this schema:
 
 ```json
 {
@@ -114,27 +111,24 @@ Rules:
 
 - Missing or unauthorized values are `null`; never invent zero.
 - Numeric values use SI/metric units shown in the field names.
-- Known decimal measurements are rounded to the nearest value with at most two
-  fractional digits before semantic comparison and encoding. Use the shortest
-  round-trip decimal representation of each finite `Double` measurement or
-  aggregate, with decimal half values rounded away from zero: `1.005` becomes
-  `1.01`, `4.015` becomes `4.02`, and `-1.005` becomes `-1.01`. Values immediately
-  below or above a midpoint stay on their respective sides. Steps remain
-  integers; `null` and unknown future fields are not quantized.
-- Decimal rounding applies to newly aggregated or encoded records. Previously
-  exported records retain their rounded values and semantic digests; upgrading
-  does not restage them for rounding alone. When ordinary sync rebuilds a day
-  from HealthKit, a changed rounded value changes its semantic digest and
-  stages the updated export. Historical regeneration requires an explicit
-  user-requested backfill.
-- All timestamps are complete ISO 8601 values with a UTC offset and valid
-  calendar dates; trailing content and out-of-range time components are rejected.
+- Round known decimal measurements to at most two fractional digits before
+  semantic comparison and encoding. Start from the shortest round-trip decimal
+  of each finite `Double`, and round halves away from zero: `1.005` becomes
+  `1.01`, `4.015` becomes `4.02`, `-1.005` becomes `-1.01`. Values just below or
+  above a midpoint stay on their side. Steps stay integers; `null` and unknown
+  future fields are not rounded.
+- Rounding applies to newly aggregated or encoded records. Exported records
+  keep their values and semantic digests; an upgrade alone restages nothing.
+  When sync rebuilds a day and a rounded value changes, the digest changes and
+  the export restages. Historical regeneration needs an explicit user backfill.
+- Timestamps are complete ISO 8601 values with a UTC offset and valid calendar
+  dates; reject trailing content and out-of-range time components.
 - Do not include GPS routes, raw heart-rate series, clinical records,
   medications, symptoms, reproductive data, or free-text metadata.
 - Preserve unknown future fields when decoding a previously written record.
-- Preserve unknown numeric values exactly when their coefficient has at most 38
-  significant decimal digits after insignificant leading and trailing zeroes
-  are removed. Reject wider values before decoding instead of rounding them.
+- Preserve unknown numeric values exactly up to 38 significant digits, after
+  stripping leading and trailing zeroes. Reject wider values before decoding;
+  never round them.
 
 ### R4: Aggregation semantics
 
@@ -142,21 +136,19 @@ Rules:
 - Weight: latest authorized sample in the local day.
 - Resting heart rate and HRV: arithmetic mean of authorized samples in the
   local day.
-- VO₂ max: latest authorized sample on or before the end of the local day;
-  include `null` when none exists in the selected history window. Include the
-  selected carry-forward sample in source provenance without double-counting
-  its UUID. Older staged records do not widen the active selected-history
-  boundary after the user narrows the range.
-- Sleep: sum asleep-stage intervals for the sleep session ending on that local
-  date. Exclude `awake` and `inBed`; de-duplicate overlapping intervals. Source
-  names and sample counts must exclude earlier sessions read only to identify
-  the selected session. Use a bounded look-ahead and do not publish a fragment
-  until the maximum inter-fragment gap has elapsed, so a pre-midnight fragment
-  cannot also be exported as part of the following day's session.
+- VO₂ max: latest authorized sample on or before the end of the local day, or
+  `null` when none exists in the selected history window. Include the
+  carried-forward sample in provenance once by UUID. Older staged records never
+  widen the selected history after the user narrows it.
+- Sleep: sum asleep-stage intervals of the session ending on that local date.
+  Exclude `awake` and `inBed`; de-duplicate overlaps. Source names and sample
+  counts exclude earlier sessions read only to find the selected one. Use a
+  bounded look-ahead, and hold a fragment until the maximum inter-fragment gap
+  has passed, so a pre-midnight fragment never also lands on the next day.
 - Workouts: export each authorized `HKWorkout` once by UUID. Derive daily
   workout totals from the rounded values in the exported workout list.
-- Use HealthKit statistics queries for cumulative metrics so multiple sources
-  are de-duplicated according to HealthKit semantics.
+- Use HealthKit statistics queries for cumulative metrics, so HealthKit
+  de-duplicates multiple sources.
 
 ### R5: Incremental and idempotent sync
 
@@ -164,18 +156,17 @@ Rules:
 - Use `HKObserverQuery` to learn that a type changed, then
   `HKAnchoredObjectQuery` to fetch deltas.
 - Recompute and upsert the affected local dates.
-- For sleep additions, edits, and deletions, also recompute the following local
-  date as the bounded plausible session-ending day; preserve the sample's
-  direct-date mapping so deletions can apply the same rule after relaunch.
-- On every sync, also recompute a rolling three-day reconciliation window to
-  capture late sleep, workout, or device synchronization without crossing the
-  selected first export day.
+- For sleep additions, edits, and deletions, also recompute the next local
+  date as the plausible session-ending day; keep the sample's direct-date
+  mapping so deletions apply the same rule after relaunch.
+- Every sync also recomputes a rolling three-day window, for late sleep,
+  workouts, or device sync, without crossing the selected first export day.
 - Upsert the existing Drive file instead of creating duplicates.
 - A repeated sync with unchanged HealthKit data must produce the same semantic
   record and no duplicate Drive file.
 - If upload fails, persist a retry item locally with exponential backoff.
-- If artifact bytes are committed but their state revision is not, recover the
-  pending revision on the next attempt without requiring a process restart.
+- If artifact bytes commit but their state revision does not, recover the
+  pending revision on the next attempt, without a process restart.
 - Never advance an anchor past data that has not been durably staged locally.
 - Retain a deleted sample's UUID-to-date mapping until the anchor that consumed
   that deletion is durably written.
@@ -206,8 +197,8 @@ During onboarding, let the user choose:
 - Last 90 days
 - Custom start date
 
-Default to 30 days. Process the backfill in bounded day-sized batches and show
-progress. It must resume after interruption without duplicating records.
+Default to 30 days. Process the backfill in day-sized batches and show
+progress. It resumes after interruption without duplicating records.
 
 ### R8: Background behavior
 
@@ -216,15 +207,14 @@ progress. It must resume after interruption without duplicating records.
 - Use `BGAppRefreshTask` as a fallback reconciliation trigger.
 - Use a background `URLSession` for pending Drive uploads.
 - Background timing is best-effort; the UI must never promise an exact schedule.
-- Record bounded, privacy-safe receipts for automatic reconciliation
-  opportunities and background scheduling outcomes. Receipts prove only what
-  the app attempted or observed; they must not imply cadence or future runs.
+- Record bounded, privacy-safe receipts of automatic reconciliation
+  opportunities and scheduling outcomes. Receipts show only what the app
+  attempted or observed; they never imply cadence or future runs.
 - Opening the app always triggers a reconciliation and retry pass.
 
 ### R9: User interface
 
-The app keeps **Home** and **Settings** as permanent tabs and exposes four
-product surfaces without giving one-time workflows permanent tab weight:
+**Home** and **Settings** are the only permanent tabs. Four product surfaces:
 
 1. **Setup**, a Home drill-in:
    - HealthKit authorization state
@@ -249,13 +239,12 @@ product surfaces without giving one-time workflows permanent tab weight:
    - Reset local sync state
    - Move accessible HealthMule Drive exports to Trash, with separate confirmation
 
-Initial loading must reserve the final layout and must not flash a persisted
-failure before bootstrap restores current state. Automatic outcomes remain in
-the activity surfaces instead of replacing the app shell with transient error
-or success banners. Completed setup steps may collapse; incomplete steps remain
-expanded and actionable.
+Initial loading reserves the final layout and never flashes a persisted
+failure before bootstrap restores current state. Automatic outcomes stay in the
+activity surfaces, not in transient banners over the app shell. Completed setup
+steps may collapse; incomplete steps stay expanded and actionable.
 
-Resetting local state must not delete Drive data without a separate destructive
+Resetting local state never deletes Drive data without a separate destructive
 confirmation.
 
 ### R10: Diagnostics and privacy
@@ -271,42 +260,42 @@ confirmation.
 
 ### R11: Apple Watch companion
 
-Provide a paired watchOS companion that:
+A paired watchOS companion:
 
 - displays only sanitized readiness, sync activity, last-success time, and
-  pending/failure counts;
+  pending and failure counts;
 - combines snapshot freshness, activation, reachability, queue state, and
-  request delivery so stale or unreachable data never claims Up to Date;
+  request delivery, so stale or unreachable data never claims Up to Date;
 - shows a waiting or retry state before the first valid snapshot;
-- sends Sync Now only when the iPhone is reachable, acknowledges accepted
-  requests promptly, and clears obsolete delivery failures after a later valid
+- sends Sync Now only while the iPhone is reachable, acknowledges accepted
+  requests promptly, and clears obsolete delivery failures on a later valid
   snapshot;
 - never stores or receives OAuth tokens, Google account details, Drive IDs,
   exported records, raw health metadata, or health values.
 
-The iPhone remains the sole HealthKit query, local staging, Google OAuth, and
-Drive upload owner. Watch requests enter the existing idempotent reconciliation
-path and must not create a second sync engine.
+The iPhone alone queries HealthKit, stages locally, holds Google OAuth, and
+uploads to Drive. Watch requests enter the existing idempotent reconciliation
+path; there is no second sync engine.
 
 ## Architecture
 
-[Architecture and privacy boundaries](../ARCHITECTURE.md) owns the current
-module and runtime map. The product contract requires deterministic,
-Foundation-only aggregation and sync logic, platform adapters for HealthKit,
-Google Drive, and Watch Connectivity, and dependency injection that keeps core
-tests independent of HealthKit and Google.
+Aggregation and sync logic is deterministic and Foundation-only. HealthKit,
+Google Drive, and Watch Connectivity sit behind injected adapters, so core
+tests need neither HealthKit nor Google. Invariants:
+[Architecture](../ARCHITECTURE.md).
 
 ## Drive upload rules
 
 Use multipart uploads and immutable file IDs. Tagged-file discovery and
 Drive-generated create IDs prevent duplicate logical files after ambiguous
-responses; [Google Drive identity](../ARCHITECTURE.md#google-drive-identity)
-defines their lifecycle. Serialize reconciliation so competing triggers cannot
-race the manifest.
+responses ([Google Drive identity](../ARCHITECTURE.md#google-drive-identity)).
+Serialize reconciliation so competing triggers cannot race the manifest.
 
-[OAuth error classification](../GOOGLE_OAUTH.md#error-classification) defines
-retryable, reauthorization, and permanent failures. Background uploads refresh
-and retry the first `401` once; repeated `401` responses require reauthorization.
+`DriveAPIError` in
+[`DriveAPIClient.swift`](../../HealthMuleApp/Google/DriveAPIClient.swift)
+classifies retryable, reauthorization, and permanent failures. Background
+uploads refresh and retry the first `401` once; a repeated `401` requires
+reauthorization.
 
 ## Conformance fixtures
 
@@ -319,8 +308,8 @@ Commit language-independent fixtures under `Tests/Fixtures/`:
 - `idempotent-sync.json`: two identical syncs produce one Drive file.
 - `failed-upload.json`: anchor and manifest behavior remain recoverable.
 
-The fixture format may use simplified sample objects rather than archived
-HealthKit instances, but expected output must be exact JSON.
+Fixtures may use simplified sample objects instead of archived HealthKit
+instances; expected output is exact JSON.
 
 ## Acceptance criteria
 
@@ -354,23 +343,14 @@ HealthKit instances, but expected output must be exact JSON.
 
 ## Constraints
 
-- HealthKit and background delivery must be tested on a physical iPhone; the
-  simulator is insufficient for the end-to-end proof.
-- iOS controls background launch timing. The app guarantees eventual
-  reconciliation, not a fixed export time.
+- HealthKit and background delivery need a physical iPhone for end-to-end
+  proof.
+- iOS controls background timing. The app guarantees eventual reconciliation,
+  not a fixed export time.
 - Google OAuth client configuration and Apple signing entitlements are supplied
   at build time and never committed as secrets.
-- The repository and exported schema must not contain a personal email address,
-  Drive folder ID, OAuth token, or other user-specific credential.
-- Existing exported dates retain their original local-date filenames after a
-  timezone change; the rolling reconciliation window uses the current timezone
-  only for newly affected samples.
-
-## Upstream references
-
-- [Setting up HealthKit](https://developer.apple.com/documentation/healthkit/setting-up-healthkit)
-- [Authorizing access to health data](https://developer.apple.com/documentation/healthkit/authorizing-access-to-health-data)
-- [Executing observer queries](https://developer.apple.com/documentation/healthkit/executing-observer-queries)
-- [Choosing background strategies](https://developer.apple.com/documentation/backgroundtasks/choosing-background-strategies-for-your-app)
-- [Transferring data with Watch Connectivity](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)
-- [Google Drive uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
+- The repository and exported schema hold no personal email address, Drive
+  folder ID, OAuth token, or other user-specific credential.
+- Exported dates keep their original local-date filenames after a timezone
+  change; the rolling window uses the current timezone only for newly affected
+  samples.

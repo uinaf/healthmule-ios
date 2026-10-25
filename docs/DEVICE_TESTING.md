@@ -1,202 +1,112 @@
-# Physical-device testing
+# Physical-device checklist
 
-Use a real iPhone for HealthKit authorization, observer delivery, and
-background-behavior acceptance. Use a paired real Apple Watch to prove
-background Watch Connectivity delivery. Simulator checks remain useful for both
-app shells and deterministic contracts, but they do not prove those delivery
-boundaries.
+Simulator runs prove the app shell and deterministic contracts only. Use a real
+iPhone for HealthKit, background, and real Drive behavior, and a paired Watch
+for background Watch Connectivity. Record results in
+[Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c), tied to
+the tested build.
 
-Use `make harness` for deterministic Simulator screenshots and assertions;
-see [Contributing](../CONTRIBUTING.md#validation). Track completed release
-acceptance in [Notion](https://app.notion.com/p/3e5e75710b5281999cc8c6a31e5a9e5c),
-with evidence tied to the tested build.
+| Behavior | Simulator | Needs |
+| --- | --- | --- |
+| App shell, `make harness` | yes | none |
+| Export and sync contracts | `make test-core` | none |
+| HealthKit authorization and queries | fixtures only | iPhone |
+| Aggregation, staging, Drive upload | fixtures, mocked Drive | iPhone |
+| Background observer delivery | no | iPhone |
+| Protected files, process-surviving uploads | no | iPhone |
+| Watch sync request | `canRequestSync` is false | paired Watch |
+| Background Watch snapshot delivery | no | paired Watch |
 
-## Proof matrix
+## Setup
 
-| Behavior | Simulator | Physical iPhone | Paired Watch |
-| --- | --- | --- | --- |
-| App shell, fixtures, `make harness` | yes | n/a | n/a |
-| Deterministic export and sync contracts | `make test-core` | n/a | n/a |
-| Foreground HealthKit authorization and queries | fixtures only | required | n/a |
-| Daily aggregation, staging, Drive upload | fixtures / mocked Drive | required | n/a |
-| HealthKit background observer delivery | no | required | n/a |
-| Lock-state protected files, process-surviving uploads | no | required | n/a |
-| Reachable Watch sync request | `canRequestSync` is false | n/a | required |
-| Background application-context and user-info snapshot | no | n/a | required |
+Needs iOS 26+, watchOS 26+ for companion checks, an Apple Development team,
+and a [Google iOS client](GOOGLE_OAUTH.md) whose bundle ID matches the build.
 
-## Prerequisites
+```sh
+make verify-full
+cp Config/Signing.xcconfig.example Config/Signing.xcconfig   # set bundle ID and team
+make project
+```
 
-- A physical iPhone running iOS 26 or later.
-- A paired Apple Watch running watchOS 26 or later for companion acceptance.
-- Full Xcode with an Apple Development team capable of signing the app.
-- A native iOS Google OAuth client configured as described in
-  [Google OAuth setup](GOOGLE_OAUTH.md).
-- Health data suitable for the scenario being tested.
-- A clean local verification run:
-
-  ```sh
-  make verify-full
-  ```
-
-## Build and install
-
-1. Create the ignored local signing configuration and set the bundle identifier
-   and Apple Development team:
-
-   ```sh
-   cp Config/Signing.xcconfig.example Config/Signing.xcconfig
-   ```
-
-   The bundle identifier must also match the native iOS Google OAuth client.
-2. Generate the Xcode project:
-
-   ```sh
-   make project
-   ```
-
-3. Open `HealthMule.xcodeproj`.
-4. Confirm the HealthKit and Background Delivery capabilities remain present.
-5. Select the physical iPhone, build, and run.
-
-The embedded companion installs on the paired Apple Watch. Its bundle ID is the
-iPhone bundle ID plus `.watchkitapp`; it has no HealthKit or Google capability.
-
-Do not use a personal production Drive account for destructive or
-failure-injection scenarios.
+Open `HealthMule.xcodeproj`, confirm the HealthKit and Background Delivery
+capabilities, and run on the iPhone. The Watch app installs with the bundle ID
+plus `.watchkitapp`. Use a disposable Drive account for destructive or
+failure-injection checks, never live health exports.
 
 ## Onboarding and permissions
 
-- [ ] Launch from a fresh install and confirm the Home and Settings tabs appear.
-- [ ] From Home, open Setup, Sync details, and per-metric Health Data status; confirm each drill-in returns to Home and does not obscure content with the tab bar.
-- [ ] Confirm the app requests read-only HealthKit access; it must not request write access.
-- [ ] Disable Sleep and Body Mass before the first request and confirm the
-  authorization sheet omits both types; their status cards must say Not
-  included and no observer/query may be registered for them.
-- [ ] Enable one of those types afterward and confirm setup changes to Review
-  needed; the type must say Not requested and remain excluded from sync until
-  the follow-up Health request completes.
-- [ ] Grant all requested types and confirm the status screen can surface readable samples.
-- [ ] Repeat after denying at least one type. The UI must not claim that read access was denied: HealthKit intentionally does not disclose read-denial state, so “No readable data” is the expected ambiguous state.
-- [ ] Make the Health authorization-status query fail temporarily and confirm
-  the UI shows Check failed rather than Request complete. A previously
-  completed request may continue querying visible types; a never-completed
-  request must remain blocked.
-- [ ] Connect Google and confirm `Apple Health Sync` and its `daily` child folder are discovered or created.
-- [ ] Move the managed root folder elsewhere within My Drive, relaunch the app, and confirm it is still found by ID or app properties rather than by path alone.
-- [ ] Trash or delete the managed root or `daily` folder, choose Try Drive
-  Again, and confirm a coherent replacement tree receives every local day and a
-  fresh manifest. No upload may remain attached to the old folder.
-- [ ] Switch to a second Google account and confirm every locally staged day
-  plus a fresh manifest is published there before the app reports Up to date.
-  Switch back and confirm stable IDs prevent duplicate logical files.
+- [ ] A fresh install shows the Home and Settings tabs.
+- [ ] Setup, Sync details, and per-metric Health Data drill-ins return to Home; the tab bar never covers content.
+- [ ] The app requests read-only HealthKit access, never write.
+- [ ] Disable Sleep and Body Mass before the first request: the sheet omits both, their cards say Not included, and no observer or query runs for them.
+- [ ] Enable one afterward: setup says Review needed, the type says Not requested, and sync excludes it until the follow-up request completes.
+- [ ] Grant all types: the status screen shows readable samples.
+- [ ] Deny one type: the UI says "No readable data", never that access was denied.
+- [ ] Make the authorization-status query fail: the UI shows Check failed, not Request complete. A previously completed request keeps querying visible types; a never-completed one stays blocked.
+- [ ] Connect Google: `Apple Health Sync` and its `daily` folder are found or created.
+- [ ] Move the root folder within My Drive and relaunch: the app finds it by ID or app properties.
+- [ ] Trash the root or `daily` folder and Try Drive Again: a new tree gets every local day and a fresh manifest; nothing uploads to the old folder.
+- [ ] Switch Google accounts: every staged day and a fresh manifest publish before Up to date. Switch back: no duplicate files.
 
-## Foreground sync acceptance
+## Foreground sync
 
-- [ ] An initial 30-day backfill creates one deterministic daily JSON object per calendar date and a manifest.
-- [ ] During that backfill the progress bar advances through both phases: it
-  counts days while staging, then counts files while uploading. It must not sit
-  pinned at 100% for the duration of the upload.
-- [ ] Retry pending uploads shows upload progress rather than no progress bar.
-- [ ] Running sync again without source changes creates no duplicate file and no semantic rewrite.
+- [ ] A 30-day backfill creates one JSON file per date plus a manifest.
+- [ ] Backfill progress counts days while staging, then files while uploading; it never sits at 100% through the upload.
+- [ ] Retry pending uploads shows upload progress.
+- [ ] A second sync without source changes creates no duplicate and no semantic rewrite.
 - [ ] Adding or editing a workout updates only affected dates and the manifest.
-- [ ] Missing or unreadable values are encoded as explicit `null` values rather than omitted fields.
-- [ ] Steps recorded by both iPhone and Watch are not double-counted.
-- [ ] Sleep intervals are unioned without double-counting overlaps.
-- [ ] Workouts are deduplicated and totals are deterministic.
-- [ ] Exported data contains no raw routes, heart-rate samples, or other unapproved health fields.
-- [ ] The manifest is updated only after all corresponding daily current files succeed.
+- [ ] Missing or unreadable values are explicit `null`.
+- [ ] Steps from both iPhone and Watch are not double-counted.
+- [ ] Overlapping sleep intervals are unioned.
+- [ ] Workouts are de-duplicated; totals are deterministic.
+- [ ] Exports contain no routes, raw heart-rate samples, or unapproved fields.
+- [ ] The manifest updates only after every daily file succeeds.
 
-## Apple Watch companion acceptance
+## Watch companion
 
-- [ ] On a first Watch launch before any snapshot arrives, confirm the headline
-  says Waiting for iPhone and Retry iPhone is available. It must not say Ready
-  or spin indefinitely.
-- [ ] Launch the Watch app and confirm it shows only readiness, sync activity,
-  last-success time, and queue counts. No health values, account details, Drive
-  IDs, or error strings may cross the companion message.
-- [ ] Create pending, retryable, and blocked work on the iPhone and confirm the
-  Watch shows each nonzero count as an independent row while preserving Last
-  confirmed when one exists.
-- [ ] With the iPhone reachable, tap Sync and confirm the Watch reports that
-  the request was accepted before the iPhone completes reconciliation.
-- [ ] Disable reachability and confirm Sync is unavailable rather than
-  claiming that work was queued or completed. The headline must say Phone
-  Unavailable and must not say Up to Date.
-- [ ] Leave a previously synced snapshot without a phone update for more than
-  30 minutes and confirm the Watch labels it out of date while retaining its
-  last confirmed time and counts. It must not say Up to Date.
-- [ ] Restore reachability, request another sync, and confirm the iPhone's
-  existing reconciliation path publishes a fresh status snapshot.
-- [ ] Leave the Watch app, allow background delivery, and confirm the latest
-  snapshot appears after reopening it. The iPhone publishes that snapshot
-  through application context and a queued user-info transfer.
+- [ ] Before the first snapshot, the Watch says Waiting for iPhone and offers Retry iPhone; never Ready, never an endless spinner.
+- [ ] The Watch shows only readiness, sync activity, last-success time, and queue counts: no health values, account details, Drive IDs, or error strings.
+- [ ] Pending, retryable, and blocked work each show as a separate nonzero row, beside Last confirmed.
+- [ ] With the iPhone reachable, Sync reports the request accepted before reconciliation finishes.
+- [ ] Without reachability, Sync is unavailable and the headline says Phone Unavailable, never Up to Date.
+- [ ] A snapshot older than 30 minutes shows as out of date with its last confirmed time and counts, never Up to Date.
+- [ ] After reachability returns, a new request publishes a fresh snapshot.
+- [ ] Leave the Watch app; after background delivery, the latest snapshot appears on reopen.
 
-## Background acceptance
+## Background
 
-- [ ] With the app backgrounded, add a relevant Health sample and confirm the affected daily record is eventually updated.
-- [ ] Trigger an app-refresh task and confirm the Sync screen records one
-  Background refresh receipt with its outcome. Confirm the schedule row reports
-  Submitted, Existing request kept, or a closed failure reason. A receipt proves
-  that the app observed an opportunity or requested scheduling; it does not
-  prove prompt, periodic, or future execution.
-- [ ] Interrupt connectivity during an upload and confirm retry preserves the same logical operation without duplicate Drive files.
-- [ ] While an upload is waiting for connectivity, switch accounts or replace
-      the managed folder tree. Confirm the app does not report the new
-      destination Connected until the old transfer receives a definitive HTTP
-      response. If draining times out, confirm Drive remains temporarily
-      unavailable for retry rather than optimistically activating the new tree.
-      Reconnect the unchanged destination separately and confirm its transfer
-      remains scheduled.
-- [ ] Leave connectivity unavailable for more than 15 seconds and confirm the
-      visible sync operation returns to a pending/retry state while the
-      background transfer remains scheduled.
-- [ ] Lock the device during staging and confirm protected files are handled safely after the first unlock.
-- [ ] Terminate the process during an upload and confirm a file-backed background transfer can be reconciled after relaunch.
-- [ ] Force-quit the app and confirm documentation and UI do not promise background execution before the next launch.
+- [ ] With the app backgrounded, a new Health sample eventually updates its daily record.
+- [ ] An app-refresh task records one Background refresh receipt; the schedule row says Submitted, Existing request kept, or a closed failure reason.
+- [ ] Interrupting connectivity during an upload causes a retry of the same operation, with no duplicate files.
+- [ ] Switch accounts or replace the folder tree while an upload waits for connectivity: the new destination is not Connected until the old transfer gets a definitive HTTP response. If draining times out, Drive stays unavailable for retry. Reconnecting the unchanged destination keeps its transfer scheduled.
+- [ ] With connectivity down for over 15 seconds, the visible sync returns to pending while the background transfer stays scheduled.
+- [ ] Locking the device during staging handles protected files safely after first unlock.
+- [ ] Terminating the app during an upload lets the transfer reconcile after relaunch.
+- [ ] After a force-quit, nothing promises background execution before the next launch.
 
-For development-only task simulation, attach LLDB to the running app and use Apple’s private debug selector:
+Simulate a refresh task during development from LLDB. This does not prove
+observer delivery, surviving uploads, or relaunch recovery
+([Apple](https://developer.apple.com/documentation/backgroundtasks/starting-and-terminating-tasks-during-development)).
 
 ```text
 e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"dev.uinaf.healthmule.refresh"]
 ```
 
-Task simulation does not prove observer delivery, process-surviving uploads,
-or relaunch recovery. See Apple’s
-[Starting and Terminating Tasks During
-Development](https://developer.apple.com/documentation/backgroundtasks/starting-and-terminating-tasks-during-development).
-
 ## Privacy and resilience
 
-- [ ] Console logs contain no health values, OAuth tokens, Drive file bodies, or raw HealthKit metadata.
-- [ ] Shared diagnostics remain bounded and redact sensitive fields.
-- [ ] Protected outbox, anchor, saved day-boundary, and automatic-activity
-  receipt files use data protection and remain excluded from backups.
-- [ ] Automatic-activity receipt JSON remains bounded to 20 entries and contains
-  no health values, record bodies, raw metadata, OAuth tokens, account details,
-  or Drive identifiers.
-- [ ] Disconnecting or resetting local state does not delete existing Drive exports.
-- [ ] With disposable test exports, cancel each destructive Settings confirmation;
-  no remote or local data changes. Confirm Move Drive Exports to Trash separately:
-  only tagged exports move, unrelated files and folders remain, and Google disconnects.
-- [ ] Interrupt cleanup after a partial move and relaunch. Uploads remain paused;
-  explicit sign-in can republish the preserved local records. Never use live health
-  exports for this destructive acceptance check.
-- [ ] Revoking Google access returns the app to a recoverable Reconnect state.
-- [ ] Complete Google sign-in, terminate the app before the pending queue
-  resumes, then relaunch. Restored valid credentials must unblock the persisted
-  reauthorization queue.
-- [ ] Launching once while offline shows a temporary Google failure, then
-  foregrounding online restores the connection without requesting a new grant.
+- [ ] Console logs hold no health values, OAuth tokens, Drive file bodies, or raw HealthKit metadata.
+- [ ] Shared diagnostics stay bounded and redacted.
+- [ ] Outbox, anchor, day-boundary, and activity-receipt files use data protection and are excluded from backups.
+- [ ] The activity-receipt file holds at most 20 entries with no health values, record bodies, metadata, tokens, account details, or Drive IDs.
+- [ ] Disconnect or reset never deletes Drive exports.
+- [ ] Cancelling each destructive Settings confirmation changes nothing. Move Drive Exports to Trash moves only tagged exports, leaves other files and folders, and disconnects Google.
+- [ ] Interrupt that cleanup midway and relaunch: uploads stay paused; explicit sign-in republishes the preserved records.
+- [ ] Revoking Google access leads to a recoverable Reconnect state.
+- [ ] Sign in, kill the app before the queue resumes, relaunch: restored credentials unblock the queued reauthorization work.
+- [ ] Launching offline shows a temporary Google failure; going online and foregrounding restores it without a new grant.
 
-## Evidence to retain
+## Evidence
 
-Record for each scenario:
-
-- app version or commit
-- iOS version
-- permission combination
-- foreground or background state
-- pass or fail result
-
-Sanitize screenshots and diagnostics before sharing them. Do not retain personal
-health values, account identifiers, access tokens, or device identifiers.
+Record app version or commit, iOS version, permission combination, foreground
+or background state, and result. Strip health values, account and device
+identifiers, and tokens from screenshots and diagnostics.
