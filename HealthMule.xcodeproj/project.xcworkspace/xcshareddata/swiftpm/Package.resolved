@@ -1,5 +1,5 @@
 {
-  "originHash" : "c2ff2d751ae4d524d8df9d20a325d5c2899677b0f5c358809c51ac19fb904ca0",
+  "originHash" : "95b0dca8cc49888b05a049ada6207006680afdcb094e2e0a879718e6ee424d1d",
   "pins" : [
     {
       "identity" : "app-check",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/google/GoogleSignIn-iOS",
       "state" : {
-        "revision" : "7823e518f5d4db765ccac3e140dd3265ef0a1cf1",
-        "version" : "10.0.0"
+        "revision" : "bfaebbc04a4d13ed7a89b0fc1fb8ad66b362cc1c",
+        "version" : "10.1.0"
       }
     },
     {
