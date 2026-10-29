@@ -105,6 +105,7 @@ final class AppModel {
     private var operationEpoch: UInt64 = 0
     private var selectionReconciliationQueue = SelectionReconciliationQueue()
     private var reconcileOccupancy = ReconcileOccupancy()
+    private var activeSyncPass: Task<Void, Never>?
     private var observerFlushQueue = ObserverFlushQueue()
     private var observerStagingFailurePending = false
     private var watchConnectivity: PhoneWatchConnectivityCoordinator?
@@ -377,11 +378,12 @@ final class AppModel {
         let reconciliationTrigger = bootstrapRequestedTrigger
             ?? requestedTrigger
         bootstrapActiveTrigger = reconciliationTrigger
+        // Saved state is restored; the launch sync shows its own progress.
+        finishInitialLoad()
         await reconcile(trigger: reconciliationTrigger)
         await scheduleBackgroundRefresh()
         await diagnostics.record(.bootstrapFinished)
         isBootstrapped = true
-        finishInitialLoad()
         bootstrapInProgress = false
         bootstrapRequestedTrigger = nil
         bootstrapActiveTrigger = nil
@@ -716,6 +718,7 @@ final class AppModel {
             .googleConnection,
             "Disconnecting Google"
         )
+        cancelActiveSyncPass()
         setOperationState(disconnectingState, origin: .userInitiated)
         let expectedOperationEpoch = operationEpoch
         let expectedEpoch = beginGoogleTransition()
@@ -792,7 +795,13 @@ final class AppModel {
             // start. A later settings change remains queued while the actor is
             // suspended and causes one serialized follow-up pass.
             selectionReconciliationQueue.beginPass()
-            await reconcileOnce(trigger: nextTrigger)
+            let passTrigger = nextTrigger
+            let pass = Task { [weak self] () -> Void in
+                await self?.reconcileOnce(trigger: passTrigger)
+            }
+            activeSyncPass = pass
+            await pass.value
+            activeSyncPass = nil
             guard
                 let followUpTrigger =
                     selectionReconciliationQueue.followUpTrigger,
@@ -918,7 +927,9 @@ final class AppModel {
                 return
             }
             syncSummary = outcome.summary
-            await refreshHealthStatuses(publishingCheckingState: false)
+            if !Task.isCancelled {
+                await refreshHealthStatuses(publishingCheckingState: false)
+            }
             guard
                 isGoogleTransitionCurrent(expectedGoogleEpoch),
                 operationEpoch == expectedOperationEpoch,
@@ -1036,6 +1047,7 @@ final class AppModel {
             )
         } catch {
             guard
+                !Task.isCancelled,
                 isGoogleTransitionCurrent(expectedGoogleEpoch),
                 operationEpoch == expectedOperationEpoch,
                 operationState == syncingState
@@ -1248,43 +1260,58 @@ final class AppModel {
         await reconcile(trigger: .rebuild)
     }
 
-    func updateBackfillRange(_ range: BackfillRange) {
-        guard backfillRange != range else { return }
+    /// The first exported day; settings drafts are compared against this.
+    var appliedBackfillStart: Date? {
+        BackfillDateCodec.date(from: selectedBackfillStart)
+    }
+
+    /// Settings stay editable during a sync; a confirmed change cancels it.
+    var blocksSettingsChanges: Bool {
+        operationState.isWorking && !operationState.isWorking(.sync)
+    }
+
+    func backfillSelectionChanges(
+        range: BackfillRange,
+        customStart: Date
+    ) -> Bool {
+        guard range == backfillRange else { return true }
+        return range == .custom
+            && BackfillDateCodec.string(from: customStart)
+                != selectedBackfillStart
+    }
+
+    func applyBackfillSelection(range: BackfillRange, customStart: Date) {
+        guard
+            !blocksSettingsChanges,
+            backfillSelectionChanges(range: range, customStart: customStart)
+        else {
+            return
+        }
         backfillRange = range
         UserDefaults.standard.set(range.rawValue, forKey: "backfill.range")
         if range == .custom {
+            customBackfillStartValue = BackfillDateCodec.string(
+                from: customStart
+            )
+            UserDefaults.standard.set(
+                customBackfillStartValue,
+                forKey: "backfill.customStart"
+            )
             setSelectedBackfillStart(customBackfillStartValue)
         } else {
             setSelectedBackfillStart(
                 range.startDate(customDate: customBackfillStart)
             )
         }
-        queueHistorySelectionReconciliation()
+        startSelectionReconciliation(.historySelection)
     }
 
-    func updateCustomBackfillStart(_ date: Date) {
-        let nextDate = BackfillDateCodec.string(from: date)
-        guard customBackfillStartValue != nextDate else { return }
-        customBackfillStartValue = nextDate
-        UserDefaults.standard.set(
-            nextDate,
-            forKey: "backfill.customStart"
-        )
-        if backfillRange == .custom {
-            setSelectedBackfillStart(nextDate)
-            queueHistorySelectionReconciliation()
+    func applyMetricSelection(_ metrics: Set<HealthMetric>) {
+        guard !blocksSettingsChanges, metrics != enabledMetrics else {
+            return
         }
-    }
-
-    func setMetric(_ metric: HealthMetric, enabled: Bool) {
-        let selectionChanged: Bool
-        if enabled {
-            selectionChanged = enabledMetrics.insert(metric).inserted
-        } else {
-            selectionChanged = enabledMetrics.remove(metric) != nil
-        }
-        guard selectionChanged else { return }
-        selectionReconciliationQueue.enqueue(.metricSelection)
+        let addedMetrics = metrics.subtracting(enabledMetrics)
+        enabledMetrics = metrics
         UserDefaults.standard.set(
             enabledMetrics.map(\.rawValue).sorted(),
             forKey: "metrics.enabled"
@@ -1296,11 +1323,15 @@ final class AppModel {
                     state: .notIncluded
                 )
             }
-            if status.metric == metric, status.state == .notIncluded {
+            if
+                addedMetrics.contains(status.metric),
+                status.state == .notIncluded
+            {
                 return MetricStatus(metric: status.metric, state: .checking)
             }
             return status
         }
+        cancelActiveSyncPass(queueing: .metricSelection)
         guard !isUITesting else { return }
         Task { [weak self] in
             await self?.applyHealthMetricSelection()
@@ -1346,7 +1377,8 @@ final class AppModel {
     private static let driveExportsPausedKey = "sync.driveExportsPaused"
 
     func trashDriveExports() async {
-        guard !operationState.isWorking, let account = googleConnection.account else { return }
+        guard !blocksSettingsChanges, let account = googleConnection.account else { return }
+        cancelActiveSyncPass()
         let state = OperationState.working(.driveDeletion, "Moving Drive exports to Trash")
         setOperationState(state, origin: .userInitiated)
         let operation = operationEpoch
@@ -1399,6 +1431,7 @@ final class AppModel {
     }
 
     func resetLocalState() async {
+        cancelActiveSyncPass()
         setOperationState(
             .working(
                 .localReset,
@@ -1625,12 +1658,21 @@ final class AppModel {
         backgroundDeliveryRegistrationState.apply(summary)
     }
 
-    private func queueHistorySelectionReconciliation() {
-        selectionReconciliationQueue.enqueue(.historySelection)
+    private func startSelectionReconciliation(_ trigger: SyncTrigger) {
+        cancelActiveSyncPass(queueing: trigger)
         guard !isUITesting else { return }
         Task { [weak self] in
-            await self?.reconcile(trigger: .historySelection)
+            await self?.reconcile(trigger: trigger)
         }
+    }
+
+    /// Queues `trigger` so the reconcile loop runs one follow-up pass with the
+    /// new selection after the cancelled pass settles.
+    private func cancelActiveSyncPass(queueing trigger: SyncTrigger? = nil) {
+        if let trigger {
+            selectionReconciliationQueue.enqueue(trigger)
+        }
+        activeSyncPass?.cancel()
     }
 
     private func reconcileAfterSetupIfReady() async {

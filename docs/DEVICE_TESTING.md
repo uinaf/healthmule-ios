@@ -51,6 +51,9 @@ failure-injection checks, never live health exports.
 - [ ] A 30-day backfill creates one JSON file per date plus a manifest.
 - [ ] Backfill progress counts days while staging, then files while uploading; it never sits at 100% through the upload.
 - [ ] Retry pending uploads shows upload progress.
+- [ ] Changing the history range, start date, or included metrics starts nothing until Apply and Sync.
+- [ ] Settings stay editable during a long backfill. Apply mid-sync stops that sync and restarts from the new selection.
+- [ ] Applying an earlier custom start exports every day from that start; the manifest `earliestDate` matches it.
 - [ ] A second sync without source changes creates no duplicate and no semantic rewrite.
 - [ ] Adding or editing a workout updates only affected dates and the manifest.
 - [ ] Missing or unreadable values are explicit `null`.

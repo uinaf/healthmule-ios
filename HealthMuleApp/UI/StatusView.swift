@@ -703,7 +703,7 @@ struct StatusView: View {
                 badge: "Syncing",
                 tone: .accent,
                 title: "Syncing your latest changes",
-                message: "New daily records are staged locally before anything is uploaded.",
+                message: "Days are saved on this iPhone, then uploaded. You can keep using HealthMule.",
                 action: .sync("Sync now")
             )
         }

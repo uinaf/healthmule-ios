@@ -9,6 +9,8 @@ struct SetupView: View {
     @Environment(\.openURL) private var openURL
     @State private var isHealthDetailsExpanded = false
     @State private var isGoogleDetailsExpanded = false
+    @State private var draftBackfillRange: BackfillRange?
+    @State private var draftCustomBackfillStart: Date?
 
     var body: some View {
         ScrollView {
@@ -252,6 +254,14 @@ struct SetupView: View {
             .font(HealthMuleStyle.Text.cardBody)
             .foregroundStyle(.secondary)
 
+            if let appliedStart = model.appliedBackfillStart {
+                ValueRow(
+                    title: "Exporting from",
+                    value: appliedStart.formatted(date: .abbreviated, time: .omitted)
+                )
+                .accessibilityIdentifier("backfill-applied-start")
+            }
+
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Initial backfill")
@@ -265,29 +275,85 @@ struct SetupView: View {
                 }
             }
 
-            if model.backfillRange == .custom {
+            if shownBackfillRange == .custom {
                 Divider()
                 DatePicker(
                     "Start date",
                     selection: Binding(
-                        get: { model.customBackfillStart },
-                        set: { model.updateCustomBackfillStart($0) }
+                        get: { shownCustomBackfillStart },
+                        set: { draftCustomBackfillStart = $0 }
                     ),
                     in: ...Date.now,
                     displayedComponents: .date
                 )
-                .disabled(model.operationState.isWorking)
+            }
+
+            if hasBackfillDraft {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(backfillDraftMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Button("Apply and Sync") {
+                            model.applyBackfillSelection(
+                                range: shownBackfillRange,
+                                customStart: shownCustomBackfillStart
+                            )
+                            discardBackfillDraft()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(HealthMuleStyle.tint)
+                        .disabled(model.blocksSettingsChanges)
+                        .accessibilityIdentifier("backfill-apply-action")
+
+                        Button("Cancel") {
+                            discardBackfillDraft()
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("backfill-discard-action")
+                    }
+                }
             }
         }
         .healthMuleCard()
+    }
+
+    private var shownBackfillRange: BackfillRange {
+        draftBackfillRange ?? model.backfillRange
+    }
+
+    private var shownCustomBackfillStart: Date {
+        draftCustomBackfillStart ?? model.customBackfillStart
+    }
+
+    private var hasBackfillDraft: Bool {
+        (draftBackfillRange != nil || draftCustomBackfillStart != nil)
+            && model.backfillSelectionChanges(
+                range: shownBackfillRange,
+                customStart: shownCustomBackfillStart
+            )
+    }
+
+    private var backfillDraftMessage: String {
+        let start = shownBackfillRange
+            .startDate(customDate: shownCustomBackfillStart)
+            .formatted(date: .abbreviated, time: .omitted)
+        return model.operationState.isWorking(.sync)
+            ? "The current sync stops and a new one exports from \(start)."
+            : "HealthMule will sync from \(start)."
+    }
+
+    private func discardBackfillDraft() {
+        draftBackfillRange = nil
+        draftCustomBackfillStart = nil
     }
 
     private var backfillPicker: some View {
         Picker(
             "Initial backfill",
             selection: Binding(
-                get: { model.backfillRange },
-                set: { model.updateBackfillRange($0) }
+                get: { shownBackfillRange },
+                set: { draftBackfillRange = $0 }
             )
         ) {
             ForEach(BackfillRange.allCases) { range in
@@ -296,7 +362,6 @@ struct SetupView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
-        .disabled(model.operationState.isWorking)
         .accessibilityIdentifier("backfill-range-picker")
     }
 
@@ -468,7 +533,7 @@ struct SetupView: View {
     }
 
     private var historyBadge: String {
-        switch model.backfillRange {
+        switch shownBackfillRange {
         case .thirtyDays:
             "30 days"
         case .ninetyDays:
