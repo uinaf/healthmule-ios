@@ -30,6 +30,7 @@ struct HomeView: View {
                 Text("No developer backend, analytics, or write access to Apple Health.")
             }
         }
+        .listSectionSpacing(.compact)
         .navigationTitle("HealthMule")
         .accessibilityIdentifier("home-screen")
         .refreshable {
@@ -46,10 +47,15 @@ struct HomeView: View {
     private var statusSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
-                Text(status.title)
-                    .font(.headline)
-                    .foregroundStyle(status.isProblem ? Color.red : .primary)
-                    .accessibilityIdentifier("status-title")
+                HStack(spacing: 8) {
+                    Text(status.title)
+                        .font(.headline)
+                        .foregroundStyle(status.isProblem ? Color.red : .primary)
+                        .accessibilityIdentifier("status-title")
+                    if model.operationState.isWorking(.sync), model.syncProgress == nil {
+                        ProgressView().controlSize(.small)
+                    }
+                }
                 Text(status.message)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -95,13 +101,14 @@ struct HomeView: View {
                 Task { await model.reconcile(trigger: .manual) }
             } label: {
                 Label(title, systemImage: "arrow.triangle.2.circlepath")
-                    .font(.body.weight(.semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color(uiColor: .systemBackground))
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
             .tint(.primary)
-            .buttonBorderShape(.roundedRectangle(radius: 10))
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("sync-now-action")
         case .retry:
@@ -125,10 +132,10 @@ struct HomeView: View {
 
     private var setupSection: some View {
         Section("Setup") {
-            LabeledContent("Apple Health", value: healthStateText)
+            setupStep("Apple Health", healthStateText, isDone: model.healthAuthorizationState.allowsQueries)
                 .accessibilityIdentifier("health-connection-row")
             healthAction
-            LabeledContent("Google Drive", value: googleStateText)
+            setupStep("Google Drive", googleStateText, isDone: model.googleConnection.isDriveReady)
                 .accessibilityIdentifier("google-connection-row")
             googleAction
             if let advisory = model.backgroundDeliveryAdvisory {
@@ -139,6 +146,14 @@ struct HomeView: View {
                 .accessibilityIdentifier("background-delivery-advisory")
                 checkHealthAgainButton
             }
+        }
+    }
+
+    private func setupStep(_ title: String, _ state: String, isDone: Bool) -> some View {
+        LabeledContent {
+            Text(state)
+        } label: {
+            Label(title, systemImage: isDone ? "checkmark.circle.fill" : "circle.dashed")
         }
     }
 
@@ -420,6 +435,7 @@ struct SyncDayProgressView: View {
                 .monospacedDigit()
                 .contentTransition(.numericText())
         }
+        .tint(.primary)
         .animation(.default, value: progress.completedUnits)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Sync progress")
