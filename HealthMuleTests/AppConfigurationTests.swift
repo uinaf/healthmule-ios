@@ -332,16 +332,6 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(migratedSubset, enabled)
     }
 
-    func testPreauthorizationCountExcludesMetricsThatAreNotIncluded() {
-        let statuses = [
-            MetricStatus(metric: .stepCount, state: .notRequested),
-            MetricStatus(metric: .sleep, state: .notIncluded),
-            MetricStatus(metric: .bodyMass, state: .notRequested),
-        ]
-
-        XCTAssertEqual(statuses.includedMetricCount, 2)
-    }
-
     func testHistoryChangeDuringReconciliationQueuesFollowUpPass() {
         var queue = SelectionReconciliationQueue()
 

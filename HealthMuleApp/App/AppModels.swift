@@ -1,11 +1,6 @@
 import Foundation
 import HealthMuleCore
 
-enum AppTab: Hashable {
-    case home
-    case settings
-}
-
 enum InitialLoadPhase: Equatable, Sendable {
     case loading
     case loaded
@@ -419,24 +414,6 @@ struct BackgroundDeliveryRegistrationState: Equatable, Sendable {
     }
 }
 
-extension Collection where Element == MetricStatus {
-    var includedMetricCount: Int {
-        reduce(into: 0) { count, status in
-            if status.state != .notIncluded {
-                count += 1
-            }
-        }
-    }
-
-    var readableMetricCount: Int {
-        reduce(into: 0) { count, status in
-            if case .readable = status.state {
-                count += 1
-            }
-        }
-    }
-}
-
 enum HealthAuthorizationState: Equatable, Sendable {
     case unavailable
     case checking
@@ -552,32 +529,8 @@ struct SyncSummary: Equatable, Sendable {
             .formatted(date: .abbreviated, time: .shortened) ?? "Never"
     }
 
-    var compactLastSyncText: String {
-        guard let lastSync = lastSuccessfulSyncAt else { return "Never" }
-        let time = lastSync.formatted(date: .omitted, time: .shortened)
-        return "\(Self.compactDate(lastSync)) · \(time)"
-    }
-
     var latestExportedDayText: String {
         latestExportedDate ?? "None"
-    }
-
-    var compactLatestDayText: String {
-        guard let rawValue = latestExportedDate else { return "None" }
-        guard let date = BackfillDateCodec.date(from: rawValue) else {
-            return rawValue
-        }
-        return Self.compactDate(date)
-    }
-
-    private static func compactDate(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.component(.year, from: date)
-            == calendar.component(.year, from: .now)
-        {
-            return date.formatted(.dateTime.month(.abbreviated).day())
-        }
-        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 }
 
