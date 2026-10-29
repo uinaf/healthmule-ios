@@ -29,6 +29,8 @@ struct AppRootView: View {
                     }
                 }
         }
+        // The asset is near-black in light mode and gray in dark mode.
+        .tint(Color("AccentColor"))
     }
 }
 

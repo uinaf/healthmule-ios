@@ -95,12 +95,13 @@ struct HomeView: View {
                 Task { await model.reconcile(trigger: .manual) }
             } label: {
                 Label(title, systemImage: "arrow.triangle.2.circlepath")
-                    .symbolEffect(
-                        .rotate,
-                        options: .repeating,
-                        isActive: model.operationState.isWorking(.sync)
-                    )
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .frame(maxWidth: .infinity, minHeight: 36)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.primary)
+            .buttonBorderShape(.roundedRectangle(radius: 10))
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("sync-now-action")
         case .retry:
