@@ -800,9 +800,16 @@ final class AppModel {
                 await self?.reconcileOnce(trigger: passTrigger)
             }
             activeSyncPass = pass
-            await pass.value
+            // The pass is unstructured so settings can cancel it; forward the
+            // caller's cancellation too, such as background task expiry.
+            await withTaskCancellationHandler {
+                await pass.value
+            } onCancel: {
+                pass.cancel()
+            }
             activeSyncPass = nil
             guard
+                !Task.isCancelled,
                 let followUpTrigger =
                     selectionReconciliationQueue.followUpTrigger,
                 !operationState.isWorking
