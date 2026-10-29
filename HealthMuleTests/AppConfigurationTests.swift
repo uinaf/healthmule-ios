@@ -101,14 +101,14 @@ final class AppConfigurationTests: XCTestCase {
             .retry,
             .rebuild,
             .watchCompanion,
+            .metricSelection,
+            .historySelection,
         ] {
             XCTAssertEqual(trigger.operationOrigin, .userInitiated)
         }
         for trigger in [
             SyncTrigger.appLaunch,
             .foreground,
-            .metricSelection,
-            .historySelection,
             .backgroundRefresh,
             .healthObserver,
         ] {

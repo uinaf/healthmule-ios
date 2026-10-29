@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var isShowingResetConfirmation = false
     @State private var isShowingDisconnectConfirmation = false
     @State private var isShowingTrashConfirmation = false
+    @State private var draftMetrics: Set<HealthMetric>?
 
     var body: some View {
         Form {
@@ -37,7 +38,7 @@ struct SettingsView: View {
                 Text("Export preferences")
                     .font(HealthMuleStyle.Text.sectionTitle)
                 Text(
-                    "\(model.enabledMetrics.count) of \(HealthMetric.allCases.count) health data types included"
+                    "\(shownMetrics.count) of \(HealthMetric.allCases.count) health data types included"
                 )
                 .font(HealthMuleStyle.Text.cardBody)
                 .foregroundStyle(.secondary)
@@ -53,8 +54,8 @@ struct SettingsView: View {
         Section {
             ForEach(HealthMetric.allCases) { metric in
                 Toggle(isOn: Binding(
-                    get: { model.enabledMetrics.contains(metric) },
-                    set: { model.setMetric(metric, enabled: $0) }
+                    get: { shownMetrics.contains(metric) },
+                    set: { setDraftMetric(metric, enabled: $0) }
                 )) {
                     Label {
                         Text(metric.title)
@@ -66,7 +67,18 @@ struct SettingsView: View {
                             .frame(width: metricIconWidth)
                     }
                 }
-                .disabled(model.operationState.isWorking)
+            }
+            if let draftMetrics {
+                Button("Apply and Sync") {
+                    model.applyMetricSelection(draftMetrics)
+                    self.draftMetrics = nil
+                }
+                .disabled(model.blocksSettingsChanges)
+                .accessibilityIdentifier("metrics-apply-action")
+                Button("Discard Changes", role: .cancel) {
+                    self.draftMetrics = nil
+                }
+                .accessibilityIdentifier("metrics-discard-action")
             }
         } header: {
             Text("Included metrics")
@@ -114,7 +126,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Disconnect Google", systemImage: "link")
                 }
-                .disabled(model.operationState.isWorking)
+                .disabled(model.blocksSettingsChanges)
                 .alert("Disconnect Google?", isPresented: $isShowingDisconnectConfirmation) {
                     Button("Disconnect Google", role: .destructive) {
                         Task {
@@ -141,7 +153,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Move Drive Exports to Trash", systemImage: "trash")
                 }
-                .disabled(model.operationState.isWorking)
+                .disabled(model.blocksSettingsChanges)
                 .alert("Move Drive exports to Trash?", isPresented: $isShowingTrashConfirmation) {
                     Button("Move to Trash", role: .destructive) {
                         Task {
@@ -168,7 +180,7 @@ struct SettingsView: View {
             } label: {
                 Label("Reset Local Sync State", systemImage: "arrow.counterclockwise")
             }
-            .disabled(model.operationState.isWorking)
+            .disabled(model.blocksSettingsChanges)
             .alert("Reset local sync state?", isPresented: $isShowingResetConfirmation) {
                 Button("Reset Local State", role: .destructive) {
                     Task {
@@ -185,6 +197,22 @@ struct SettingsView: View {
             Text("Clears local sync progress. Apple Health data and existing Drive exports are kept.")
         }
         .listRowBackground(HealthMuleStyle.surface)
+    }
+}
+
+private extension SettingsView {
+    var shownMetrics: Set<HealthMetric> {
+        draftMetrics ?? model.enabledMetrics
+    }
+
+    func setDraftMetric(_ metric: HealthMetric, enabled: Bool) {
+        var metrics = shownMetrics
+        if enabled {
+            metrics.insert(metric)
+        } else {
+            metrics.remove(metric)
+        }
+        draftMetrics = metrics == model.enabledMetrics ? nil : metrics
     }
 }
 

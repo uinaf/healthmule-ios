@@ -25,13 +25,17 @@ enum SyncTrigger: String, Codable, Equatable, Sendable {
 
     var operationOrigin: OperationOrigin {
         switch self {
-        case .manual, .retry, .rebuild, .watchCompanion:
+        case
+            .manual,
+            .retry,
+            .rebuild,
+            .watchCompanion,
+            .metricSelection,
+            .historySelection:
             .userInitiated
         case
             .appLaunch,
             .foreground,
-            .metricSelection,
-            .historySelection,
             .backgroundRefresh,
             .healthObserver:
             .automatic
@@ -90,7 +94,14 @@ struct SyncProgress: Equatable, Sendable {
     let currentDate: LocalDate?
 
     var presentationText: String {
-        "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
+        let count = "\(phase.verb) \(completedUnits.formatted()) of \(totalUnits.formatted()) \(phase.unitNoun)"
+        guard
+            let currentDate,
+            let day = BackfillDateCodec.date(from: currentDate.rawValue)
+        else {
+            return count
+        }
+        return "\(count) · \(day.formatted(date: .abbreviated, time: .omitted))"
     }
 
     var accessibilityValue: String {

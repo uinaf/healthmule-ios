@@ -79,7 +79,7 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(homeProgress.waitForExistence(timeout: 10))
         XCTAssertEqual(
             homeProgress.value as? String,
-            "Processing 12 of 30 days"
+            "Processing 12 of 30 days · Jul 12, 2026"
         )
         homeApp.terminate()
 
@@ -91,7 +91,7 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(syncProgress.waitForExistence(timeout: 10))
         XCTAssertEqual(
             syncProgress.value as? String,
-            "Processing 12 of 30 days"
+            "Processing 12 of 30 days · Jul 12, 2026"
         )
     }
 
@@ -305,7 +305,7 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testHistorySelectionIsDisabledWhileWorkIsVisible() throws {
+    func testHistorySelectionStaysEditableAndNeedsApplyDuringSync() throws {
         let app = launch(
             additionalArguments: ["--ui-ready", "--ui-operation-working"]
         )
@@ -316,8 +316,17 @@ final class HealthMuleUITests: XCTestCase {
 
         XCTAssertTrue(element("setup-screen", in: app).waitForExistence(timeout: 5))
         let picker = element("backfill-range-picker", in: app)
-        XCTAssertTrue(picker.exists)
-        XCTAssertFalse(picker.isEnabled)
+        XCTAssertTrue(picker.isEnabled)
+        XCTAssertFalse(element("backfill-apply-action", in: app).exists)
+
+        picker.tap()
+        app.buttons["Last 90 days"].tap()
+
+        let apply = element("backfill-apply-action", in: app)
+        XCTAssertTrue(apply.waitForExistence(timeout: 5))
+        XCTAssertTrue(apply.isEnabled)
+        element("backfill-discard-action", in: app).tap()
+        XCTAssertFalse(apply.exists)
     }
 
     @MainActor
@@ -529,7 +538,7 @@ final class HealthMuleUITests: XCTestCase {
         )
         XCTAssertEqual(
             element("sync-day-progress", in: app).value as? String,
-            "Processing 12 of 30 days"
+            "Processing 12 of 30 days · Jul 12, 2026"
         )
         capture("02-sync-in-progress", from: app)
         app.terminate()
