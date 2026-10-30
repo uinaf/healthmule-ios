@@ -126,77 +126,37 @@ actor LiveSyncCoordinator {
             return try await outcome(report: report)
         }
 
-        let existingRecords = try await runtime.store.allDailyRecords()
-        _ = try await healthKit.recoverAuxiliaryState(
-            from: existingRecords
-        )
-        let backfillStartInstant = try await healthKit.startDate(
-            for: backfillStartDate
-        )
-        var dates = try BackfillDatePlanner.recentDates(
-            through: currentDate,
-            count: 3,
-            notBefore: backfillStartDate,
+        var plan = try await makeStagingPlan(
+            enabledMetrics: enabledMetrics,
+            backfillStart: backfillStartDate,
+            currentDate: currentDate,
             calendar: syncCalendar
         )
         var batches: [HealthAnchoredChangeBatch] = []
-        let existingDates = Set(existingRecords.map(\.date))
-        let historyStart = Self.effectiveHistoryStart(
-            requestedStart: backfillStartInstant,
-            existingRecordDates: existingRecords.map(\.date)
-        )
-        await recordProvider.configure(
-            earliestVO2Date: historyStart,
-            enabledMetrics: enabledMetrics
-        )
-        let selectionChanged = lastStagedMetrics != enabledMetrics
-        let backfillBoundaryChanged =
-            lastStagedBackfillStart != backfillStartDate
-        if selectionChanged || backfillBoundaryChanged || exportContractChanged {
-            dates.formUnion(existingDates)
-        }
-
         if trigger != .rebuild {
             for metric in HealthMetric.allCases where enabledMetrics.contains(metric) {
                 try Task.checkCancellation()
                 let batch = try await healthKit.changedDates(
                     for: metric,
                     calendar: syncCalendar,
-                    notBefore: backfillStartInstant
+                    notBefore: plan.backfillStartInstant
                 )
                 try Task.checkCancellation()
                 batches.append(batch)
-                let changedDates = try localDates(from: batch.affectedDates)
-                dates.formUnion(
-                    changedDates.filter {
-                        $0 >= backfillStartDate || existingDates.contains($0)
-                    }
-                )
-
-                if metric == .vo2Max, !batch.affectedDates.isEmpty {
-                    dates.formUnion(existingDates)
-                }
+                try plan.add(batch)
             }
-            dates.formUnion(missingDates)
+            plan.dates.formUnion(missingDates)
         }
 
         var report = try await stage(
-            dates: dates,
+            dates: plan.dates,
             progress: progress
         )
-        if selectionChanged {
-            persistStagedMetrics(enabledMetrics)
-        }
-        if backfillBoundaryChanged {
-            persistStagedBackfillStart(backfillStartDate)
-        }
-        if exportContractChanged {
-            try await runtime.store.enqueueCurrentDailyArtifactsForUpload()
-            persistStagedExportContractRevision()
-        }
-        for batch in batches {
-            try await healthKit.commit(batch)
-        }
+        try await finishStaging(
+            plan,
+            enabledMetrics: enabledMetrics,
+            batches: batches
+        )
 
         let uploadReport = try await runtime.engine.retryPendingUploads(
             force: trigger == .retry,
@@ -232,72 +192,124 @@ actor LiveSyncCoordinator {
 
         guard enabledMetrics.contains(metric) else { return }
         let syncCalendar = calendar()
-        let currentDate = now()
-        let selectionChanged = lastStagedMetrics != enabledMetrics
-        let backfillStartDate = backfillStart
+        var plan = try await makeStagingPlan(
+            enabledMetrics: enabledMetrics,
+            backfillStart: backfillStart,
+            currentDate: now(),
+            calendar: syncCalendar
+        )
+        let batch = try await healthKit.changedDates(
+            for: metric,
+            calendar: syncCalendar,
+            notBefore: plan.backfillStartInstant
+        )
+        try plan.add(batch)
+        plan.dates.formUnion(
+            try await missingBackfillDates(
+                from: backfillStart,
+                through: plan.currentDate,
+                calendar: syncCalendar
+            )
+        )
+
+        _ = try await stage(dates: plan.dates)
+        try await finishStaging(
+            plan,
+            enabledMetrics: enabledMetrics,
+            batches: [batch]
+        )
+    }
+
+    private struct StagingPlan {
+        let backfillStart: LocalDate
+        let backfillStartInstant: Date
+        let currentDate: Date
+        let existingDates: Set<LocalDate>
+        let selectionChanged: Bool
+        let backfillBoundaryChanged: Bool
+        let exportContractChanged: Bool
+        var dates: Set<LocalDate>
+
+        mutating func add(_ batch: HealthAnchoredChangeBatch) throws {
+            let changedDates = try Set(
+                batch.affectedDates.map(LocalDate.init(rawValue:))
+            )
+            dates.formUnion(
+                changedDates.filter {
+                    $0 >= backfillStart || existingDates.contains($0)
+                }
+            )
+            if batch.metric == .vo2Max, !batch.affectedDates.isEmpty {
+                dates.formUnion(existingDates)
+            }
+        }
+    }
+
+    private func makeStagingPlan(
+        enabledMetrics: Set<HealthMetric>,
+        backfillStart: LocalDate,
+        currentDate: Date,
+        calendar: Calendar
+    ) async throws -> StagingPlan {
         let existingRecords = try await runtime.store.allDailyRecords()
         _ = try await healthKit.recoverAuxiliaryState(
             from: existingRecords
         )
         let backfillStartInstant = try await healthKit.startDate(
-            for: backfillStartDate
+            for: backfillStart
         )
-        let backfillBoundaryChanged =
-            lastStagedBackfillStart != backfillStartDate
-        let exportContractChanged =
-            lastStagedExportContractRevision != Self.exportContractRevision
-        let batch = try await healthKit.changedDates(
-            for: metric,
-            calendar: syncCalendar,
-            notBefore: backfillStartInstant
-        )
-        var dates = try BackfillDatePlanner.recentDates(
-            through: currentDate,
-            count: 3,
-            notBefore: backfillStartDate,
-            calendar: syncCalendar
-        )
-        let existingDates = Set(existingRecords.map(\.date))
-        let historyStart = Self.effectiveHistoryStart(
-            requestedStart: backfillStartInstant,
-            existingRecordDates: existingRecords.map(\.date)
-        )
+        // Older artifacts can remain repair targets after a range is narrowed,
+        // but they must never widen the active VO2 carry-forward window.
         await recordProvider.configure(
-            earliestVO2Date: historyStart,
+            earliestVO2Date: backfillStartInstant,
             enabledMetrics: enabledMetrics
         )
-        if selectionChanged || backfillBoundaryChanged || exportContractChanged {
-            dates.formUnion(existingDates)
-        }
-        let changedDates = try localDates(from: batch.affectedDates)
-        dates.formUnion(
-            changedDates.filter {
-                $0 >= backfillStartDate || existingDates.contains($0)
-            }
-        )
-        dates.formUnion(
-            try await missingBackfillDates(
-                from: backfillStartDate,
+        let existingDates = Set(existingRecords.map(\.date))
+        var plan = StagingPlan(
+            backfillStart: backfillStart,
+            backfillStartInstant: backfillStartInstant,
+            currentDate: currentDate,
+            existingDates: existingDates,
+            selectionChanged: lastStagedMetrics != enabledMetrics,
+            backfillBoundaryChanged:
+                lastStagedBackfillStart != backfillStart,
+            exportContractChanged:
+                lastStagedExportContractRevision != Self.exportContractRevision,
+            dates: try BackfillDatePlanner.recentDates(
                 through: currentDate,
-                calendar: syncCalendar
+                count: 3,
+                notBefore: backfillStart,
+                calendar: calendar
             )
         )
-        if metric == .vo2Max, !batch.affectedDates.isEmpty {
-            dates.formUnion(existingDates)
+        if
+            plan.selectionChanged
+                || plan.backfillBoundaryChanged
+                || plan.exportContractChanged
+        {
+            plan.dates.formUnion(existingDates)
         }
+        return plan
+    }
 
-        _ = try await stage(dates: dates)
-        if selectionChanged {
+    private func finishStaging(
+        _ plan: StagingPlan,
+        enabledMetrics: Set<HealthMetric>,
+        batches: [HealthAnchoredChangeBatch]
+    ) async throws {
+        if plan.selectionChanged {
             persistStagedMetrics(enabledMetrics)
         }
-        if backfillBoundaryChanged {
-            persistStagedBackfillStart(backfillStartDate)
+        if plan.backfillBoundaryChanged {
+            persistStagedBackfillStart(plan.backfillStart)
         }
-        if exportContractChanged {
+        if plan.exportContractChanged {
             try await runtime.store.enqueueCurrentDailyArtifactsForUpload()
             persistStagedExportContractRevision()
         }
-        try await healthKit.commit(batch)
+        for batch in batches {
+            try await healthKit.commit(batch)
+        }
     }
 
     func flushPendingUploads() async throws -> LiveSyncOutcome {
@@ -474,19 +486,6 @@ actor LiveSyncCoordinator {
             excluding: existingDates,
             calendar: calendar
         )
-    }
-
-    private func localDates(from values: Set<String>) throws -> Set<LocalDate> {
-        try Set(values.map(LocalDate.init(rawValue:)))
-    }
-
-    static func effectiveHistoryStart(
-        requestedStart: Date,
-        existingRecordDates _: [LocalDate]
-    ) -> Date {
-        // Older artifacts can remain repair targets after a range is narrowed,
-        // but they must never widen the active VO2 carry-forward window.
-        requestedStart
     }
 
     private func merge(_ source: SyncReport, into destination: inout SyncReport) {

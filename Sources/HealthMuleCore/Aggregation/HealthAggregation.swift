@@ -341,15 +341,8 @@ public enum DailyHealthRecordAggregator {
             uniqueSamples[sample.id] = sample
         }
 
-        let ordered = uniqueSamples.values.sorted {
-            if $0.id != $1.id { return $0.id < $1.id }
-            if $0.end != $1.end { return $0.end > $1.end }
-            if $0.start != $1.start { return $0.start > $1.start }
-            return $0.type < $1.type
-        }
-
         var records: [WorkoutRecord] = []
-        for sample in ordered {
+        for sample in uniqueSamples.values {
             records.append(
                 WorkoutRecord(
                     id: sample.id,

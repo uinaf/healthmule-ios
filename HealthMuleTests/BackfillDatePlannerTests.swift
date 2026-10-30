@@ -93,22 +93,6 @@ final class BackfillDatePlannerTests: XCTestCase {
         )
     }
 
-    func testVO2HistoryStartDoesNotReachIntoOlderExistingRecords() throws {
-        let requestedStart = try ISO8601Timestamp(
-            rawValue: "2026-07-15T00:00:00Z"
-        ).date()
-
-        let resolved = LiveSyncCoordinator.effectiveHistoryStart(
-            requestedStart: requestedStart,
-            existingRecordDates: [
-                try LocalDate(rawValue: "2026-06-01"),
-                try LocalDate(rawValue: "2026-07-01"),
-            ]
-        )
-
-        XCTAssertEqual(resolved, requestedStart)
-    }
-
     func testCalendarDayIterationSurvivesMidnightDaylightSavingTime() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "America/Santiago"))
         let calendar = LocalDayCalendar.make(timeZone: timeZone)

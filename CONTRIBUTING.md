@@ -33,16 +33,6 @@ health data from the report.
 
 ## Dependencies
 
-[project.yml](project.yml) pins GoogleSignIn with `exactVersion`. After
-changing it, run:
-
-```sh
-make project
-./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthMule.xcodeproj -scheme HealthMule -derivedDataPath .artifacts/DerivedData
-make verify-full
-```
-
-Commit the generated project and the workspace `Package.resolved` together.
-`make verify` fails when the pin and the lock differ. On a pull request that
-changes `project.yml`, [Package Lock](.github/workflows/package-lock.yml)
-commits the resolved lock and reruns Verify.
+[project.yml](project.yml) pins GoogleSignIn with `exactVersion`. Commit the
+generated project and the workspace `Package.resolved` with any pin change;
+`make verify` fails when they differ.

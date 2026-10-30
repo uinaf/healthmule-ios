@@ -34,13 +34,13 @@ failure-injection checks, never live health exports.
 ## Onboarding and permissions
 
 - [ ] A fresh install shows one screen with Setup rows for Apple Health and Google Drive.
-- [ ] Setup, Sync details, and per-metric Health Data drill-ins return to Home; the tab bar never covers content.
+- [ ] Metrics and Advanced return to Home.
 - [ ] The app requests read-only HealthKit access, never write.
-- [ ] Disable Sleep and Body Mass before the first request: the sheet omits both, their cards say Not included, and no observer or query runs for them.
+- [ ] Disable Sleep and Body Mass before the first request: the sheet omits both, their rows say Not included, and no observer or query runs for them.
 - [ ] Enable one afterward: setup says Review needed, the type says Not requested, and sync excludes it until the follow-up request completes.
 - [ ] Grant all types: the status screen shows readable samples.
 - [ ] Deny one type: the UI says "No readable data", never that access was denied.
-- [ ] Make the authorization-status query fail: the UI shows Check failed, not Request complete. A previously completed request keeps querying visible types; a never-completed one stays blocked.
+- [ ] Make the authorization-status query fail: the UI shows Check failed, not Requested. A previously completed request keeps querying visible types; a never-completed one stays blocked.
 - [ ] Connect Google: `Apple Health Sync` and its `daily` folder are found or created.
 - [ ] Move the root folder within My Drive and relaunch: the app finds it by ID or app properties.
 - [ ] Trash the root or `daily` folder and Try Drive Again: a new tree gets every local day and a fresh manifest; nothing uploads to the old folder.
@@ -67,10 +67,10 @@ failure-injection checks, never live health exports.
 
 - [ ] Before the first snapshot, the Watch says Waiting for iPhone and offers Retry iPhone; never Ready, never an endless spinner.
 - [ ] The Watch shows only readiness, sync activity, last-success time, and queue counts: no health values, account details, Drive IDs, or error strings.
-- [ ] Pending, retryable, and blocked work each show as a separate nonzero row, beside Last confirmed.
+- [ ] Pending, retryable, and blocked work each show as a separate nonzero row, beside Last successful sync.
 - [ ] With the iPhone reachable, Sync reports the request accepted before reconciliation finishes.
 - [ ] Without reachability, Sync is unavailable and the headline says Phone Unavailable, never Up to Date.
-- [ ] A snapshot older than 30 minutes shows as out of date with its last confirmed time and counts, never Up to Date.
+- [ ] A snapshot older than 30 minutes shows Status Out of Date with its last successful sync and counts, never Up to Date.
 - [ ] After reachability returns, a new request publishes a fresh snapshot.
 - [ ] Leave the Watch app; after background delivery, the latest snapshot appears on reopen.
 
