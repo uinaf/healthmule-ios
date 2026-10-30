@@ -220,6 +220,19 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testFailedHealthCheckKeepsGoogleRecoveryReachable() throws {
+        for (google, recovery) in [
+            ("--ui-google-reconnect", "Reconnect Google Drive"),
+            ("--ui-google-drive-unavailable", "google-retry-action"),
+        ] {
+            let app = launch(additionalArguments: ["--ui-health-status-failed", google])
+            XCTAssertTrue(element("health-check-again-action", in: app).waitForExistence(timeout: 10))
+            XCTAssertTrue(element(recovery, in: app).exists || app.buttons[recovery].exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testHealthReviewRemainsSyncable() throws {
         let app = launch(additionalArguments: [
             "--ui-health-review",

@@ -125,7 +125,12 @@ struct HomeStatus: Equatable {
     private static func setupStatus(_ readiness: SyncReadiness) -> HomeStatus? {
         switch readiness {
         case .localStorageUnavailable:
-            HomeStatus("Local storage unavailable", "Syncing is paused.", tone: .problem)
+            HomeStatus(
+                "Local storage unavailable",
+                "Syncing is paused.",
+                tone: .problem,
+                action: .diagnostics
+            )
         case .checkingConnections:
             HomeStatus("Checking connections", tone: .working)
         case .healthUnavailable:

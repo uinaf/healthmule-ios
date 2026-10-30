@@ -2492,6 +2492,8 @@ final class AppModel {
             healthAuthorizationState = .checking
         } else if arguments.contains("--ui-health-review") {
             healthAuthorizationState = .reviewRequired
+        } else if arguments.contains("--ui-health-status-failed") {
+            healthAuthorizationState = .statusUnavailable(previouslyRequested: true)
         } else if arguments.contains("--ui-ready")
             || arguments.contains("--ui-health-request-complete")
         {

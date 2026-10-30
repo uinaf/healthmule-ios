@@ -123,24 +123,33 @@ struct HomeView: View {
                 setupAction
             }
             // Health review and a stale status check still allow syncing.
-            if let action = status.action, !showsSetup || model.syncReadiness.canSync {
+            if let action = status.action,
+               !showsSetup || model.syncReadiness.canSync || action == .diagnostics {
                 statusAction(action)
             }
         }
     }
 
-    /// The one next step: Apple Health first, then Google, then a recheck.
+    /// Every recovery that applies stays reachable: a failed Health check
+    /// must not hide a Google reconnect, and the reverse.
     @ViewBuilder
     private var setupAction: some View {
-        switch model.healthAuthorizationState {
-        case .notRequested, .reviewRequired, .statusUnavailable:
+        let needsHealthAction: Bool = switch model.healthAuthorizationState {
+        case .notRequested, .reviewRequired, .statusUnavailable: true
+        case .unavailable, .checking, .requestCompleted: false
+        }
+        let needsGoogleAction: Bool = switch model.googleConnection {
+        case .disconnected, .reauthorizationRequired, .temporarilyUnavailable, .driveUnavailable: true
+        case .notConfigured, .restoring, .authorized, .connected: false
+        }
+        if needsHealthAction {
             healthAction
-        case .unavailable, .checking, .requestCompleted:
-            if model.googleConnection.isDriveReady, model.backgroundDeliveryAdvisory != nil {
-                checkHealthAgainButton
-            } else {
-                googleAction
-            }
+        }
+        if needsGoogleAction {
+            googleAction
+        }
+        if !needsHealthAction, !needsGoogleAction, model.backgroundDeliveryAdvisory != nil {
+            checkHealthAgainButton
         }
     }
 
@@ -276,9 +285,14 @@ struct HomeView: View {
         Button {
             Task { await model.retryHealthStatus() }
         } label: {
-            Text("Check Apple Health Again").primaryActionLabel()
+            Text("Check Apple Health Again")
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
         }
-        .primaryActionStyle()
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .tint(.secondary)
         .disabled(model.operationState.isWorking)
         .accessibilityIdentifier("health-check-again-action")
     }
