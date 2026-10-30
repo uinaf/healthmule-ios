@@ -7,14 +7,16 @@ struct AppRootView: View {
     init(model: AppModel) {
         self.model = model
         let arguments = ProcessInfo.processInfo.arguments
-        let initialRoute: HomeRoute? = if arguments.contains("--ui-show-metrics") {
-            .metrics
+        let initialPath: [HomeRoute] = if arguments.contains("--ui-show-metrics") {
+            [.settings, .metrics]
         } else if arguments.contains("--ui-show-advanced") {
-            .advanced
+            [.settings, .advanced]
+        } else if arguments.contains("--ui-show-settings") {
+            [.settings]
         } else {
-            nil
+            []
         }
-        _path = State(initialValue: initialRoute.map { [$0] } ?? [])
+        _path = State(initialValue: initialPath)
     }
 
     var body: some View {
@@ -22,6 +24,8 @@ struct AppRootView: View {
             HomeView(model: model)
                 .navigationDestination(for: HomeRoute.self) { route in
                     switch route {
+                    case .settings:
+                        SettingsView(model: model)
                     case .metrics:
                         MetricsView(model: model)
                     case .advanced:

@@ -102,6 +102,21 @@ struct SyncProgress: Equatable, Sendable {
     var accessibilityValue: String {
         presentationText
     }
+
+    var fraction: Double {
+        totalUnits > 0 ? Double(completedUnits) / Double(totalUnits) : 0
+    }
+
+    /// The phase and current day, for the line under the progress ring.
+    var dayText: String {
+        guard
+            let currentDate,
+            let day = BackfillDateCodec.date(from: currentDate.rawValue)
+        else {
+            return phase.verb
+        }
+        return "\(phase.verb) \(day.formatted(.dateTime.month(.abbreviated).day()))"
+    }
 }
 
 struct SyncProgressState: Equatable, Sendable {

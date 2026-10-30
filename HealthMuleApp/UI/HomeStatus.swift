@@ -11,6 +11,7 @@ struct HomeStatus: Equatable {
     enum Tone: Equatable {
         case done
         case working
+        case idle
         case waiting
         case setup
         case problem
@@ -28,8 +29,9 @@ struct HomeStatus: Equatable {
         switch tone {
         case .done: "checkmark.circle.fill"
         case .working: "arrow.triangle.2.circlepath"
+        case .idle: "arrow.triangle.2.circlepath.circle.fill"
         case .waiting: "clock.fill"
-        case .setup: "circle.dashed"
+        case .setup: "link.circle.fill"
         case .problem: "exclamationmark.triangle.fill"
         }
     }
@@ -37,7 +39,7 @@ struct HomeStatus: Equatable {
     var tint: Color {
         switch tone {
         case .done: .green
-        case .working, .setup: .secondary
+        case .working, .idle, .setup: .secondary
         case .waiting: .orange
         case .problem: .red
         }
@@ -115,7 +117,7 @@ struct HomeStatus: Equatable {
             )
         }
         if summary.lastSuccessfulSyncAt == nil {
-            return HomeStatus("Ready to sync", tone: .setup, action: .sync("Sync Now"))
+            return HomeStatus("Ready to sync", tone: .idle, action: .sync("Sync Now"))
         }
         return HomeStatus("Up to date", tone: .done, action: .sync("Sync Now"))
     }

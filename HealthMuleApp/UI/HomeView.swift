@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 enum HomeRoute: Hashable {
+    case settings
     case metrics
     case advanced
 }
@@ -10,35 +11,42 @@ enum HomeRoute: Hashable {
 struct HomeView: View {
     @Bindable var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.openURL) private var openURL
-    @State private var draftRange: BackfillRange?
-    @State private var draftCustomStart: Date?
-    @State private var isShowingDisconnectConfirmation = false
 
     var body: some View {
-        Form {
-            statusSection
-            if showsSetup {
-                setupSection
-            }
-            exportSection
-            driveSection
-            Section {
-                NavigationLink(value: HomeRoute.advanced) {
-                    Label("Advanced", systemImage: "gearshape")
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 24) {
+                    Spacer(minLength: 0)
+                    statusHero
+                    Spacer(minLength: 0)
+                    if showsSetup {
+                        setupCard
+                    }
+                    bottomBar
                 }
-                .accessibilityIdentifier("advanced-link")
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .refreshable {
+                // Return at once: the launch sync can run for minutes, and the
+                // status already shows its progress.
+                Task { await model.applicationDidBecomeActive() }
             }
         }
-        .pageStyle()
+        .background(Color("PageBackground"))
         .navigationTitle("HealthMule")
         .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("home-screen")
-        .refreshable {
-            // Return at once: the launch sync can run for minutes, and the
-            // status section already shows its progress.
-            Task { await model.applicationDidBecomeActive() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink(value: HomeRoute.settings) {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("Settings")
+                .accessibilityIdentifier("settings-link")
+            }
         }
+        .accessibilityIdentifier("home-screen")
     }
 
     // MARK: Status
@@ -47,62 +55,104 @@ struct HomeView: View {
         HomeStatus(model: model)
     }
 
-    @ViewBuilder
-    private var statusSection: some View {
-        Section {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: status.symbol)
-                    .foregroundStyle(status.tint)
-                    .symbolEffect(.rotate, isActive: status.isWorking)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(status.title)
-                        .accessibilityIdentifier("status-title")
-                    if let message = status.message {
-                        Text(message)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("status-message")
-                    }
-                }
-            }
-            .font(.headline)
-            .accessibilityElement(children: .combine)
-            .listRowSeparator(.hidden)
-
+    private var statusHero: some View {
+        VStack(spacing: 12) {
             if let progress = model.syncProgress, progress.totalUnits > 0 {
                 SyncDayProgressView(progress: progress)
+            } else {
+                Image(systemName: status.symbol)
+                    .font(.system(size: 64))
+                    .foregroundStyle(status.tint)
+                    .symbolEffect(.rotate, isActive: status.isWorking)
+                    .accessibilityHidden(true)
             }
-
+            Text(status.title)
+                .font(.title.bold())
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("status-title")
+            if let subtitle {
+                subtitle
+            }
             if let note = OperationNote(state: model.presentedOperationState) {
-                note
+                note.multilineTextAlignment(.center)
             }
+        }
+        .padding(.top, 24)
+    }
 
-            if let action = status.action {
-                statusAction(action)
-            }
-
+    private var subtitle: AnyView? {
+        if let message = status.message {
+            return AnyView(
+                Text(message)
+                    .accessibilityIdentifier("status-message")
+                    .modifier(SubtitleStyle())
+            )
+        }
+        if let progress = model.syncProgress, progress.totalUnits > 0 {
+            return AnyView(Text(progress.dayText).modifier(SubtitleStyle()))
         }
         if showsSyncFacts {
-            Section {
-                LabeledContent {
-                    Text(model.syncSummary.lastSyncText)
-                } label: {
-                    Label("Last sync", systemImage: "clock")
-                }
-                .accessibilityIdentifier("last-sync-fact")
-                LabeledContent {
-                    Text(model.syncSummary.latestExportedDayText)
-                } label: {
-                    Label("Data through", systemImage: "calendar")
-                }
-                .accessibilityIdentifier("data-through-fact")
-            }
+            return AnyView(
+                Text("Last sync \(model.syncSummary.lastSyncText) · Data through \(model.syncSummary.latestExportedDayText)")
+                    .accessibilityIdentifier("last-sync-fact")
+                    .modifier(SubtitleStyle())
+            )
         }
+        return nil
     }
 
     private var showsSyncFacts: Bool {
         model.initialLoadPhase == .loaded
             && model.syncSummary.lastSuccessfulSyncAt != nil
+            && !model.operationState.isWorking(.sync)
+    }
+
+    // MARK: Bottom
+
+    private var bottomBar: some View {
+        VStack(spacing: 16) {
+            if !showsSetup, model.initialLoadPhase == .loaded {
+                HStack(spacing: 20) {
+                    connectionDot("Apple Health", isReady: model.healthAuthorizationState.allowsQueries)
+                    connectionDot("Google Drive", isReady: model.googleConnection.isDriveReady)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            if showsSetup {
+                setupAction
+            }
+            // Health review and a stale status check still allow syncing.
+            if let action = status.action, !showsSetup || model.syncReadiness.canSync {
+                statusAction(action)
+            }
+        }
+    }
+
+    /// The one next step: Apple Health first, then Google, then a recheck.
+    @ViewBuilder
+    private var setupAction: some View {
+        switch model.healthAuthorizationState {
+        case .notRequested, .reviewRequired, .statusUnavailable:
+            healthAction
+        case .unavailable, .checking, .requestCompleted:
+            if model.googleConnection.isDriveReady, model.backgroundDeliveryAdvisory != nil {
+                checkHealthAgainButton
+            } else {
+                googleAction
+            }
+        }
+    }
+
+    private func connectionDot(_ title: String, isReady: Bool) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(isReady ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+            Text(title)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isReady ? "Connected" : "Needs attention")
     }
 
     @ViewBuilder
@@ -112,21 +162,18 @@ struct HomeView: View {
             Button {
                 Task { await model.reconcile(trigger: .manual) }
             } label: {
-                Text(title)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color(uiColor: .systemBackground))
-                    .frame(maxWidth: .infinity)
+                Text(title).primaryActionLabel()
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
-            .tint(.primary)
+            .primaryActionStyle()
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("sync-now-action")
         case .retry:
-            Button("Retry Uploads", systemImage: "arrow.clockwise") {
+            Button {
                 Task { await model.retryFailedUploads() }
+            } label: {
+                Text("Retry Uploads").primaryActionLabel()
             }
+            .primaryActionStyle()
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("retry-uploads-action")
         case .diagnostics:
@@ -142,30 +189,39 @@ struct HomeView: View {
             || model.backgroundDeliveryAdvisory != nil
     }
 
-    private var setupSection: some View {
-        Section("Setup") {
-            setupStep("Apple Health", healthStateText, isDone: model.healthAuthorizationState.allowsQueries)
+    private var setupCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            setupStep(1, "Apple Health", healthStateText, isDone: model.healthAuthorizationState.allowsQueries)
                 .accessibilityIdentifier("health-connection-row")
-            healthAction
-            setupStep("Google Drive", googleStateText, isDone: model.googleConnection.isDriveReady)
+            Divider()
+            setupStep(2, "Google Drive", googleStateText, isDone: model.googleConnection.isDriveReady)
                 .accessibilityIdentifier("google-connection-row")
-            googleAction
             if let advisory = model.backgroundDeliveryAdvisory {
+                Divider()
                 VStack(alignment: .leading, spacing: 4) {
                     Text(advisory.title).font(.subheadline.weight(.semibold))
                     Text(advisory.message).font(.footnote).foregroundStyle(.secondary)
                 }
                 .accessibilityIdentifier("background-delivery-advisory")
-                checkHealthAgainButton
             }
         }
+        .padding(16)
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
     }
 
-    private func setupStep(_ title: String, _ state: String, isDone: Bool) -> some View {
+    private func setupStep(_ number: Int, _ title: String, _ state: String, isDone: Bool) -> some View {
         LabeledContent {
             Text(state)
         } label: {
-            Label(title, systemImage: isDone ? "checkmark.circle.fill" : "circle.dashed")
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: isDone ? "checkmark.circle.fill" : "\(number).circle")
+                    .foregroundStyle(isDone ? Color.green : .secondary)
+            }
         }
     }
 
@@ -184,13 +240,28 @@ struct HomeView: View {
     private var healthAction: some View {
         switch model.healthAuthorizationState {
         case .notRequested, .reviewRequired:
-            Button(
-                model.healthAuthorizationState == .reviewRequired
-                    ? "Review Health Access"
-                    : "Request Health Access",
-                systemImage: "heart"
-            ) {
+            let button = Button {
                 Task { await model.requestHealthAuthorization() }
+            } label: {
+                Text(
+                    model.healthAuthorizationState == .reviewRequired
+                        ? "Review Health Access"
+                        : "Connect Apple Health"
+                )
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+            }
+            Group {
+                // Sync Now stays primary when Health only needs a review.
+                if model.syncReadiness.canSync {
+                    button.buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        .tint(.secondary)
+                } else {
+                    button.primaryActionStyle()
+                        .foregroundStyle(Color(uiColor: .systemBackground))
+                }
             }
             .disabled(!model.isHealthKitAvailable || model.operationState.isWorking)
             .accessibilityIdentifier("health-authorization-action")
@@ -202,9 +273,12 @@ struct HomeView: View {
     }
 
     private var checkHealthAgainButton: some View {
-        Button("Check Apple Health Again") {
+        Button {
             Task { await model.retryHealthStatus() }
+        } label: {
+            Text("Check Apple Health Again").primaryActionLabel()
         }
+        .primaryActionStyle()
         .disabled(model.operationState.isWorking)
         .accessibilityIdentifier("health-check-again-action")
     }
@@ -226,7 +300,7 @@ struct HomeView: View {
     private var googleAction: some View {
         switch model.googleConnection {
         case .disconnected, .reauthorizationRequired:
-            GoogleSignInButton(scheme: colorScheme == .dark ? .dark : .light) {
+            GoogleSignInButton(scheme: colorScheme == .dark ? .dark : .light, style: .wide) {
                 Task { await model.connectGoogle() }
             }
             .disabled(model.operationState.isWorking)
@@ -236,156 +310,43 @@ struct HomeView: View {
                     : "Reconnect Google Drive"
             )
         case .temporarilyUnavailable, .driveUnavailable:
-            Button("Try Drive Again") {
+            Button {
                 Task { await model.retryGoogleRestore() }
+            } label: {
+                Text("Try Drive Again").primaryActionLabel()
             }
+            .primaryActionStyle()
             .disabled(model.operationState.isWorking)
             .accessibilityIdentifier("google-retry-action")
         case .notConfigured, .restoring, .authorized, .connected:
             EmptyView()
         }
     }
+}
 
-    // MARK: Export
-
-    private var shownRange: BackfillRange {
-        draftRange ?? model.backfillRange
+private struct SubtitleStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
     }
+}
 
-    private var shownCustomStart: Date {
-        draftCustomStart ?? model.customBackfillStart
+private extension Text {
+    func primaryActionLabel() -> some View {
+        fontWeight(.semibold)
+            .foregroundStyle(Color(uiColor: .systemBackground))
+            .frame(maxWidth: .infinity)
     }
+}
 
-    private var hasExportDraft: Bool {
-        (draftRange != nil || draftCustomStart != nil)
-            && model.backfillSelectionChanges(
-                range: shownRange,
-                customStart: shownCustomStart
-            )
-    }
-
-    private var exportSection: some View {
-        Section {
-            Picker(
-                selection: Binding(
-                    get: { shownRange },
-                    set: { draftRange = $0 }
-                )
-            ) {
-                ForEach(BackfillRange.allCases) { range in
-                    Text(range.title).tag(range)
-                }
-            } label: {
-                Label("History", systemImage: "calendar.badge.clock")
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier("backfill-range-picker")
-
-            if shownRange == .custom {
-                DatePicker(
-                    "Start date",
-                    selection: Binding(
-                        get: { shownCustomStart },
-                        set: { draftCustomStart = $0 }
-                    ),
-                    in: ...Date.now,
-                    displayedComponents: .date
-                )
-            }
-
-            if hasExportDraft {
-                Button("Apply and Sync") {
-                    model.applyBackfillSelection(
-                        range: shownRange,
-                        customStart: shownCustomStart
-                    )
-                    discardExportDraft()
-                }
-                .disabled(model.blocksSettingsChanges)
-                .accessibilityIdentifier("backfill-apply-action")
-                Button("Cancel", role: .cancel) {
-                    discardExportDraft()
-                }
-                .accessibilityIdentifier("backfill-discard-action")
-            }
-
-            NavigationLink(value: HomeRoute.metrics) {
-                LabeledContent {
-                    Text("\(model.enabledMetrics.count) of \(HealthMetric.allCases.count)")
-                } label: {
-                    Label("Metrics", systemImage: "heart.text.square")
-                }
-            }
-            .accessibilityIdentifier("metrics-link")
-        } footer: {
-            if let exportFooter {
-                Text(exportFooter)
-            }
-        }
-    }
-
-    private var exportFooter: String? {
-        guard hasExportDraft else { return nil }
-        let start = shownRange.startDate(customDate: shownCustomStart)
-            .formatted(date: .abbreviated, time: .omitted)
-        return model.operationState.isWorking(.sync)
-            ? "The current sync stops and a new one exports from \(start)."
-            : "Exports from \(start)."
-    }
-
-    private func discardExportDraft() {
-        draftRange = nil
-        draftCustomStart = nil
-    }
-
-    // MARK: Drive
-
-    @ViewBuilder
-    private var driveSection: some View {
-        if let account = model.googleConnection.account {
-            Section("Google Drive") {
-                if let email = account.email {
-                    Label(email, systemImage: "person.crop.circle")
-                }
-                if case .connected(let connection) = model.googleConnection {
-                    if let folderURL = connection.folderURL {
-                        Button {
-                            openURL(folderURL)
-                        } label: {
-                            LabeledContent {
-                                Image(systemName: "arrow.up.right")
-                                    .foregroundStyle(.secondary)
-                            } label: {
-                                Label(connection.folderName, systemImage: "folder")
-                            }
-                        }
-                        .foregroundStyle(.primary)
-                    } else {
-                        Label(connection.folderName, systemImage: "folder")
-                    }
-                }
-                disconnectButton
-            }
-        } else if model.googleConnection.canDisconnect {
-            Section("Google Drive") {
-                disconnectButton
-            }
-        }
-    }
-
-    private var disconnectButton: some View {
-        Button("Disconnect Google", role: .destructive) {
-            isShowingDisconnectConfirmation = true
-        }
-        .disabled(model.blocksSettingsChanges)
-        .alert("Disconnect Google?", isPresented: $isShowingDisconnectConfirmation) {
-            Button("Disconnect Google", role: .destructive) {
-                Task { await model.disconnectGoogle() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Files in Drive stay.")
-        }
+private extension View {
+    func primaryActionStyle() -> some View {
+        buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(.primary)
     }
 }
 
@@ -402,7 +363,7 @@ struct OperationNote: View {
     let message: String
     let isFailure: Bool
 
-    /// Home shows sync state in its status section; other screens pass `includesSync`.
+    /// Home shows sync state in its status; other screens pass `includesSync`.
     init?(state: OperationState, includesSync: Bool = false) {
         switch state {
         case .idle:
@@ -448,24 +409,30 @@ struct DiagnosticsButton: View {
     }
 }
 
+/// A ring with the completed count; the full progress text stays for VoiceOver.
 struct SyncDayProgressView: View {
     let progress: SyncProgress
 
     var body: some View {
-        ProgressView(
-            value: Double(progress.completedUnits),
-            total: Double(progress.totalUnits)
-        ) {
-            EmptyView()
-        } currentValueLabel: {
-            Text(progress.presentationText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .contentTransition(.numericText())
+        ZStack {
+            Circle()
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: progress.fraction)
+                .stroke(Color.primary, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.default, value: progress.completedUnits)
+            VStack(spacing: 0) {
+                Text(progress.completedUnits.formatted())
+                    .font(.title2.bold())
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                Text("of \(progress.totalUnits.formatted())")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .tint(.primary)
-        .animation(.default, value: progress.completedUnits)
+        .frame(width: 112, height: 112)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Sync progress")
         .accessibilityValue(progress.accessibilityValue)

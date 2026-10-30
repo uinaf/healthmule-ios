@@ -9,8 +9,9 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(element("home-screen", in: app).exists)
         XCTAssertFalse(app.tabBars.firstMatch.exists)
 
+        app.buttons["settings-link"].firstMatch.tap()
         let advanced = element("advanced-link", in: app)
-        scrollTo(advanced, in: app)
+        XCTAssertTrue(advanced.waitForExistence(timeout: 5))
         advanced.tap()
         XCTAssertTrue(element("advanced-screen", in: app).waitForExistence(timeout: 5))
     }
@@ -90,7 +91,6 @@ final class HealthMuleUITests: XCTestCase {
 
         XCTAssertTrue(element("sync-now-action", in: app).waitForExistence(timeout: 10))
         XCTAssertFalse(element("last-sync-fact", in: app).exists)
-        XCTAssertFalse(element("data-through-fact", in: app).exists)
     }
 
     @MainActor
@@ -141,7 +141,7 @@ final class HealthMuleUITests: XCTestCase {
 
     @MainActor
     func testHistorySelectionStaysEditableAndNeedsApplyDuringSync() throws {
-        let app = launch(additionalArguments: ["--ui-ready", "--ui-operation-working"])
+        let app = launch(additionalArguments: ["--ui-ready", "--ui-operation-working", "--ui-show-settings"])
         let picker = element("backfill-range-picker", in: app)
 
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
@@ -186,8 +186,8 @@ final class HealthMuleUITests: XCTestCase {
     @MainActor
     func testUnavailableGoogleOffersDisconnectWithoutDriveDeletion() throws {
         for state in ["--ui-google-unavailable", "--ui-google-reconnect"] {
-            let app = launch(additionalArguments: [state])
-            XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+            let app = launch(additionalArguments: [state, "--ui-show-settings"])
+            XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
             scrollTo(app.buttons["Disconnect Google"], in: app)
             app.terminate()
 
@@ -201,7 +201,7 @@ final class HealthMuleUITests: XCTestCase {
 
     @MainActor
     func testDestructiveActionsUseCancellableAlerts() throws {
-        let home = launch(additionalArguments: ["--ui-ready"])
+        let home = launch(additionalArguments: ["--ui-ready", "--ui-show-settings"])
         confirmAlertCancels(
             action: "Disconnect Google",
             title: "Disconnect Google?",
@@ -282,7 +282,11 @@ final class HealthMuleUITests: XCTestCase {
             ("06-metrics", ["--ui-ready", "--ui-show-metrics", "--ui-health-readable"]),
             ("07-advanced", ["--ui-ready", "--ui-show-advanced", "--ui-activity-success"]),
             ("08-home-dark", ["--ui-ready", "--ui-synced", "--ui-dark-mode"]),
+            ("12-setup-dark", ["--ui-dark-mode"]),
+            ("13-syncing-dark", ["--ui-ready", "--ui-operation-working", "--ui-sync-progress", "--ui-dark-mode"]),
+            ("14-settings-dark", ["--ui-ready", "--ui-show-settings", "--ui-dark-mode"]),
             ("10-home-synced", ["--ui-ready", "--ui-synced"]),
+            ("11-settings", ["--ui-ready", "--ui-show-settings"]),
             ("09-home-accessibility-text", ["--ui-ready", "--ui-accessibility-text"]),
         ]
         for (name, arguments) in states {
