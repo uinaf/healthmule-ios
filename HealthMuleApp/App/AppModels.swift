@@ -400,7 +400,7 @@ struct BackgroundDeliveryAdvisory: Equatable, Sendable {
             names = titles.dropLast().joined(separator: ", ")
                 + ", and \(titles[titles.count - 1])"
         }
-        return "Background updates could not be enabled for \(names). Opening the app or syncing manually still works."
+        return "Background updates are off for \(names). Open the app to sync."
     }
 }
 
@@ -526,11 +526,21 @@ struct SyncSummary: Equatable, Sendable {
 
     var lastSyncText: String {
         lastSuccessfulSyncAt?
-            .formatted(date: .abbreviated, time: .shortened) ?? "Never"
+            .formatted(.dateTime.month(.abbreviated).day().hour().minute()) ?? "Never"
     }
 
     var latestExportedDayText: String {
-        latestExportedDate ?? "None"
+        guard let latestExportedDate else { return "None" }
+        guard let day = try? Date(
+            latestExportedDate,
+            strategy: Date.ISO8601FormatStyle().year().month().day()
+        ) else {
+            return latestExportedDate
+        }
+        // The day is a calendar date, so format it in UTC to keep it intact.
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        style.timeZone = TimeZone(secondsFromGMT: 0)!
+        return day.formatted(style)
     }
 }
 

@@ -135,7 +135,7 @@ enum HealthKitClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable:
-            "Apple Health data is only available on a supported iPhone."
+            "Apple Health needs an iPhone."
         case .queryFailed:
             "Apple Health could not complete the request."
         }

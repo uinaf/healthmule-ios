@@ -31,34 +31,33 @@ struct AdvancedView: View {
                 DiagnosticsButton(model: model)
             } header: {
                 Text("Fix a problem")
-            } footer: {
-                Text("Diagnostics hold counts, durations, and error codes, never health values or tokens.")
             }
 
             Section {
-                LabeledContent(
+                fact(
                     "Last automatic sync",
-                    value: receiptText(model.syncActivitySummary.latestAutomatic)
+                    "bolt.horizontal",
+                    receiptText(model.syncActivitySummary.latestAutomatic)
                 )
                 .accessibilityIdentifier("automatic-activity-latest")
-                LabeledContent(
+                fact(
                     "Last background refresh",
-                    value: receiptText(model.syncActivitySummary.latestBackgroundRefresh)
+                    "moon",
+                    receiptText(model.syncActivitySummary.latestBackgroundRefresh)
                 )
                 .accessibilityIdentifier("automatic-activity-background")
-                LabeledContent(
-                    "Schedule request",
-                    value: scheduleText(model.syncActivitySummary.schedule)
+                fact(
+                    "Refresh requested",
+                    "calendar.badge.clock",
+                    scheduleText(model.syncActivitySummary.schedule)
                 )
                 .accessibilityIdentifier("automatic-activity-schedule")
             } header: {
                 Text("Automatic sync")
-            } footer: {
-                Text("Past attempts only. iOS decides when background work runs.")
             }
 
             Section {
-                Button("Reset Local Sync State", role: .destructive) {
+                Button("Reset Local Sync State", systemImage: "arrow.counterclockwise", role: .destructive) {
                     isShowingResetConfirmation = true
                 }
                 .disabled(model.blocksSettingsChanges)
@@ -68,11 +67,11 @@ struct AdvancedView: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("Local anchors, staged records, and retry state are cleared. Drive files and their IDs are kept.")
+                    Text("Drive files stay.")
                 }
 
                 if model.googleConnection.account != nil {
-                    Button("Move Drive Exports to Trash", role: .destructive) {
+                    Button("Move Drive Exports to Trash", systemImage: "trash", role: .destructive) {
                         isShowingTrashConfirmation = true
                     }
                     .disabled(model.blocksSettingsChanges)
@@ -82,11 +81,9 @@ struct AdvancedView: View {
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("HealthMule exports move to Drive Trash and Google disconnects so nothing re-uploads. Local records and Apple Health data are kept.")
+                        Text("Google disconnects so nothing uploads again.")
                     }
                 }
-            } footer: {
-                Text("Apple Health data is never changed.")
             }
         }
         .pageStyle()
@@ -95,15 +92,23 @@ struct AdvancedView: View {
         .accessibilityIdentifier("advanced-screen")
     }
 
+    private func fact(_ title: String, _ symbol: String, _ value: String) -> some View {
+        LabeledContent {
+            Text(value)
+        } label: {
+            Label(title, systemImage: symbol)
+        }
+    }
+
     private func receiptText(_ receipt: SyncActivityReceipt?) -> String {
-        guard let receipt else { return "Never observed" }
+        guard let receipt else { return "None" }
         let time = (receipt.finishedAt ?? receipt.startedAt)
             .formatted(date: .abbreviated, time: .shortened)
         return "\(receipt.outcome.statusLabel) · \(time)"
     }
 
     private func scheduleText(_ receipt: BackgroundRefreshScheduleReceipt?) -> String {
-        guard let receipt else { return "Never requested" }
+        guard let receipt else { return "None" }
         let label = switch receipt.result {
         case .submitted: "Submitted"
         case .existingRequestKept: "Kept"

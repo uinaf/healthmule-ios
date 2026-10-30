@@ -8,7 +8,7 @@ private enum AppModelStorageError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable(let message):
-            "Local protected sync storage is unavailable: \(message)"
+            "Local storage unavailable: \(message)"
         }
     }
 }
@@ -350,6 +350,12 @@ final class AppModel {
         await diagnostics.record(.bootstrapStarted)
         await refreshSyncActivitySummary()
         await recoverSyncCoordinatorIfNeeded()
+        if let syncCoordinator {
+            syncSummary = (try? await syncCoordinator.summary()) ?? .empty
+        }
+        // Local state is enough to draw Home. Google restore and the launch
+        // sync can take minutes on a slow network and report their own state.
+        finishInitialLoad()
         let restoredGoogleCredentials =
             await restoreGoogleConnection() != nil
             && googleConnection.isAuthorized
@@ -377,8 +383,6 @@ final class AppModel {
         let reconciliationTrigger = bootstrapRequestedTrigger
             ?? requestedTrigger
         bootstrapActiveTrigger = reconciliationTrigger
-        // Saved state is restored; the launch sync shows its own progress.
-        finishInitialLoad()
         await reconcile(trigger: reconciliationTrigger)
         await scheduleBackgroundRefresh()
         await diagnostics.record(.bootstrapFinished)
@@ -522,7 +526,7 @@ final class AppModel {
             await registerHealthObservers()
             operationState = .succeeded(
                 .healthAuthorization,
-                "Apple Health request complete. Apple does not report which read permissions were approved."
+                "Apple Health access requested."
             )
             await diagnostics.record(.healthRequestCompleted)
             await reconcileAfterSetupIfReady()
@@ -562,7 +566,7 @@ final class AppModel {
         if case .statusUnavailable = healthAuthorizationState {
             operationState = .failed(
                 .healthAuthorization,
-                "Apple Health status could not be refreshed. Try again after reopening the app."
+                "Couldn't check Apple Health. Reopen the app to retry."
             )
             return
         }
@@ -868,7 +872,7 @@ final class AppModel {
                 .failed(
                     .sync,
                     syncInitializationError
-                        ?? "Local protected sync storage could not be prepared."
+                        ?? "Couldn't prepare local storage."
                 ),
                 origin: trigger.operationOrigin
             )
@@ -999,7 +1003,7 @@ final class AppModel {
                 }
                 operationState = .failed(
                     .sync,
-                    "The managed Drive folder changed. Verify it in Setup before retrying; local copies are safe."
+                    "The Drive folder changed. Check it before retrying."
                 )
                 await finishSyncActivity(
                     activityID,
@@ -1247,7 +1251,7 @@ final class AppModel {
         } else if case .temporarilyUnavailable = googleConnection {
             operationState = .failed(
                 .googleConnection,
-                "Google could not be reached yet. HealthMule will retry when the app becomes active again."
+                "Couldn't reach Google. Retries when you reopen the app."
             )
         } else if case .reauthorizationRequired = googleConnection {
             operationState = .failed(
@@ -1375,7 +1379,7 @@ final class AppModel {
             }
             operationState = .failed(
                 .diagnostics,
-                "Diagnostics could not be prepared."
+                "Couldn't prepare diagnostics."
             )
         }
     }
@@ -1416,8 +1420,8 @@ final class AppModel {
             operationState = .succeeded(
                 .driveDeletion,
                 trashedCount == 0
-                    ? "No accessible HealthMule exports were found. Google disconnected; local data was kept."
-                    : "Moved \(trashedCount) exports to Drive Trash. Google disconnected; local data was kept."
+                    ? "No exports found. Google disconnected."
+                    : "Moved \(trashedCount) exports to Trash. Google disconnected."
             )
         } catch {
             guard operationEpoch == operation, isGoogleTransitionCurrent(epoch) else { return }
@@ -1426,7 +1430,7 @@ final class AppModel {
             }
             operationState = .failed(
                 .driveDeletion,
-                "Moved \(trashedCount) exports to Trash; cleanup did not finish. Uploads are paused. Retry cleanup or reconnect Google to resume syncing."
+                "Moved \(trashedCount) exports to Trash, then stopped. Uploads are paused until you retry or reconnect."
             )
             await diagnostics.record(
                 .driveExportsTrashFailed(
@@ -1459,7 +1463,7 @@ final class AppModel {
             diagnosticsURL = nil
             operationState = .succeeded(
                 .localReset,
-                "Local sync history was reset. Drive files and their stable IDs were kept."
+                "Local sync state reset."
             )
             await diagnostics.record(.localReset)
         } catch {
@@ -2182,7 +2186,7 @@ final class AppModel {
             let verb = count == 1 ? "needs" : "need"
             return .failed(
                 .sync,
-                "\(subject) \(verb) attention. The local copies are safe."
+                "\(subject) \(verb) attention."
             )
         }
         if !report.failures.isEmpty {
@@ -2190,7 +2194,7 @@ final class AppModel {
             let subject = "\(count) upload" + (count == 1 ? "" : "s")
             return .failed(
                 .sync,
-                "\(subject) could not finish. The local copies are safe to retry."
+                "\(subject) failed. Try again."
             )
         }
         if summary.pendingUploadCount > 0 {
@@ -2433,12 +2437,12 @@ final class AppModel {
         case .temporarilyUnavailable:
             operationState = .failed(
                 .googleConnection,
-                "Google could not be reached yet. HealthMule will retry when the app becomes active again."
+                "Couldn't reach Google. Retries when you reopen the app."
             )
         case .authorized, .driveUnavailable:
             operationState = .failed(
                 .googleConnection,
-                "Google is authorized, but Drive folder setup still needs to finish."
+                "Drive folder setup isn't finished."
             )
         case .notConfigured, .restoring, .disconnected:
             operationState = .failed(
@@ -2451,7 +2455,7 @@ final class AppModel {
     }
 
     private static let googleReconnectMessage =
-        "Google Drive access needs approval. Reconnect in Setup; local copies are safe."
+        "Reconnect Google Drive to resume uploads."
 
     private func loadUITestState() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -2526,6 +2530,14 @@ final class AppModel {
                 retryableUploadCount: 0,
                 permanentFailureCount: 1
             )
+        } else if arguments.contains("--ui-synced") {
+            syncSummary = SyncSummary(
+                lastSuccessfulSyncAt: .now.addingTimeInterval(-2 * 60 * 60),
+                latestExportedDate: "2026-07-23",
+                pendingUploadCount: 0,
+                retryableUploadCount: 0,
+                permanentFailureCount: 0
+            )
         } else {
             syncSummary = .empty
         }
@@ -2568,7 +2580,7 @@ final class AppModel {
             )
         } else if arguments.contains("--ui-google-operation-failed") {
             setOperationState(
-                .failed(.googleConnection, "Drive could not finish setup. Try again."),
+                .failed(.googleConnection, "Drive setup failed. Try again."),
                 origin: .userInitiated
             )
         } else if arguments.contains("--ui-operation-working") {

@@ -24,10 +24,10 @@ struct HomeView: View {
             exportSection
             driveSection
             Section {
-                NavigationLink("Advanced", value: HomeRoute.advanced)
-                    .accessibilityIdentifier("advanced-link")
-            } footer: {
-                Text("No developer backend, analytics, or write access to Apple Health.")
+                NavigationLink(value: HomeRoute.advanced) {
+                    Label("Advanced", systemImage: "gearshape")
+                }
+                .accessibilityIdentifier("advanced-link")
             }
         }
         .pageStyle()
@@ -35,7 +35,9 @@ struct HomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("home-screen")
         .refreshable {
-            await model.applicationDidBecomeActive()
+            // Return at once: the launch sync can run for minutes, and the
+            // status section already shows its progress.
+            Task { await model.applicationDidBecomeActive() }
         }
     }
 
@@ -45,25 +47,30 @@ struct HomeView: View {
         HomeStatus(model: model)
     }
 
+    @ViewBuilder
     private var statusSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            HStack(spacing: 14) {
+                Image(systemName: status.symbol)
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(status.tint)
+                    .symbolEffect(.rotate, isActive: status.isWorking)
+                    .frame(width: 44)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(status.title)
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(status.isProblem ? Color.red : .primary)
                         .accessibilityIdentifier("status-title")
-                    if model.operationState.isWorking(.sync), model.syncProgress == nil {
-                        ProgressView().controlSize(.small)
+                    if let message = status.message {
+                        Text(message)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("status-message")
                     }
                 }
-                Text(status.message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("status-message")
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .accessibilityElement(children: .combine)
+            .listRowSeparator(.hidden)
 
             if let progress = model.syncProgress, progress.totalUnits > 0 {
                 SyncDayProgressView(progress: progress)
@@ -77,21 +84,28 @@ struct HomeView: View {
                 statusAction(action)
             }
 
-            if showsSyncFacts {
-                LabeledContent("Last Drive sync", value: model.syncSummary.lastSyncText)
-                    .accessibilityIdentifier("last-sync-fact")
-                LabeledContent("Data through", value: model.syncSummary.latestExportedDayText)
-                    .accessibilityIdentifier("data-through-fact")
-                LabeledContent("To upload", value: model.syncSummary.pendingUploadCount.formatted())
-                    .accessibilityIdentifier("pending-upload-count")
+        }
+        if showsSyncFacts {
+            Section {
+                LabeledContent {
+                    Text(model.syncSummary.lastSyncText)
+                } label: {
+                    Label("Last sync", systemImage: "clock")
+                }
+                .accessibilityIdentifier("last-sync-fact")
+                LabeledContent {
+                    Text(model.syncSummary.latestExportedDayText)
+                } label: {
+                    Label("Data through", systemImage: "calendar")
+                }
+                .accessibilityIdentifier("data-through-fact")
             }
         }
     }
 
     private var showsSyncFacts: Bool {
         model.initialLoadPhase == .loaded
-            && (model.syncReadiness.canSync
-                || model.syncSummary.lastSuccessfulSyncAt != nil)
+            && model.syncSummary.lastSuccessfulSyncAt != nil
     }
 
     @ViewBuilder
@@ -256,7 +270,6 @@ struct HomeView: View {
     private var exportSection: some View {
         Section {
             Picker(
-                "Start",
                 selection: Binding(
                     get: { shownRange },
                     set: { draftRange = $0 }
@@ -265,6 +278,8 @@ struct HomeView: View {
                 ForEach(BackfillRange.allCases) { range in
                     Text(range.title).tag(range)
                 }
+            } label: {
+                Label("History", systemImage: "calendar.badge.clock")
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("backfill-range-picker")
@@ -295,37 +310,30 @@ struct HomeView: View {
                     discardExportDraft()
                 }
                 .accessibilityIdentifier("backfill-discard-action")
-            } else if let applied = model.appliedBackfillStart {
-                LabeledContent(
-                    "Exporting from",
-                    value: applied.formatted(date: .abbreviated, time: .omitted)
-                )
-                .accessibilityIdentifier("backfill-applied-start")
             }
 
             NavigationLink(value: HomeRoute.metrics) {
-                LabeledContent(
-                    "Metrics",
-                    value: "\(model.enabledMetrics.count) of \(HealthMetric.allCases.count)"
-                )
+                LabeledContent {
+                    Text("\(model.enabledMetrics.count) of \(HealthMetric.allCases.count)")
+                } label: {
+                    Label("Metrics", systemImage: "heart.text.square")
+                }
             }
             .accessibilityIdentifier("metrics-link")
-        } header: {
-            Text("Export")
         } footer: {
-            Text(exportFooter)
+            if let exportFooter {
+                Text(exportFooter)
+            }
         }
     }
 
-    private var exportFooter: String {
-        guard hasExportDraft else {
-            return "Changes start a sync only after Apply."
-        }
+    private var exportFooter: String? {
+        guard hasExportDraft else { return nil }
         let start = shownRange.startDate(customDate: shownCustomStart)
             .formatted(date: .abbreviated, time: .omitted)
         return model.operationState.isWorking(.sync)
             ? "The current sync stops and a new one exports from \(start)."
-            : "HealthMule will sync from \(start)."
+            : "Exports from \(start)."
     }
 
     private func discardExportDraft() {
@@ -340,14 +348,23 @@ struct HomeView: View {
         if let account = model.googleConnection.account {
             Section("Google Drive") {
                 if let email = account.email {
-                    LabeledContent("Account", value: email)
+                    Label(email, systemImage: "person.crop.circle")
                 }
                 if case .connected(let connection) = model.googleConnection {
-                    LabeledContent("Folder", value: connection.folderName)
                     if let folderURL = connection.folderURL {
-                        Button("Open in Google Drive") {
+                        Button {
                             openURL(folderURL)
+                        } label: {
+                            LabeledContent {
+                                Image(systemName: "arrow.up.right")
+                                    .foregroundStyle(.secondary)
+                            } label: {
+                                Label(connection.folderName, systemImage: "folder")
+                            }
                         }
+                        .foregroundStyle(.primary)
+                    } else {
+                        Label(connection.folderName, systemImage: "folder")
                     }
                 }
                 disconnectButton
@@ -370,21 +387,20 @@ struct HomeView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Existing files in Google Drive will not be deleted.")
+            Text("Files in Drive stay.")
         }
     }
 }
 
-/// Shows the latest user-visible operation message unless the status already says it.
 extension View {
     /// Neutral page grays shared with healthmule.uinaf.dev.
     func pageStyle() -> some View {
-        listSectionSpacing(.compact)
-            .scrollContentBackground(.hidden)
+        scrollContentBackground(.hidden)
             .background(Color("PageBackground"))
     }
 }
 
+/// Shows the latest user-visible operation message unless the status already says it.
 struct OperationNote: View {
     let message: String
     let isFailure: Bool
