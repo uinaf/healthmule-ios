@@ -1,0 +1,75 @@
+name: Package Lock
+
+# Renovate bumps project.yml but cannot run Xcode, so it leaves Package.resolved
+# behind. This resolves the lock on macOS and commits it to the pull request.
+on:
+  pull_request:
+    paths:
+      - project.yml
+
+permissions: {}
+
+concurrency:
+  group: package-lock-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Resolve Package.resolved
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      # Commit the lock, then dispatch Verify: GITHUB_TOKEN pushes start no runs.
+      contents: write
+      actions: write
+
+    steps:
+      - name: Check out pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Resolve packages
+        run: |
+          make project
+          ./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh \
+            -resolvePackageDependencies \
+            -project HealthMule.xcodeproj \
+            -scheme HealthMule \
+            -derivedDataPath .artifacts/DerivedData
+          ./scripts/check-app-dependencies.sh
+
+      - name: Commit lock and dispatch Verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LOCK: HealthMule.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "${LOCK}"; then
+            echo "Package.resolved is current."
+            exit 0
+          fi
+          git diff -- "${LOCK}"
+          # The API signs the commit, which main's rules require.
+          # shellcheck disable=SC2016
+          jq -n \
+            --arg repo "${GITHUB_REPOSITORY}" \
+            --arg branch "${BRANCH}" \
+            --arg head "${HEAD_SHA}" \
+            --arg path "${LOCK}" \
+            --rawfile contents <(base64 < "${LOCK}" | tr -d '\n') \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {input: {
+                branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                expectedHeadOid: $head,
+                message: {headline: "deps: resolve Package.resolved"},
+                fileChanges: {additions: [{path: $path, contents: $contents}]}
+              }}
+            }' |
+            gh api graphql --input -
+          gh workflow run verify.yml --repo "${GITHUB_REPOSITORY}" --ref "${BRANCH}"

@@ -43,4 +43,6 @@ make verify-full
 ```
 
 Commit the generated project and the workspace `Package.resolved` together.
-`make verify` fails when the pin and the lock differ.
+`make verify` fails when the pin and the lock differ. On a pull request that
+changes `project.yml`, [Package Lock](.github/workflows/package-lock.yml)
+commits the resolved lock and reruns Verify.
