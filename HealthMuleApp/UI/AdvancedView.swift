@@ -89,6 +89,7 @@ struct AdvancedView: View {
                 Text("Apple Health data is never changed.")
             }
         }
+        .pageStyle()
         .navigationTitle("Advanced")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("advanced-screen")

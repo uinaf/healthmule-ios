@@ -44,6 +44,7 @@ struct MetricsView: View {
                 }
             }
         }
+        .pageStyle()
         .navigationTitle("Metrics")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("metrics-screen")

@@ -30,8 +30,9 @@ struct HomeView: View {
                 Text("No developer backend, analytics, or write access to Apple Health.")
             }
         }
-        .listSectionSpacing(.compact)
+        .pageStyle()
         .navigationTitle("HealthMule")
+        .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("home-screen")
         .refreshable {
             await model.applicationDidBecomeActive()
@@ -49,7 +50,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(status.title)
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(status.isProblem ? Color.red : .primary)
                         .accessibilityIdentifier("status-title")
                     if model.operationState.isWorking(.sync), model.syncProgress == nil {
@@ -61,7 +62,7 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("status-message")
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 6)
             .accessibilityElement(children: .combine)
 
             if let progress = model.syncProgress, progress.totalUnits > 0 {
@@ -100,7 +101,7 @@ struct HomeView: View {
             Button {
                 Task { await model.reconcile(trigger: .manual) }
             } label: {
-                Label(title, systemImage: "arrow.triangle.2.circlepath")
+                Text(title)
                     .fontWeight(.semibold)
                     .foregroundStyle(Color(uiColor: .systemBackground))
                     .frame(maxWidth: .infinity)
@@ -375,6 +376,15 @@ struct HomeView: View {
 }
 
 /// Shows the latest user-visible operation message unless the status already says it.
+extension View {
+    /// Neutral page grays shared with healthmule.uinaf.dev.
+    func pageStyle() -> some View {
+        listSectionSpacing(.compact)
+            .scrollContentBackground(.hidden)
+            .background(Color("PageBackground"))
+    }
+}
+
 struct OperationNote: View {
     let message: String
     let isFailure: Bool
