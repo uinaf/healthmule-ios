@@ -123,6 +123,7 @@ final class CompanionAppModel: NSObject {
     }
 
     private func apply(_ snapshot: CompanionSyncSnapshot) {
+        guard snapshot.supersedes(self.snapshot) else { return }
         self.snapshot = snapshot
         requestLifecycle.receive(snapshot: snapshot)
     }

@@ -14,6 +14,34 @@ private final class CompanionReply: @unchecked Sendable {
     }
 }
 
+/// Persists the snapshot revision so the Watch can drop stale deliveries
+/// across phone app launches. A reinstall gets a new publisher ID.
+private struct CompanionRevisionCounter {
+    private static let publisherIDKey = "companion.publisherID"
+    private static let sequenceKey = "companion.sequence"
+
+    let defaults: UserDefaults
+
+    func next() -> CompanionSyncSnapshot.Revision {
+        let publisherID: UUID
+        if
+            let stored = defaults.string(forKey: Self.publisherIDKey),
+            let storedID = UUID(uuidString: stored)
+        {
+            publisherID = storedID
+        } else {
+            publisherID = UUID()
+            defaults.set(publisherID.uuidString, forKey: Self.publisherIDKey)
+        }
+        let sequence = defaults.integer(forKey: Self.sequenceKey) + 1
+        defaults.set(sequence, forKey: Self.sequenceKey)
+        return CompanionSyncSnapshot.Revision(
+            publisherID: publisherID,
+            sequence: sequence
+        )
+    }
+}
+
 @MainActor
 final class PhoneWatchConnectivityCoordinator: NSObject {
     typealias SnapshotProvider =
@@ -24,6 +52,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
     private let snapshotProvider: SnapshotProvider
     private let syncRequestHandler: SyncRequestHandler
     private var publicationState = CompanionSnapshotPublicationState()
+    private let revisions = CompanionRevisionCounter(defaults: .standard)
 
     init(
         snapshotProvider: @escaping SnapshotProvider,
@@ -50,7 +79,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject {
             let snapshot = snapshotProvider(),
             publicationState.needsPublication(of: snapshot),
             let message = try? CompanionPayloadCodec.message(
-                snapshot: snapshot
+                snapshot: snapshot.revised(revisions.next())
             )
         else {
             return

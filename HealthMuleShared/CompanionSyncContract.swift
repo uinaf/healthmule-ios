@@ -27,10 +27,24 @@ public struct CompanionSyncSnapshot: Codable, Equatable, Sendable {
         case attention
     }
 
+    /// Orders snapshots from one phone install. WatchConnectivity can deliver
+    /// an older user-info transfer after a newer application context, and the
+    /// phone clock can move backward, so `generatedAt` cannot order them.
+    public struct Revision: Codable, Equatable, Sendable {
+        public let publisherID: UUID
+        public let sequence: Int
+
+        public init(publisherID: UUID, sequence: Int) {
+            self.publisherID = publisherID
+            self.sequence = sequence
+        }
+    }
+
     public static let currentSchemaVersion = 1
 
     public let schemaVersion: Int
     public let generatedAt: Date
+    public let revision: Revision?
     public let readiness: Readiness
     public let activity: Activity
     public let canRequestSync: Bool
@@ -52,9 +66,38 @@ public struct CompanionSyncSnapshot: Codable, Equatable, Sendable {
         )
     }
 
+    /// True unless both snapshots come from the same publisher and this one
+    /// is not newer. Snapshots without a revision always apply.
+    public func supersedes(_ current: CompanionSyncSnapshot?) -> Bool {
+        guard
+            let revision,
+            let currentRevision = current?.revision,
+            revision.publisherID == currentRevision.publisherID
+        else {
+            return true
+        }
+        return revision.sequence > currentRevision.sequence
+    }
+
+    public func revised(_ revision: Revision) -> CompanionSyncSnapshot {
+        CompanionSyncSnapshot(
+            schemaVersion: schemaVersion,
+            generatedAt: generatedAt,
+            revision: revision,
+            readiness: readiness,
+            activity: activity,
+            canRequestSync: canRequestSync,
+            lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+            pendingUploadCount: pendingUploadCount,
+            retryableUploadCount: retryableUploadCount,
+            permanentFailureCount: permanentFailureCount
+        )
+    }
+
     public init(
         schemaVersion: Int = currentSchemaVersion,
         generatedAt: Date,
+        revision: Revision? = nil,
         readiness: Readiness,
         activity: Activity,
         canRequestSync: Bool,
@@ -65,6 +108,7 @@ public struct CompanionSyncSnapshot: Codable, Equatable, Sendable {
     ) {
         self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
+        self.revision = revision
         self.readiness = readiness
         self.activity = activity
         self.canRequestSync = canRequestSync

@@ -42,7 +42,9 @@ final class CompanionSyncContractTests: XCTestCase {
 
     func testSnapshotJSONContainsOnlyApprovedWireKeys() throws {
         let message = try CompanionPayloadCodec.message(
-            snapshot: makeSnapshot()
+            snapshot: makeSnapshot().revised(
+                .init(publisherID: UUID(), sequence: 1)
+            )
         )
         let data = try XCTUnwrap(
             message[CompanionPayloadCodec.snapshotKey] as? Data
@@ -62,9 +64,30 @@ final class CompanionSyncContractTests: XCTestCase {
                 "permanentFailureCount",
                 "readiness",
                 "retryableUploadCount",
+                "revision",
                 "schemaVersion",
             ]
         )
+    }
+
+    func testRevisionOrdersSnapshotsFromOnePublisherOnly() {
+        let publisher = UUID()
+        let older = makeSnapshot().revised(
+            .init(publisherID: publisher, sequence: 4)
+        )
+        let newer = makeSnapshot(activity: .syncing).revised(
+            .init(publisherID: publisher, sequence: 5)
+        )
+        let reinstalled = makeSnapshot().revised(
+            .init(publisherID: UUID(), sequence: 1)
+        )
+
+        XCTAssertTrue(older.supersedes(nil))
+        XCTAssertTrue(newer.supersedes(older))
+        XCTAssertFalse(older.supersedes(newer))
+        XCTAssertFalse(newer.supersedes(newer))
+        XCTAssertTrue(reinstalled.supersedes(newer))
+        XCTAssertTrue(makeSnapshot().supersedes(newer))
     }
 
     func testSyncRequestRoundTripsAndAcknowledgementIsExplicit() throws {

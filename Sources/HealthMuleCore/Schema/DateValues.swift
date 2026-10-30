@@ -109,17 +109,12 @@ public struct ISO8601Timestamp: Codable, Hashable, Comparable, Sendable {
             wholeSeconds += 1
             nanoseconds = 0
         }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [
-            .withInternetDateTime,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone,
-        ]
-        formatter.timeZone = timeZone
-        let base = formatter.string(
-            from: Date(timeIntervalSince1970: wholeSeconds)
-        )
+        let base = Date.ISO8601FormatStyle(
+            dateSeparator: .dash,
+            timeSeparator: .colon,
+            timeZoneSeparator: .colon,
+            timeZone: timeZone
+        ).format(Date(timeIntervalSince1970: wholeSeconds))
         guard nanoseconds > 0 else {
             try self.init(rawValue: base)
             return

@@ -332,10 +332,11 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(migratedSubset, enabled)
     }
 
-    func testHistoryChangeDuringReconciliationQueuesFollowUpPass() {
+    func testSelectionChangesCoalesceIntoOneHistoryFollowUpPass() {
         var queue = SelectionReconciliationQueue()
 
         queue.beginPass()
+        queue.enqueue(.metricSelection)
         queue.enqueue(.historySelection)
 
         XCTAssertEqual(queue.followUpTrigger, .historySelection)
@@ -343,34 +344,13 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertNil(queue.followUpTrigger)
     }
 
-    func testMetricAndHistoryChangesCoalesceIntoOneHistoryFollowUpPass() {
-        var queue = SelectionReconciliationQueue()
-
-        queue.enqueue(.metricSelection)
-        queue.enqueue(.historySelection)
-
-        XCTAssertEqual(queue.followUpTrigger, .historySelection)
-    }
-
-    func testObserverFlushRequestsCoalesceWhileDrainIsActive() {
+    func testObserverFlushRequestsCoalesceIntoOneFollowUpPass() {
         var queue = ObserverFlushQueue()
 
         XCTAssertTrue(queue.request())
         XCTAssertFalse(queue.request())
         XCTAssertTrue(queue.isDraining)
         XCTAssertTrue(queue.beginPass())
-        XCTAssertFalse(queue.beginPass())
-        queue.finish()
-
-        XCTAssertFalse(queue.isDraining)
-        XCTAssertTrue(queue.request())
-    }
-
-    func testObserverFlushRequestDuringPassCreatesOneFollowUp() {
-        var queue = ObserverFlushQueue()
-
-        XCTAssertTrue(queue.request())
-        XCTAssertTrue(queue.beginPass())
         XCTAssertFalse(queue.request())
         XCTAssertFalse(queue.request())
         XCTAssertTrue(queue.beginPass())
@@ -378,6 +358,7 @@ final class AppConfigurationTests: XCTestCase {
         queue.finish()
 
         XCTAssertFalse(queue.isDraining)
+        XCTAssertTrue(queue.request())
     }
 
     func testDriveReadinessRequiresVerifiedFolder() {
@@ -402,11 +383,8 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertFalse(GoogleConnectionState.restoring.canDisconnect)
     }
 
-    func testSyncReadinessKeepsAuthorizationAndDriveSetupDistinct() {
-        let account = GoogleAccount(
-            id: "google-user",
-            email: nil
-        )
+    func testSyncReadinessKeepsStorageHealthAndDriveStatesDistinct() {
+        let account = GoogleAccount(id: "google-user", email: nil)
         let connected = GoogleConnectionState.connected(
             GoogleConnection(
                 account: account,
@@ -414,76 +392,46 @@ final class AppConfigurationTests: XCTestCase {
                 folderName: "Apple Health Sync"
             )
         )
+        let cases: [(
+            health: HealthAuthorizationState,
+            google: GoogleConnectionState,
+            localStorageAvailable: Bool,
+            expected: SyncReadiness,
+            canSync: Bool?
+        )] = [
+            (.checking, connected, true, .checkingConnections, nil),
+            (.requestCompleted, .authorized(account), true, .googleDriveSetupRequired, nil),
+            (.requestCompleted, .driveUnavailable(account), true, .googleDriveUnavailable, nil),
+            (.requestCompleted, connected, true, .ready, nil),
+            (.reviewRequired, connected, true, .healthReviewRecommended, true),
+            (
+                .statusUnavailable(previouslyRequested: true),
+                connected,
+                true,
+                .healthStatusUnavailable(canSync: true),
+                true
+            ),
+            (
+                .statusUnavailable(previouslyRequested: false),
+                connected,
+                true,
+                .healthStatusUnavailable(canSync: false),
+                false
+            ),
+            (.requestCompleted, connected, false, .localStorageUnavailable, false),
+        ]
 
-        XCTAssertEqual(
-            SyncReadiness.resolve(
-                health: .checking,
-                google: .connected(
-                    GoogleConnection(
-                        account: account,
-                        folderID: "folder-id",
-                        folderName: "Apple Health Sync"
-                    )
-                )
-            ),
-            .checkingConnections
-        )
-        XCTAssertEqual(
-            SyncReadiness.resolve(
-                health: .requestCompleted,
-                google: .authorized(account)
-            ),
-            .googleDriveSetupRequired
-        )
-        XCTAssertEqual(
-            SyncReadiness.resolve(
-                health: .requestCompleted,
-                google: .driveUnavailable(account)
-            ),
-            .googleDriveUnavailable
-        )
-        XCTAssertEqual(
-            SyncReadiness.resolve(
-                health: .requestCompleted,
-                google: .connected(
-                    GoogleConnection(
-                        account: account,
-                        folderID: "folder-id",
-                        folderName: "Apple Health Sync"
-                    )
-                )
-            ),
-            .ready
-        )
-        let reviewReadiness = SyncReadiness.resolve(
-            health: .reviewRequired,
-            google: connected
-        )
-        XCTAssertEqual(reviewReadiness, .healthReviewRecommended)
-        XCTAssertTrue(reviewReadiness.canSync)
-    }
-
-    func testSyncReadinessRequiresLocalProtectedStorage() {
-        let account = GoogleAccount(
-            id: "google-user",
-            email: nil
-        )
-        let connected = GoogleConnectionState.connected(
-            GoogleConnection(
-                account: account,
-                folderID: "folder-id",
-                folderName: "Apple Health Sync"
+        for testCase in cases {
+            let readiness = SyncReadiness.resolve(
+                health: testCase.health,
+                google: testCase.google,
+                localStorageAvailable: testCase.localStorageAvailable
             )
-        )
-
-        let readiness = SyncReadiness.resolve(
-            health: .requestCompleted,
-            google: connected,
-            localStorageAvailable: false
-        )
-
-        XCTAssertEqual(readiness, .localStorageUnavailable)
-        XCTAssertFalse(readiness.canSync)
+            XCTAssertEqual(readiness, testCase.expected)
+            if let canSync = testCase.canSync {
+                XCTAssertEqual(readiness.canSync, canSync, "\(readiness)")
+            }
+        }
     }
 
     func testHealthReviewDoesNotBlockPreviouslyReadableTypes() {
@@ -501,37 +449,6 @@ final class AppConfigurationTests: XCTestCase {
         )
         XCTAssertFalse(HealthAuthorizationState.notRequested.allowsQueries)
         XCTAssertFalse(HealthAuthorizationState.unavailable.allowsQueries)
-    }
-
-    func testHealthStatusFailurePreservesPriorQueryability() {
-        let account = GoogleAccount(id: "google-user", email: nil)
-        let connected = GoogleConnectionState.connected(
-            GoogleConnection(
-                account: account,
-                folderID: "folder-id",
-                folderName: "Apple Health Sync"
-            )
-        )
-
-        let previouslyRequested = SyncReadiness.resolve(
-            health: .statusUnavailable(previouslyRequested: true),
-            google: connected
-        )
-        let neverRequested = SyncReadiness.resolve(
-            health: .statusUnavailable(previouslyRequested: false),
-            google: connected
-        )
-
-        XCTAssertEqual(
-            previouslyRequested,
-            .healthStatusUnavailable(canSync: true)
-        )
-        XCTAssertTrue(previouslyRequested.canSync)
-        XCTAssertEqual(
-            neverRequested,
-            .healthStatusUnavailable(canSync: false)
-        )
-        XCTAssertFalse(neverRequested.canSync)
     }
 
     @MainActor
@@ -631,83 +548,56 @@ final class AppConfigurationTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingSummaryDoesNotBecomeSuccessfulSyncState() {
-        let summary = SyncSummary(
-            lastSuccessfulSyncAt: nil,
-            latestExportedDate: "2026-07-23",
-            pendingUploadCount: 2,
-            retryableUploadCount: 2,
-            permanentFailureCount: 0
-        )
-
-        let state = AppModel.syncCompletionState(
+    func testSyncCompletionWarnsForPendingAndFailsForPermanentUploads() {
+        let pending = AppModel.syncCompletionState(
             report: SyncReport(),
-            summary: summary
+            summary: SyncSummary(
+                lastSuccessfulSyncAt: nil,
+                latestExportedDate: "2026-07-23",
+                pendingUploadCount: 2,
+                retryableUploadCount: 2,
+                permanentFailureCount: 0
+            )
+        )
+        let blocked = AppModel.syncCompletionState(
+            report: SyncReport(),
+            summary: SyncSummary(
+                lastSuccessfulSyncAt: nil,
+                latestExportedDate: "2026-07-23",
+                pendingUploadCount: 1,
+                retryableUploadCount: 0,
+                permanentFailureCount: 1
+            )
         )
 
-        XCTAssertTrue(state.isWarning(.sync))
-        XCTAssertFalse(state.isFailure(.sync))
+        XCTAssertTrue(pending.isWarning(.sync))
+        XCTAssertFalse(pending.isFailure(.sync))
+        XCTAssertTrue(blocked.isFailure(.sync))
+        XCTAssertFalse(blocked.isWarning(.sync))
     }
 
     @MainActor
-    func testPermanentFailureSummaryBecomesFailedSyncState() {
-        let summary = SyncSummary(
-            lastSuccessfulSyncAt: nil,
-            latestExportedDate: "2026-07-23",
-            pendingUploadCount: 1,
-            retryableUploadCount: 0,
-            permanentFailureCount: 1
+    func testObserverCompletionReplacesOnlyAStaleSyncBanner() {
+        let upToDate = OperationState.succeeded(
+            .sync,
+            "Everything is up to date."
         )
+        let cases: [(current: OperationState, expected: OperationState?)] = [
+            (.failed(.sync, "An older upload failed."), upToDate),
+            (.succeeded(.diagnostics, "Diagnostics are ready to share."), nil),
+            (upToDate, nil),
+        ]
 
-        let state = AppModel.syncCompletionState(
-            report: SyncReport(),
-            summary: summary
-        )
-
-        XCTAssertTrue(state.isFailure(.sync))
-        XCTAssertFalse(state.isWarning(.sync))
-    }
-
-    @MainActor
-    func testObserverCompletionReplacesStaleSyncBanner() {
-        let state = AppModel.observerSyncCompletionState(
-            replacing: .failed(.sync, "An older upload failed."),
-            report: SyncReport(),
-            summary: .empty
-        )
-
-        XCTAssertEqual(
-            state,
-            .succeeded(.sync, "Everything is up to date.")
-        )
-    }
-
-    @MainActor
-    func testObserverCompletionPreservesUnrelatedOperationBanner() {
-        let state = AppModel.observerSyncCompletionState(
-            replacing: .succeeded(
-                .diagnostics,
-                "Diagnostics are ready to share."
-            ),
-            report: SyncReport(),
-            summary: .empty
-        )
-
-        XCTAssertNil(state)
-    }
-
-    @MainActor
-    func testObserverCompletionDoesNotRepublishIdenticalSyncBanner() {
-        let state = AppModel.observerSyncCompletionState(
-            replacing: .succeeded(
-                .sync,
-                "Everything is up to date."
-            ),
-            report: SyncReport(),
-            summary: .empty
-        )
-
-        XCTAssertNil(state)
+        for testCase in cases {
+            XCTAssertEqual(
+                AppModel.observerSyncCompletionState(
+                    replacing: testCase.current,
+                    report: SyncReport(),
+                    summary: .empty
+                ),
+                testCase.expected
+            )
+        }
     }
 
     @MainActor
@@ -824,56 +714,52 @@ final class AppConfigurationTests: XCTestCase {
         }
     }
 
-    func testPlaceholderGoogleConfigurationIsNotReady() {
-        let configuration = GoogleOAuthConfiguration(
-            clientID: "",
-            redirectScheme: "dev.uinaf.healthmule.oauth.unconfigured"
-        )
-
-        XCTAssertFalse(configuration.isConfigured)
-    }
-
-    func testGoogleConfigurationRequiresExactReversedClientIDScheme() {
+    func testGoogleConfigurationRequiresClientIDAndExactReversedScheme() {
         let clientPrefix = "123456789-example-client"
         let clientID = clientPrefix + ".apps.googleusercontent.com"
-        let configuration = GoogleOAuthConfiguration(
-            clientID: clientID,
-            redirectScheme: "com.googleusercontent.apps." + clientPrefix
-        )
-        let mismatchedConfiguration = GoogleOAuthConfiguration(
-            clientID: clientID,
-            redirectScheme: "com.googleusercontent.apps.987654321-other-client"
-        )
 
-        XCTAssertTrue(configuration.isConfigured)
-        XCTAssertFalse(mismatchedConfiguration.isConfigured)
+        XCTAssertFalse(
+            GoogleOAuthConfiguration(
+                clientID: "",
+                redirectScheme: "dev.uinaf.healthmule.oauth.unconfigured"
+            ).isConfigured
+        )
+        XCTAssertTrue(
+            GoogleOAuthConfiguration(
+                clientID: clientID,
+                redirectScheme: "com.googleusercontent.apps." + clientPrefix
+            ).isConfigured
+        )
+        XCTAssertFalse(
+            GoogleOAuthConfiguration(
+                clientID: clientID,
+                redirectScheme: "com.googleusercontent.apps.987654321-other-client"
+            ).isConfigured
+        )
     }
 
-    func testRevokedRefreshGrantRequiresReauthorization() {
-        let error = NSError(
+    func testRefreshErrorSeparatesRevokedGrantFromNetworkFailure() {
+        let revoked = NSError(
             domain: "org.openid.appauth.oauth_token",
             code: -10
         )
-
-        XCTAssertEqual(
-            GoogleAuthService.refreshError(for: error),
-            .reauthorizationRequired
-        )
-    }
-
-    func testRefreshNetworkFailureRemainsRetryable() {
-        let networkError = NSError(
-            domain: NSURLErrorDomain,
-            code: URLError.notConnectedToInternet.rawValue
-        )
-        let error = NSError(
+        let offline = NSError(
             domain: "org.openid.appauth.general",
             code: -5,
-            userInfo: [NSUnderlyingErrorKey: networkError]
+            userInfo: [
+                NSUnderlyingErrorKey: NSError(
+                    domain: NSURLErrorDomain,
+                    code: URLError.notConnectedToInternet.rawValue
+                ),
+            ]
         )
 
         XCTAssertEqual(
-            GoogleAuthService.refreshError(for: error),
+            GoogleAuthService.refreshError(for: revoked),
+            .reauthorizationRequired
+        )
+        XCTAssertEqual(
+            GoogleAuthService.refreshError(for: offline),
             .refreshTemporarilyUnavailable
         )
     }

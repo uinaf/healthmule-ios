@@ -8,42 +8,24 @@ struct FileSyncStoreTests {
     func dailyDateIndexDoesNotReadArtifactContents() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = try FileSyncStore(rootDirectory: directory)
         let record = try makeRecord()
+        let staging = try FileSyncStore(rootDirectory: directory)
+        _ = try await staging.stageDaily(record)
+        let recovered = try FileSyncStore(rootDirectory: directory)
+        try await recovered.recover()
 
-        _ = try await store.stageDaily(record)
         try FileManager.default.removeItem(
             at: directory.appendingPathComponent(
                 "daily/\(record.date.rawValue).json"
             )
         )
 
-        #expect(try await store.allDailyDates() == [record.date])
-        let cached = try await store.allDailyRecords()
-        #expect(cached.map(\.date) == [record.date])
-        #expect(cached.first?.metrics.steps == record.metrics.steps)
-    }
-
-    @Test
-    func recoverCachesDailyRecordsWithoutRereadingFiles() async throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let original = try FileSyncStore(rootDirectory: directory)
-        let record = try makeRecord()
-        _ = try await original.stageDaily(record)
-
-        let store = try FileSyncStore(rootDirectory: directory)
-        try await store.recover()
-        try FileManager.default.removeItem(
-            at: directory.appendingPathComponent(
-                "daily/\(record.date.rawValue).json"
-            )
-        )
-
-        #expect(try await store.allDailyDates() == [record.date])
-        let cached = try await store.allDailyRecords()
-        #expect(cached.map(\.date) == [record.date])
-        #expect(cached.first?.metrics.steps == record.metrics.steps)
+        for store in [staging, recovered] {
+            #expect(try await store.allDailyDates() == [record.date])
+            let cached = try await store.allDailyRecords()
+            #expect(cached.map(\.date) == [record.date])
+            #expect(cached.first?.metrics.steps == record.metrics.steps)
+        }
     }
 
     @Test
@@ -138,18 +120,9 @@ struct FileSyncStoreTests {
         let store = try FileSyncStore(rootDirectory: directory)
         var original = try makeRecord()
         original.workouts = [
-            WorkoutRecord(
-                id: "workout-1",
-                type: "running",
-                startedAt: try ISO8601Timestamp(
-                    rawValue: "2026-07-23T10:00:00+03:00"
-                ),
-                endedAt: try ISO8601Timestamp(
-                    rawValue: "2026-07-23T11:00:00+03:00"
-                ),
-                durationMinutes: 60,
-                activeEnergyKcal: nil,
-                distanceMeters: nil
+            try hourLongRun(
+                from: "2026-07-23T10:00:00+03:00",
+                to: "2026-07-23T11:00:00+03:00"
             )
         ]
         original.totals.workoutMinutes = 60
@@ -159,18 +132,9 @@ struct FileSyncStoreTests {
             steps: 11
         )
         traveler.workouts = [
-            WorkoutRecord(
-                id: "workout-1",
-                type: "running",
-                startedAt: try ISO8601Timestamp(
-                    rawValue: "2026-07-23T03:00:00-04:00"
-                ),
-                endedAt: try ISO8601Timestamp(
-                    rawValue: "2026-07-23T04:00:00-04:00"
-                ),
-                durationMinutes: 60,
-                activeEnergyKcal: nil,
-                distanceMeters: nil
+            try hourLongRun(
+                from: "2026-07-23T03:00:00-04:00",
+                to: "2026-07-23T04:00:00-04:00"
             )
         ]
         traveler.totals.workoutMinutes = 60
@@ -198,18 +162,9 @@ struct FileSyncStoreTests {
         let store = try FileSyncStore(rootDirectory: directory)
         var original = try makeRecord()
         original.workouts = [
-            WorkoutRecord(
-                id: "workout-1",
-                type: "running",
-                startedAt: try ISO8601Timestamp(
-                    rawValue: "2026-07-23T10:00:00+03:00"
-                ),
-                endedAt: try ISO8601Timestamp(
-                    rawValue: "2026-07-23T11:00:00+03:00"
-                ),
-                durationMinutes: 60,
-                activeEnergyKcal: nil,
-                distanceMeters: nil
+            try hourLongRun(
+                from: "2026-07-23T10:00:00+03:00",
+                to: "2026-07-23T11:00:00+03:00"
             )
         ]
         original.totals.workoutMinutes = 60
@@ -978,16 +933,6 @@ struct FileSyncStoreTests {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let record = try makeRecord()
-        let contents = try DailyHealthRecordCodec.encode(record)
-        let semanticData = try DailyHealthRecordCodec.semanticData(for: record)
-        try FileManager.default.createDirectory(
-            at: directory.appendingPathComponent("daily", isDirectory: true),
-            withIntermediateDirectories: true
-        )
-        try contents.write(
-            to: directory.appendingPathComponent("daily/2026-07-23.json"),
-            options: [.atomic]
-        )
         let retryItem = RetryQueueItem(
             artifactID: .daily(record.date),
             revision: 4,
@@ -996,20 +941,12 @@ struct FileSyncStoreTests {
             blockReason: .reauthorizationRequired,
             lastErrorCode: "401"
         )
-        let v1Data = try CanonicalJSON.encode(
-            LegacyV1State(
-                artifacts: [
-                    ExportArtifactID.daily(record.date).key: LegacyV1Artifact(
-                        id: .daily(record.date),
-                        localRevision: 4,
-                        uploadedRevision: 2,
-                        semanticData: semanticData,
-                        contentData: contents
-                    )
-                ],
-                retryQueue: [retryItem],
-                manifestNeedsRefresh: false
-            )
+        let v1Data = try legacyV1State(
+            for: record,
+            in: directory,
+            localRevision: 4,
+            uploadedRevision: 2,
+            retryQueue: [retryItem]
         )
         try v1Data.write(
             to: directory.appendingPathComponent("sync-state.json"),
@@ -1047,30 +984,11 @@ struct FileSyncStoreTests {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let record = try makeRecord()
-        let contents = try DailyHealthRecordCodec.encode(record)
-        let semanticData = try DailyHealthRecordCodec.semanticData(for: record)
-        try FileManager.default.createDirectory(
-            at: directory.appendingPathComponent("daily", isDirectory: true),
-            withIntermediateDirectories: true
-        )
-        try contents.write(
-            to: directory.appendingPathComponent("daily/2026-07-23.json"),
-            options: [.atomic]
-        )
-        let v1Data = try CanonicalJSON.encode(
-            LegacyV1State(
-                artifacts: [
-                    ExportArtifactID.daily(record.date).key: LegacyV1Artifact(
-                        id: .daily(record.date),
-                        localRevision: 2,
-                        uploadedRevision: 2,
-                        semanticData: semanticData,
-                        contentData: contents
-                    )
-                ],
-                retryQueue: [],
-                manifestNeedsRefresh: false
-            )
+        let v1Data = try legacyV1State(
+            for: record,
+            in: directory,
+            localRevision: 2,
+            uploadedRevision: 2
         )
         try v1Data.write(
             to: directory.appendingPathComponent("sync-state.json"),
@@ -1101,30 +1019,11 @@ struct FileSyncStoreTests {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let record = try makeRecord()
-        let contents = try DailyHealthRecordCodec.encode(record)
-        let semanticData = try DailyHealthRecordCodec.semanticData(for: record)
-        try FileManager.default.createDirectory(
-            at: directory.appendingPathComponent("daily", isDirectory: true),
-            withIntermediateDirectories: true
-        )
-        try contents.write(
-            to: directory.appendingPathComponent("daily/2026-07-23.json"),
-            options: [.atomic]
-        )
-        let v1Data = try CanonicalJSON.encode(
-            LegacyV1State(
-                artifacts: [
-                    ExportArtifactID.daily(record.date).key: LegacyV1Artifact(
-                        id: .daily(record.date),
-                        localRevision: 5,
-                        uploadedRevision: 5,
-                        semanticData: semanticData,
-                        contentData: contents
-                    )
-                ],
-                retryQueue: [],
-                manifestNeedsRefresh: false
-            )
+        let v1Data = try legacyV1State(
+            for: record,
+            in: directory,
+            localRevision: 5,
+            uploadedRevision: 5
         )
         try v1Data.write(
             to: directory.appendingPathComponent("sync-state.v1.json"),
@@ -1173,6 +1072,54 @@ private struct LegacyV1State: Codable {
     var artifacts: [String: LegacyV1Artifact]
     var retryQueue: [RetryQueueItem]
     var manifestNeedsRefresh: Bool
+}
+
+private func legacyV1State(
+    for record: DailyHealthRecord,
+    in directory: URL,
+    localRevision: Int,
+    uploadedRevision: Int,
+    retryQueue: [RetryQueueItem] = []
+) throws -> Data {
+    let contents = try DailyHealthRecordCodec.encode(record)
+    try FileManager.default.createDirectory(
+        at: directory.appendingPathComponent("daily", isDirectory: true),
+        withIntermediateDirectories: true
+    )
+    try contents.write(
+        to: directory.appendingPathComponent("daily/\(record.date.rawValue).json"),
+        options: [.atomic]
+    )
+    return try CanonicalJSON.encode(
+        LegacyV1State(
+            artifacts: [
+                ExportArtifactID.daily(record.date).key: LegacyV1Artifact(
+                    id: .daily(record.date),
+                    localRevision: localRevision,
+                    uploadedRevision: uploadedRevision,
+                    semanticData: try DailyHealthRecordCodec.semanticData(for: record),
+                    contentData: contents
+                )
+            ],
+            retryQueue: retryQueue,
+            manifestNeedsRefresh: false
+        )
+    )
+}
+
+private func hourLongRun(
+    from start: String,
+    to end: String
+) throws -> WorkoutRecord {
+    WorkoutRecord(
+        id: "workout-1",
+        type: "running",
+        startedAt: try ISO8601Timestamp(rawValue: start),
+        endedAt: try ISO8601Timestamp(rawValue: end),
+        durationMinutes: 60,
+        activeEnergyKcal: nil,
+        distanceMeters: nil
+    )
 }
 
 private func makeTestManifest(
