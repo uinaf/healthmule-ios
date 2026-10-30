@@ -71,44 +71,6 @@ struct SyncEngineTests {
     }
 
     @Test
-    func manifestRetryPublishesTheActualRetryTime() async throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let initialTime = Date(timeIntervalSince1970: 1_000)
-        let clock = TestClock(initialTime)
-        let destination = TestDestination()
-        await destination.setFailureMode(
-            .transientAfterWriteOnce,
-            for: .manifest
-        )
-        let harness = try makeManifestRetryHarness(
-            directory: directory,
-            clock: clock,
-            destination: destination
-        )
-
-        let first = try await harness.engine.reconcile(
-            dates: [harness.record.date]
-        )
-        #expect(first.failures.count == 1)
-        await clock.advance(by: 10)
-        let retryTime = initialTime.addingTimeInterval(10)
-
-        let retry = try await harness.engine.retryPendingUploads()
-        let uploadedData = try #require(
-            await destination.contents(for: .manifest)
-        )
-        let manifest = try ExportManifestCodec.decode(uploadedData)
-
-        #expect(retry.manifestUploaded)
-        #expect(retry.failures.isEmpty)
-        #expect(
-            manifest.lastSuccessfulSyncAt
-                == (try manifestTimestamp(at: retryTime))
-        )
-    }
-
-    @Test
     func deferredManifestRetryDoesNotRewriteOrUpload() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

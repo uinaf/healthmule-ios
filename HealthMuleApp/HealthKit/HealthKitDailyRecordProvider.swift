@@ -458,23 +458,28 @@ private extension HealthKitClient {
         start: Date,
         end: Date
     ) async throws -> [HKSample] {
-        var result: [HKSample] = []
-        for metric in HealthSourceSamplePlanner.directMetrics(
+        let types = HealthSourceSamplePlanner.directMetrics(
             from: enabledMetrics
-        ) {
-            guard let type = metric.sampleType else { continue }
-            let predicate = HKQuery.predicateForSamples(
-                withStart: start,
-                end: end,
-                options: [.strictStartDate]
-            )
-            let values: [HKSample] = try await samples(
-                type: type,
-                predicate: predicate
-            )
-            result.append(contentsOf: values)
+        ).compactMap(\.sampleType)
+        return try await withThrowingTaskGroup(of: [HKSample].self) { group in
+            for type in types {
+                group.addTask {
+                    try await self.samples(
+                        type: type,
+                        predicate: HKQuery.predicateForSamples(
+                            withStart: start,
+                            end: end,
+                            options: [.strictStartDate]
+                        )
+                    )
+                }
+            }
+            var result: [HKSample] = []
+            for try await values in group {
+                result += values
+            }
+            return result
         }
-        return result
     }
 
     func samples<Sample: HKSample>(
