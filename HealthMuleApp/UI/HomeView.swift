@@ -50,15 +50,12 @@ struct HomeView: View {
     @ViewBuilder
     private var statusSection: some View {
         Section {
-            HStack(spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: status.symbol)
-                    .font(.system(size: 34, weight: .medium))
                     .foregroundStyle(status.tint)
                     .symbolEffect(.rotate, isActive: status.isWorking)
-                    .frame(width: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(status.title)
-                        .font(.title3.weight(.semibold))
                         .accessibilityIdentifier("status-title")
                     if let message = status.message {
                         Text(message)
@@ -68,7 +65,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.vertical, 8)
+            .font(.headline)
             .accessibilityElement(children: .combine)
             .listRowSeparator(.hidden)
 
