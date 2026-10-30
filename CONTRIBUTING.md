@@ -39,8 +39,8 @@ changing it, run:
 ```sh
 make project
 ./scripts/with-xcode-lock.sh ./scripts/xcodebuild.sh -resolvePackageDependencies -project HealthMule.xcodeproj -scheme HealthMule -derivedDataPath .artifacts/DerivedData
-./scripts/check-app-dependencies.sh
 make verify-full
 ```
 
 Commit the generated project and the workspace `Package.resolved` together.
+`make verify` fails when the pin and the lock differ.
