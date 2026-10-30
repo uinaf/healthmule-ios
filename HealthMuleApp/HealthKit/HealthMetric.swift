@@ -37,6 +37,20 @@ enum HealthMetric: String, CaseIterable, Codable, Hashable, Identifiable, Sendab
         }
     }
 
+    var symbol: String {
+        switch self {
+        case .bodyMass: "scalemass"
+        case .stepCount: "figure.walk"
+        case .activeEnergy: "flame"
+        case .restingEnergy: "bolt.heart"
+        case .restingHeartRate: "heart"
+        case .hrvSDNN: "waveform.path.ecg"
+        case .vo2Max: "lungs"
+        case .sleep: "bed.double"
+        case .workouts: "figure.run"
+        }
+    }
+
     var explanation: String {
         switch self {
         case .bodyMass:

@@ -16,19 +16,19 @@ struct MetricsView: View {
                         get: { shownMetrics.contains(status.metric) },
                         set: { setDraft(status.metric, enabled: $0) }
                     )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(status.metric.title)
-                            Text(detail(for: status.state))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(status.metric.title)
+                                Text(detail(for: status.state))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: status.metric.symbol)
                         }
                     }
                     .accessibilityIdentifier("metric-toggle-\(status.metric.rawValue)")
                 }
-            } footer: {
-                Text(
-                    "Readable means Apple Health showed HealthMule at least one sample. Apple does not reveal denied read access."
-                )
             }
 
             if let draftMetrics {
@@ -39,12 +39,12 @@ struct MetricsView: View {
                     }
                     .disabled(model.blocksSettingsChanges)
                     .accessibilityIdentifier("metrics-apply-action")
-                    Button("Discard Changes", role: .cancel) {
+                    Button("Cancel", role: .cancel) {
                         self.draftMetrics = nil
                     }
                     .accessibilityIdentifier("metrics-discard-action")
                 } footer: {
-                    Text("Turned-off metrics are cleared from existing daily records.")
+                    Text("Turned-off metrics are removed from past days.")
                 }
             }
         }

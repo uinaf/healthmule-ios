@@ -9,8 +9,9 @@ final class HealthMuleUITests: XCTestCase {
         XCTAssertTrue(element("home-screen", in: app).exists)
         XCTAssertFalse(app.tabBars.firstMatch.exists)
 
+        app.buttons["settings-link"].firstMatch.tap()
         let advanced = element("advanced-link", in: app)
-        scrollTo(advanced, in: app)
+        XCTAssertTrue(advanced.waitForExistence(timeout: 5))
         advanced.tap()
         XCTAssertTrue(element("advanced-screen", in: app).waitForExistence(timeout: 5))
     }
@@ -85,13 +86,11 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
-    func testLoadedHomeKeepsEmptySyncSummaryVisible() throws {
+    func testHomeHidesSyncFactsBeforeFirstSync() throws {
         let app = launch(additionalArguments: ["--ui-ready"])
 
-        XCTAssertTrue(element("last-sync-fact", in: app).waitForExistence(timeout: 10))
-        XCTAssertTrue(value(of: "last-sync-fact", in: app).contains("Never"))
-        XCTAssertTrue(value(of: "data-through-fact", in: app).contains("None"))
-        XCTAssertTrue(value(of: "pending-upload-count", in: app).contains("0"))
+        XCTAssertTrue(element("sync-now-action", in: app).waitForExistence(timeout: 10))
+        XCTAssertFalse(element("last-sync-fact", in: app).exists)
     }
 
     @MainActor
@@ -101,9 +100,9 @@ final class HealthMuleUITests: XCTestCase {
             "--ui-operation-failed-automatic",
         ])
         XCTAssertTrue(
-            automatic.staticTexts["Ready for the first sync"].waitForExistence(timeout: 10)
+            automatic.staticTexts["Ready to sync"].waitForExistence(timeout: 10)
         )
-        XCTAssertFalse(automatic.staticTexts["Sync needs another look"].exists)
+        XCTAssertFalse(automatic.staticTexts["Sync failed"].exists)
         XCTAssertEqual(element("sync-now-action", in: automatic).label, "Sync Now")
         automatic.terminate()
 
@@ -112,17 +111,17 @@ final class HealthMuleUITests: XCTestCase {
             "--ui-operation-failed-user",
         ])
         XCTAssertTrue(
-            user.staticTexts["Sync needs another look"].waitForExistence(timeout: 10)
+            user.staticTexts["Sync failed"].waitForExistence(timeout: 10)
         )
         XCTAssertTrue(user.staticTexts["Manual sync failed."].exists)
-        XCTAssertEqual(element("sync-now-action", in: user).label, "Try Sync Again")
+        XCTAssertEqual(element("sync-now-action", in: user).label, "Try Again")
     }
 
     @MainActor
     func testDriveRetryShowsProgressAndFailure() throws {
         for (flag, message, isWorking) in [
             ("--ui-google-operation-working", "Checking Drive folder…", true),
-            ("--ui-google-operation-failed", "Drive could not finish setup. Try again.", false),
+            ("--ui-google-operation-failed", "Drive setup failed. Try again.", false),
         ] {
             let app = launch(additionalArguments: [
                 "--ui-health-request-complete",
@@ -142,7 +141,7 @@ final class HealthMuleUITests: XCTestCase {
 
     @MainActor
     func testHistorySelectionStaysEditableAndNeedsApplyDuringSync() throws {
-        let app = launch(additionalArguments: ["--ui-ready", "--ui-operation-working"])
+        let app = launch(additionalArguments: ["--ui-ready", "--ui-operation-working", "--ui-show-settings"])
         let picker = element("backfill-range-picker", in: app)
 
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
@@ -187,8 +186,8 @@ final class HealthMuleUITests: XCTestCase {
     @MainActor
     func testUnavailableGoogleOffersDisconnectWithoutDriveDeletion() throws {
         for state in ["--ui-google-unavailable", "--ui-google-reconnect"] {
-            let app = launch(additionalArguments: [state])
-            XCTAssertTrue(element("home-screen", in: app).waitForExistence(timeout: 10))
+            let app = launch(additionalArguments: [state, "--ui-show-settings"])
+            XCTAssertTrue(element("settings-screen", in: app).waitForExistence(timeout: 10))
             scrollTo(app.buttons["Disconnect Google"], in: app)
             app.terminate()
 
@@ -202,7 +201,7 @@ final class HealthMuleUITests: XCTestCase {
 
     @MainActor
     func testDestructiveActionsUseCancellableAlerts() throws {
-        let home = launch(additionalArguments: ["--ui-ready"])
+        let home = launch(additionalArguments: ["--ui-ready", "--ui-show-settings"])
         confirmAlertCancels(
             action: "Disconnect Google",
             title: "Disconnect Google?",
@@ -221,6 +220,19 @@ final class HealthMuleUITests: XCTestCase {
     }
 
     @MainActor
+    func testFailedHealthCheckKeepsGoogleRecoveryReachable() throws {
+        for (google, recovery) in [
+            ("--ui-google-reconnect", "Reconnect Google Drive"),
+            ("--ui-google-drive-unavailable", "google-retry-action"),
+        ] {
+            let app = launch(additionalArguments: ["--ui-health-status-failed", google])
+            XCTAssertTrue(element("health-check-again-action", in: app).waitForExistence(timeout: 10))
+            XCTAssertTrue(element(recovery, in: app).exists || app.buttons[recovery].exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testHealthReviewRemainsSyncable() throws {
         let app = launch(additionalArguments: [
             "--ui-health-review",
@@ -228,7 +240,7 @@ final class HealthMuleUITests: XCTestCase {
         ])
 
         XCTAssertTrue(
-            app.staticTexts["Apple Health access needs review"].waitForExistence(timeout: 10)
+            app.staticTexts["Review Apple Health access"].waitForExistence(timeout: 10)
         )
         XCTAssertTrue(element("sync-now-action", in: app).isEnabled)
         XCTAssertTrue(element("health-authorization-action", in: app).exists)
@@ -268,8 +280,8 @@ final class HealthMuleUITests: XCTestCase {
 
         let empty = launch(additionalArguments: ["--ui-ready", "--ui-show-advanced"])
         XCTAssertTrue(element("automatic-activity-latest", in: empty).waitForExistence(timeout: 10))
-        XCTAssertTrue(value(of: "automatic-activity-latest", in: empty).contains("Never observed"))
-        XCTAssertTrue(value(of: "automatic-activity-schedule", in: empty).contains("Never requested"))
+        XCTAssertTrue(value(of: "automatic-activity-latest", in: empty).contains("None"))
+        XCTAssertTrue(value(of: "automatic-activity-schedule", in: empty).contains("None"))
     }
 
     @MainActor
@@ -282,7 +294,12 @@ final class HealthMuleUITests: XCTestCase {
             ("05-blocked-upload", ["--ui-ready", "--ui-permanent-failure"]),
             ("06-metrics", ["--ui-ready", "--ui-show-metrics", "--ui-health-readable"]),
             ("07-advanced", ["--ui-ready", "--ui-show-advanced", "--ui-activity-success"]),
-            ("08-home-dark", ["--ui-ready", "--ui-dark-mode"]),
+            ("08-home-dark", ["--ui-ready", "--ui-synced", "--ui-dark-mode"]),
+            ("12-setup-dark", ["--ui-dark-mode"]),
+            ("13-syncing-dark", ["--ui-ready", "--ui-operation-working", "--ui-sync-progress", "--ui-dark-mode"]),
+            ("14-settings-dark", ["--ui-ready", "--ui-show-settings", "--ui-dark-mode"]),
+            ("10-home-synced", ["--ui-ready", "--ui-synced"]),
+            ("11-settings", ["--ui-ready", "--ui-show-settings"]),
             ("09-home-accessibility-text", ["--ui-ready", "--ui-accessibility-text"]),
         ]
         for (name, arguments) in states {

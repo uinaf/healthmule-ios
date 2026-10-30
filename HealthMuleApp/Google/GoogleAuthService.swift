@@ -16,19 +16,19 @@ enum GoogleAuthError: LocalizedError, Equatable, Sendable {
         case .configurationMissing:
             "Google OAuth is not configured yet."
         case .presenterUnavailable:
-            "Google Sign-In could not find a window to present from."
+            "Google Sign-In couldn't open."
         case .signedOut:
             "Connect Google before syncing."
         case .scopeNotGranted:
-            "Google Drive access was not granted. Reconnect and allow file access."
+            "Allow Drive file access when you reconnect."
         case .identityUnavailable:
-            "Google account identity could not be verified. Reconnect your account."
+            "Couldn't verify the Google account. Reconnect."
         case .accountChanged:
-            "The active Google account changed. The upload will be retried for the current account."
+            "Google account changed. Retrying with the new account."
         case .reauthorizationRequired:
-            "Google Drive access needs approval. Reconnect your account."
+            "Reconnect Google Drive."
         case .refreshTemporarilyUnavailable:
-            "Google authorization could not be refreshed yet. The upload will be retried."
+            "Couldn't refresh Google sign-in. Retrying."
         }
     }
 }

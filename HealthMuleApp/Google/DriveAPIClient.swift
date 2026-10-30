@@ -52,17 +52,17 @@ enum DriveAPIError: LocalizedError, Sendable {
         case .invalidResponse:
             "Google Drive returned an invalid response."
         case .reauthorizationRequired:
-            "Google Drive access needs approval. Reconnect your account."
+            "Reconnect Google Drive."
         case .authenticationUnavailable:
-            "Google authorization could not be refreshed yet. The upload will be retried."
+            "Couldn't refresh Google sign-in. Retrying."
         case .accountNotReady:
-            "Google Drive is not ready for the active account. The upload will be retried."
+            "Drive isn't ready. Retrying."
         case .destinationChanged:
-            "The managed Google Drive folders changed. Sync state will be refreshed before uploading."
+            "The Drive folders changed. Refreshing before upload."
         case .remote(let status, let reason, _):
             "Google Drive request failed (\(status)\(reason.map { ": \($0)" } ?? ""))."
         case .transport:
-            "Google Drive could not be reached. The upload will be retried."
+            "Couldn't reach Google Drive. Retrying."
         }
     }
 
@@ -87,7 +87,7 @@ struct DriveExportTrashFailure: LocalizedError {
     let underlying: any Error
 
     var errorDescription: String? {
-        "Moved \(trashedCount) exports to Trash, but could not finish. Some exports may remain."
+        "Moved \(trashedCount) exports to Trash, then stopped. Some remain."
     }
 }
 
