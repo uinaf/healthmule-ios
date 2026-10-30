@@ -1043,7 +1043,7 @@ final class AppModel {
             await diagnostics.record(
                 .syncFinished(
                     durationMilliseconds: Int(
-                        duration.components.seconds * 1_000
+                        duration / .milliseconds(1)
                     ),
                     failureCount: outcome.report.failures.count,
                     pendingCount: syncSummary.pendingUploadCount,
@@ -2273,10 +2273,7 @@ final class AppModel {
         expectedEpoch: UInt64
     ) async -> Bool {
         guard report.failures.contains(where: {
-            [
-                "drive_401",
-                "drive_reauthorization_required",
-            ].contains($0.code)
+            $0.code == "drive_reauthorization_required"
         }) else {
             return false
         }
