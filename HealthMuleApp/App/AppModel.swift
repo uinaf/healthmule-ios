@@ -21,7 +21,6 @@ private struct SyncActivityResult: Equatable, Sendable {
 @MainActor
 @Observable
 final class AppModel {
-    var selectedTab: AppTab = .home
     private(set) var initialLoadPhase: InitialLoadPhase = .loading
     private var syncProgressState = SyncProgressState()
     var syncProgress: SyncProgress? {
@@ -2463,7 +2462,6 @@ final class AppModel {
             id: "ui-test-account",
             email: "person@example.com"
         )
-        selectedTab = .home
         if arguments.contains("--ui-ready")
             || arguments.contains("--ui-google-connected")
         {

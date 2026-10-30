@@ -2,128 +2,76 @@ import SwiftUI
 
 struct MetricsView: View {
     @Bindable var model: AppModel
+    @State private var draftMetrics: Set<HealthMetric>?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: HealthMuleStyle.sectionSpacing) {
-                authorizationNote
+        Form {
+            if let note = OperationNote(state: model.presentedOperationState, includesSync: true) {
+                Section { note }
+            }
 
-                VStack(spacing: 8) {
-                    SectionHeading(title: "Included metrics")
-
-                    VStack(spacing: 0) {
-                        ForEach(Array(model.metricStatuses.enumerated()), id: \.element.id) { index, status in
-                            MetricStatusRow(status: status)
-                                .padding(16)
-
-                            if index < model.metricStatuses.count - 1 {
-                                Divider()
-                                    .padding(.leading, 56)
-                            }
+            Section {
+                ForEach(model.metricStatuses) { status in
+                    Toggle(isOn: Binding(
+                        get: { shownMetrics.contains(status.metric) },
+                        set: { setDraft(status.metric, enabled: $0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(status.metric.title)
+                            Text(detail(for: status.state))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .healthMuleCard(padding: 0)
+                    .accessibilityIdentifier("metric-toggle-\(status.metric.rawValue)")
+                }
+            } footer: {
+                Text(
+                    "Readable means Apple Health showed HealthMule at least one sample. Apple does not reveal denied read access."
+                )
+            }
 
-                    SectionFooter(
-                        text: "Readable means HealthKit exposed at least one matching sample to HealthMule."
-                    )
+            if let draftMetrics {
+                Section {
+                    Button("Apply and Sync") {
+                        model.applyMetricSelection(draftMetrics)
+                        self.draftMetrics = nil
+                    }
+                    .disabled(model.blocksSettingsChanges)
+                    .accessibilityIdentifier("metrics-apply-action")
+                    Button("Discard Changes", role: .cancel) {
+                        self.draftMetrics = nil
+                    }
+                    .accessibilityIdentifier("metrics-discard-action")
+                } footer: {
+                    Text("Turned-off metrics are cleared from existing daily records.")
                 }
             }
-            .frame(maxWidth: HealthMuleStyle.contentWidth)
-            .padding(.horizontal, HealthMuleStyle.pagePadding)
-            .padding(.top, 12)
-            .padding(.bottom, 36)
-            .frame(maxWidth: .infinity)
         }
-        .background(HealthMuleStyle.canvas)
-        .navigationTitle("Health data")
+        .pageStyle()
+        .navigationTitle("Metrics")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .accessibilityIdentifier("metrics-screen")
     }
 
-    private var authorizationNote: some View {
-        HealthMuleNote(
-            text: "Apple does not reveal whether read access was denied. “No readable data” can also mean that no matching sample exists."
-        )
-    }
-}
-
-private struct MetricStatusRow: View {
-    let status: MetricStatus
-
-    var body: some View {
-        IconStatusRow(
-            title: status.metric.title,
-            status: status.state.title,
-            detail: displayDetail,
-            systemImage: status.metric.systemImage,
-            tone: tone,
-            accessibilityValue: "\(status.state.title). \(accessibilityDetail)"
-        )
+    private var shownMetrics: Set<HealthMetric> {
+        draftMetrics ?? model.enabledMetrics
     }
 
-    private var displayDetail: String? {
-        if case .readable(let lastSampleAt) = status.state {
-            return "Last sample \(lastSampleAt.formatted(date: .abbreviated, time: .omitted))."
+    private func setDraft(_ metric: HealthMetric, enabled: Bool) {
+        var metrics = shownMetrics
+        if enabled {
+            metrics.insert(metric)
+        } else {
+            metrics.remove(metric)
         }
-        return nil
+        draftMetrics = metrics == model.enabledMetrics ? nil : metrics
     }
 
-    private var accessibilityDetail: String {
-        switch status.state {
-        case .checking:
-            "Checking for a visible sample."
-        case .notIncluded:
-            "Disabled in Settings."
-        case .notRequested:
-            "Review Apple Health access to include this type."
-        case .unavailable:
-            "Apple Health is unavailable."
-        case .noReadableData:
-            "No visible sample."
-        case .checkFailed:
-            "Could not check this type."
-        case .readable(let lastSampleAt):
-            "Last sample \(lastSampleAt.formatted(date: .abbreviated, time: .omitted))."
+    private func detail(for state: MetricReadState) -> String {
+        if case .readable(let lastSampleAt) = state {
+            return "Last sample \(lastSampleAt.formatted(date: .abbreviated, time: .omitted))"
         }
-    }
-
-    private var tone: StatusTone {
-        switch status.state {
-        case .checking:
-            .accent
-        case .notIncluded, .notRequested, .noReadableData:
-            .neutral
-        case .unavailable, .checkFailed:
-            .warning
-        case .readable:
-            .success
-        }
-    }
-}
-
-private extension HealthMetric {
-    var systemImage: String {
-        switch self {
-        case .bodyMass:
-            "scalemass"
-        case .stepCount:
-            "figure.walk"
-        case .activeEnergy:
-            "flame"
-        case .restingEnergy:
-            "bolt.heart"
-        case .restingHeartRate:
-            "heart"
-        case .hrvSDNN:
-            "waveform.path.ecg"
-        case .vo2Max:
-            "lungs"
-        case .sleep:
-            "bed.double"
-        case .workouts:
-            "figure.run"
-        }
+        return state.title
     }
 }

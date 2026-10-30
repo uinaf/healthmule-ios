@@ -47,7 +47,7 @@ sync.
 | Drive access was not granted | Reconnect and grant `drive.file`. |
 | Reconnect needed about weekly | The OAuth app is still in Testing. |
 | Restore fails while offline | Go online, then Try Again or foreground the app. Queued records stay. |
-| Authorized but Drive is unavailable | The folder check failed. Check connectivity and the Drive API, then Try Drive Again. If it still fails, share Settings → Diagnostics → Prepare Diagnostics. |
+| Authorized but Drive is unavailable | The folder check failed. Check connectivity and the Drive API, then Try Drive Again. If it still fails, share Advanced → Prepare Diagnostics. |
 | Managed root or `daily` folder deleted or trashed | Try Drive Again. The app republishes every staged day and a fresh manifest to the new tree. |
 
 Moving the folder within My Drive needs no action. Reset Local Sync State

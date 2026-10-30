@@ -33,7 +33,7 @@ failure-injection checks, never live health exports.
 
 ## Onboarding and permissions
 
-- [ ] A fresh install shows the Home and Settings tabs.
+- [ ] A fresh install shows one screen with Setup rows for Apple Health and Google Drive.
 - [ ] Setup, Sync details, and per-metric Health Data drill-ins return to Home; the tab bar never covers content.
 - [ ] The app requests read-only HealthKit access, never write.
 - [ ] Disable Sleep and Body Mass before the first request: the sheet omits both, their cards say Not included, and no observer or query runs for them.
