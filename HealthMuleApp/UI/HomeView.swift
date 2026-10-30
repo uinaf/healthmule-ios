@@ -379,9 +379,12 @@ struct OperationNote: View {
     let message: String
     let isFailure: Bool
 
-    init?(state: OperationState) {
+    /// Home shows sync state in its status section; other screens pass `includesSync`.
+    init?(state: OperationState, includesSync: Bool = false) {
         switch state {
-        case .idle, .working(.sync, _), .failed(.sync, _):
+        case .idle:
+            return nil
+        case .working(.sync, _) where !includesSync, .failed(.sync, _) where !includesSync:
             return nil
         case .working(_, let message), .warning(_, let message), .succeeded(_, let message):
             self.message = message
@@ -404,17 +407,20 @@ struct DiagnosticsButton: View {
     let model: AppModel
 
     var body: some View {
+        // Exports are snapshots, so preparing again captures later failures.
+        Button(
+            model.diagnosticsURL == nil ? "Prepare Diagnostics" : "Prepare Again",
+            systemImage: "doc.badge.gearshape"
+        ) {
+            Task { await model.prepareDiagnosticsExport() }
+        }
+        .disabled(model.operationState.isWorking)
+        .accessibilityIdentifier("diagnostics-action")
         if let diagnosticsURL = model.diagnosticsURL {
             ShareLink(item: diagnosticsURL) {
                 Label("Share Diagnostics", systemImage: "square.and.arrow.up")
             }
-            .accessibilityIdentifier("diagnostics-action")
-        } else {
-            Button("Prepare Diagnostics", systemImage: "doc.badge.gearshape") {
-                Task { await model.prepareDiagnosticsExport() }
-            }
-            .disabled(model.operationState.isWorking)
-            .accessibilityIdentifier("diagnostics-action")
+            .accessibilityIdentifier("diagnostics-share-action")
         }
     }
 }

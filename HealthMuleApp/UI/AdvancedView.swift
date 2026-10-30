@@ -7,7 +7,7 @@ struct AdvancedView: View {
 
     var body: some View {
         Form {
-            if let note = OperationNote(state: model.presentedOperationState) {
+            if let note = OperationNote(state: model.presentedOperationState, includesSync: true) {
                 Section { note }
             }
 
