@@ -14,50 +14,31 @@ fail() {
 [[ -f "${lock_file}" ]] ||
   fail "app dependency lock file is missing."
 
+# Plain awk keeps `make verify` free of anything beyond Swift and POSIX tools.
 declared_version="$(
-  /usr/bin/ruby -ryaml -e '
-    path = ARGV.fetch(0)
-    yaml = File.read(path)
-    supports_keywords = YAML.method(:safe_load).parameters.any? do |kind, _|
-      kind == :key
-    end
-    document =
-      if supports_keywords
-        YAML.safe_load(
-          yaml,
-          permitted_classes: [],
-          permitted_symbols: [],
-          aliases: false,
-          filename: path
-        )
-      else
-        YAML.safe_load(yaml, [], [], false, path)
-      end
-    package = document.fetch("packages", {}).fetch("GoogleSignIn", nil)
-    version = package.is_a?(Hash) ? package["exactVersion"] : nil
-    abort "missing" unless version.is_a?(String) && !version.empty?
-    puts version
-  ' "${declared_file}" 2>/dev/null
-)" || fail "GoogleSignIn exactVersion is missing."
+  awk '
+    /^[^[:space:]#]/ { in_packages = ($0 ~ /^packages:/); in_package = 0; next }
+    in_packages && /^  [^[:space:]#]/ { in_package = ($0 ~ /^  GoogleSignIn:[[:space:]]*$/); next }
+    in_package && /^    exactVersion:/ {
+      sub(/^    exactVersion:[[:space:]]*/, ""); gsub(/["\047[:space:]]/, ""); print
+    }
+  ' "${declared_file}"
+)"
+[[ "${declared_version}" =~ ^[0-9]+(\.[0-9]+)*$ ]] ||
+  fail "GoogleSignIn exactVersion is missing."
 
 locked_version="$(
-  /usr/bin/ruby -rjson -e '
-    document = JSON.parse(File.read(ARGV.fetch(0)))
-    pins = document.fetch("pins", []).select do |pin|
-      pin["identity"] == "googlesignin-ios"
-    end
-    abort "invalid-count" unless pins.length == 1
-    version = pins.first.fetch("state", {})["version"]
-    abort "missing-version" unless version.is_a?(String) && !version.empty?
-    puts version
-  ' "${lock_file}" 2>/dev/null
-)" || fail "GoogleSignIn lock must contain exactly one versioned pin."
+  awk '
+    /"identity"[[:space:]]*:/ { in_pin = ($0 ~ /"googlesignin-ios"/) }
+    in_pin && /"version"[[:space:]]*:/ {
+      sub(/.*"version"[[:space:]]*:[[:space:]]*"/, ""); sub(/".*/, ""); print
+    }
+  ' "${lock_file}"
+)"
+[[ "${locked_version}" =~ ^[0-9]+(\.[0-9]+)*$ ]] ||
+  fail "GoogleSignIn lock must contain exactly one versioned pin."
 
 [[ "${declared_version}" == "${locked_version}" ]] ||
   fail "GoogleSignIn declaration and lock versions differ."
 
-if [[ "${APP_DEPENDENCY_PRINT_VERSION:-0}" == "1" ]]; then
-  printf '%s\n' "${declared_version}"
-else
-  printf 'GoogleSignIn %s declaration and lock match.\n' "${declared_version}"
-fi
+printf 'GoogleSignIn %s declaration and lock match.\n' "${declared_version}"
