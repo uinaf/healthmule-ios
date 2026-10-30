@@ -6,6 +6,10 @@ struct MetricsView: View {
 
     var body: some View {
         Form {
+            if let note = OperationNote(state: model.presentedOperationState, includesSync: true) {
+                Section { note }
+            }
+
             Section {
                 ForEach(model.metricStatuses) { status in
                     Toggle(isOn: Binding(
