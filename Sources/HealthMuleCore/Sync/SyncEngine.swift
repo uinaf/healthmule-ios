@@ -205,7 +205,7 @@ public actor SyncEngine {
 
         for (index, artifact) in artifacts.enumerated() {
             try Task.checkCancellation()
-            var isLastSettledArtifact = false
+            var stopAfterDailyFailure = false
             do {
                 try await destination.upsert(artifact)
                 try Task.checkCancellation()
@@ -242,7 +242,7 @@ public actor SyncEngine {
                     )
                 )
                 if artifact.id.kind == .daily {
-                    isLastSettledArtifact = true
+                    stopAfterDailyFailure = true
                 }
             }
             await progress?(
@@ -251,7 +251,7 @@ public actor SyncEngine {
                     totalArtifacts: artifacts.count
                 )
             )
-            if isLastSettledArtifact {
+            if stopAfterDailyFailure {
                 break
             }
         }
