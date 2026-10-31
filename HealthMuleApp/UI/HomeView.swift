@@ -88,8 +88,12 @@ struct HomeView: View {
                     .modifier(SubtitleStyle())
             )
         }
-        if let progress = model.syncProgress, progress.totalUnits > 0 {
-            return AnyView(Text(progress.dayText).modifier(SubtitleStyle()))
+        if model.operationState.isWorking(.sync) {
+            return AnyView(
+                Text(model.syncProgress?.detailText ?? "Starting")
+                    .accessibilityIdentifier("sync-detail")
+                    .modifier(SubtitleStyle())
+            )
         }
         if showsSyncFacts {
             return AnyView(
@@ -441,8 +445,10 @@ struct SyncDayProgressView: View {
                     .font(.title2.bold())
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                Text("of \(progress.totalUnits.formatted())")
+                Text("of \(progress.totalUnits.formatted()) \(progress.phase.unitNoun)")
                     .font(.footnote)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .foregroundStyle(.secondary)
             }
         }

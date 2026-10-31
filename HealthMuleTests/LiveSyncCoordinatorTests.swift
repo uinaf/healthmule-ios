@@ -37,7 +37,19 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(committedMetrics.isEmpty)
         XCTAssertFalse(queriedBeforeRecovery)
         XCTAssertEqual(
-            progress,
+            progress.filter { $0.phase == .checking },
+            [
+                SyncProgress(
+                    phase: .checking,
+                    completedUnits: 0,
+                    totalUnits: 1,
+                    currentDate: nil
+                ),
+            ],
+            "The HealthKit change queries must report progress before staging."
+        )
+        XCTAssertEqual(
+            progress.filter { $0.phase == .staging },
             [
                 SyncProgress(
                     phase: .staging,
@@ -370,7 +382,7 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         let progress = await progressLog.snapshot()
         XCTAssertEqual(changed.count, 1)
         XCTAssertTrue(committed.isEmpty)
-        XCTAssertTrue(progress.isEmpty)
+        XCTAssertTrue(progress.allSatisfy { $0.phase == .checking })
         XCTAssertNil(fixture.defaults.stringArray(forKey: "sync.lastStagedMetrics"))
     }
 

@@ -134,7 +134,16 @@ actor LiveSyncCoordinator {
         )
         var batches: [HealthAnchoredChangeBatch] = []
         if trigger != .rebuild {
-            for metric in HealthMetric.allCases where enabledMetrics.contains(metric) {
+            let metrics = HealthMetric.allCases.filter(enabledMetrics.contains)
+            for (index, metric) in metrics.enumerated() {
+                await progress?(
+                    SyncProgress(
+                        phase: .checking,
+                        completedUnits: index,
+                        totalUnits: metrics.count,
+                        currentDate: nil
+                    )
+                )
                 try Task.checkCancellation()
                 let batch = try await healthKit.changedDates(
                     for: metric,
