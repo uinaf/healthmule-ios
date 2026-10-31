@@ -74,7 +74,22 @@ final class HealthMuleUITests: XCTestCase {
             "Processing 12 of 30 days · Jul 12, 2026"
         )
         XCTAssertTrue(app.staticTexts["Syncing"].exists)
+        XCTAssertEqual(
+            app.staticTexts["sync-detail"].label,
+            "Reading Jul 12 from Apple Health"
+        )
         XCTAssertFalse(element("sync-now-action", in: app).exists)
+    }
+
+    @MainActor
+    func testSyncWithoutProgressSaysItIsStarting() throws {
+        let app = launch(additionalArguments: [
+            "--ui-ready",
+            "--ui-operation-working",
+        ])
+
+        XCTAssertTrue(app.staticTexts["Syncing"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["sync-detail"].label, "Starting")
     }
 
     @MainActor

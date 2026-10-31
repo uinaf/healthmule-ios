@@ -65,11 +65,13 @@ enum SyncTrigger: String, Codable, Equatable, Sendable {
 
 struct SyncProgress: Equatable, Sendable {
     enum Phase: Equatable, Sendable {
+        case checking
         case staging
         case uploading
 
         var unitNoun: String {
             switch self {
+            case .checking: "metrics"
             case .staging: "days"
             case .uploading: "files"
             }
@@ -77,6 +79,7 @@ struct SyncProgress: Equatable, Sendable {
 
         var verb: String {
             switch self {
+            case .checking: "Checking"
             case .staging: "Processing"
             case .uploading: "Uploading"
             }
@@ -107,15 +110,25 @@ struct SyncProgress: Equatable, Sendable {
         totalUnits > 0 ? Double(completedUnits) / Double(totalUnits) : 0
     }
 
-    /// The phase and current day, for the line under the progress ring.
-    var dayText: String {
-        guard
-            let currentDate,
-            let day = BackfillDateCodec.date(from: currentDate.rawValue)
-        else {
-            return phase.verb
+    /// What the sync is doing right now, for the line under the status title.
+    var detailText: String {
+        switch phase {
+        case .checking:
+            return "Looking for changes in Apple Health"
+        case .staging:
+            guard totalUnits > 0 else {
+                return "No new data in Apple Health"
+            }
+            guard
+                let currentDate,
+                let day = BackfillDateCodec.date(from: currentDate.rawValue)
+            else {
+                return "Reading Apple Health"
+            }
+            return "Reading \(day.formatted(.dateTime.month(.abbreviated).day())) from Apple Health"
+        case .uploading:
+            return "Uploading to Google Drive"
         }
-        return "\(phase.verb) \(day.formatted(.dateTime.month(.abbreviated).day()))"
     }
 }
 
