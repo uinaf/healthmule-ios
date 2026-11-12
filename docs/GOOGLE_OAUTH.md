@@ -11,8 +11,8 @@ widen it.
 3. While an External app is in Testing, add the Google account that will run
    the app as a test user.
 4. Create an OAuth client of type **iOS**. Set its bundle ID to
-   `HEALTHMULE_BUNDLE_IDENTIFIER`: `dev.uinaf.healthmule` by default, or the
-   value in ignored `Config/Signing.xcconfig`.
+   `HEALTHMULE_BUNDLE_IDENTIFIER` from ignored `Config/Signing.xcconfig`, or
+   its default in [`Config/App.xcconfig`](../Config/App.xcconfig).
 5. Record the client ID and its reversed-client-ID URL scheme.
 
 Add no web client or client secret: a native app cannot keep one secret.

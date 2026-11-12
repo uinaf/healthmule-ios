@@ -5,7 +5,8 @@ and OAuth tokens out of logs, commits, and reports.
 
 ## Setup
 
-Requires full Xcode with the iOS 26 and watchOS 26 SDKs and Swift 6.
+Requires full Xcode with the iOS and watchOS SDKs for the deployment targets
+in [`project.yml`](project.yml).
 
 ```sh
 make project                        # also provisions the pinned XcodeGen
@@ -19,8 +20,8 @@ work needs [Google OAuth setup](docs/GOOGLE_OAUTH.md).
 ## Validation
 
 ```sh
-make verify        # required gate: Swift parse plus core tests
-make verify-full   # adds the iOS unit and Simulator UI suites
+make verify        # required gate
+make verify-full   # adds the Xcode test suites
 ```
 
 Focused targets live in the [`Makefile`](Makefile).
