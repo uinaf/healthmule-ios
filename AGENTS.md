@@ -15,7 +15,7 @@ only a signed device can prove.
 
 ## Toolchain
 
-- `make verify` needs only Swift 6 and runs on Linux. iPhone and Watch builds
+- `make verify` needs only a Swift toolchain and runs on Linux. iPhone and Watch builds
   need full Xcode with the iOS and watchOS SDKs.
 - Call the `scripts/` wrappers, not bare `swift`, `xcodebuild`, or `xcrun`.
   They find `/Applications/Xcode*.app` when `xcode-select` points at
@@ -29,7 +29,7 @@ only a signed device can prove.
 
 `make verify` only parses app and iOS test sources; it does not type-check
 them. App, Watch, and UI changes also need `make build` or `make smoke`.
-`make verify-full` adds the iOS unit and Simulator UI suites.
+`make verify-full` adds the Xcode test suites.
 
 ## Delivery
 

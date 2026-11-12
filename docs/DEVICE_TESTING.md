@@ -17,8 +17,9 @@ for background Watch Connectivity.
 
 ## Setup
 
-Needs iOS 26+, watchOS 26+ for companion checks, an Apple Development team,
-and a [Google iOS client](GOOGLE_OAUTH.md) whose bundle ID matches the build.
+Needs devices at the deployment targets in [`project.yml`](../project.yml), a
+paired Watch for companion checks, an Apple Development team, and a
+[Google iOS client](GOOGLE_OAUTH.md) whose bundle ID matches the build.
 
 ```sh
 make verify-full
@@ -48,7 +49,7 @@ failure-injection checks, never live health exports.
 
 ## Foreground sync
 
-- [ ] A 30-day backfill creates one JSON file per date plus a manifest.
+- [ ] A backfill creates one JSON file per date plus a manifest.
 - [ ] Backfill progress counts days while staging, then files while uploading; it never sits at 100% through the upload.
 - [ ] Retry pending uploads shows upload progress.
 - [ ] Changing the history range, start date, or included metrics starts nothing until Apply and Sync.
@@ -70,7 +71,7 @@ failure-injection checks, never live health exports.
 - [ ] Pending, retryable, and blocked work each show as a separate nonzero row, beside Last successful sync.
 - [ ] With the iPhone reachable, Sync reports the request accepted before reconciliation finishes.
 - [ ] Without reachability, Sync is unavailable and the headline says Phone Unavailable, never Up to Date.
-- [ ] A snapshot older than 30 minutes shows Status Out of Date with its last successful sync and counts, never Up to Date.
+- [ ] A stale snapshot shows Status Out of Date with its last successful sync and counts, never Up to Date.
 - [ ] After reachability returns, a new request publishes a fresh snapshot.
 - [ ] Leave the Watch app; after background delivery, the latest snapshot appears on reopen.
 
@@ -80,7 +81,7 @@ failure-injection checks, never live health exports.
 - [ ] An app-refresh task records one Background refresh receipt; the schedule row says Submitted, Existing request kept, or a closed failure reason.
 - [ ] Interrupting connectivity during an upload causes a retry of the same operation, with no duplicate files.
 - [ ] Switch accounts or replace the folder tree while an upload waits for connectivity: the new destination is not Connected until the old transfer gets a definitive HTTP response. If draining times out, Drive stays unavailable for retry. Reconnecting the unchanged destination keeps its transfer scheduled.
-- [ ] With connectivity down for over 15 seconds, the visible sync returns to pending while the background transfer stays scheduled.
+- [ ] With connectivity down past the response-wait timeout, the visible sync returns to pending while the background transfer stays scheduled.
 - [ ] Locking the device during staging handles protected files safely after first unlock.
 - [ ] Terminating the app during an upload lets the transfer reconcile after relaunch.
 - [ ] After a force-quit, nothing promises background execution before the next launch.
@@ -98,7 +99,7 @@ e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWith
 - [ ] Console logs hold no health values, OAuth tokens, Drive file bodies, or raw HealthKit metadata.
 - [ ] Shared diagnostics stay bounded and redacted.
 - [ ] Outbox, anchor, day-boundary, and activity-receipt files use data protection and are excluded from backups.
-- [ ] The activity-receipt file holds at most 20 entries with no health values, record bodies, metadata, tokens, account details, or Drive IDs.
+- [ ] The activity-receipt file stays bounded and holds no health values, record bodies, metadata, tokens, account details, or Drive IDs.
 - [ ] Disconnect or reset never deletes Drive exports.
 - [ ] Cancelling each destructive Settings confirmation changes nothing. Move Drive Exports to Trash moves only tagged exports, leaves other files and folders, and disconnects Google.
 - [ ] Interrupt that cleanup midway and relaunch: uploads stay paused; explicit sign-in republishes the preserved records.

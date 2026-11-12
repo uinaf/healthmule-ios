@@ -9,8 +9,8 @@ Health metrics as daily JSON files in your Google Drive.
 
 ## Quick start
 
-Requires full Xcode with the iOS 26 and watchOS 26 SDKs and Simulator
-runtimes, and Swift 6.
+Requires full Xcode with the iOS and watchOS SDKs and Simulator runtimes for
+the deployment targets in [`project.yml`](project.yml).
 
 ```sh
 make project
