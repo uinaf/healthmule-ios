@@ -17,3 +17,5 @@ HealthMule.xcodeproj/project.xcworkspace/xcshareddata/*
 !HealthMule.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 HealthMule.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/*
 !HealthMule.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+.worktrees/
+.claude/worktrees/
