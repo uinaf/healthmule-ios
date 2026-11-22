@@ -15,7 +15,8 @@ widen it.
    its default in [`Config/App.xcconfig`](../Config/App.xcconfig).
 5. Record the client ID and its reversed-client-ID URL scheme.
 
-Add no web client or client secret: a native app cannot keep one secret.
+The iOS client is the only credential: a native app cannot keep a client
+secret.
 
 ## Configure the checkout
 
