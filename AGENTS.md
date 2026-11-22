@@ -6,6 +6,7 @@ files in the user's own Google Drive. There is no developer backend.
 ## Start here
 
 - `make project` generates the Xcode project with the pinned XcodeGen.
+  Another XcodeGen version rewrites the whole project file.
 - `make run` builds and launches in Simulator.
 - `make verify` is the required gate before any push.
 
@@ -17,26 +18,23 @@ only a signed device can prove.
 
 - `make verify` needs only a Swift toolchain and runs on Linux. iPhone and Watch builds
   need full Xcode with the iOS and watchOS SDKs.
-- Call the `scripts/` wrappers, not bare `swift`, `xcodebuild`, or `xcrun`.
+- Call `swift`, `xcodebuild`, and `xcrun` through the `scripts/` wrappers.
   They find `/Applications/Xcode*.app` when `xcode-select` points at
   CommandLineTools.
 - `make test`, `make smoke`, `make harness`, and `make run` need `xcode-select`
   on a full Xcode.
-- Use only `make project`: another XcodeGen version rewrites the whole project
-  file.
 
 ## Validation
 
-`make verify` only parses app and iOS test sources; it does not type-check
-them. App, Watch, and UI changes also need `make build` or `make smoke`.
+`make verify` parses app and iOS test sources without type-checking them.
+App, Watch, and UI changes also need `make build` or `make smoke`.
 `make verify-full` adds the Xcode test suites.
 
 ## Delivery
 
 - Open a pull request; merge after the required `verify` check passes.
-- Merging ships nothing. Upload to TestFlight with
-  `gh workflow run testflight.yml --ref main`. External testing and App Store
-  submission are manual.
+- Upload to TestFlight with `gh workflow run testflight.yml --ref main`.
+  External testing and App Store submission are manual.
 
 ## Repo rules
 
@@ -49,8 +47,6 @@ them. App, Watch, and UI changes also need `make build` or `make smoke`.
   from the `daily/<date>.json` files.
 - OAuth config lives in ignored `Config/Secrets.xcconfig`, signing in ignored
   `Config/Signing.xcconfig`, runtime tokens in Keychain.
-- Simulator fixtures prove development behavior only. Background delivery and
-  real Drive uploads need the physical-device checklist.
 
 ## Repository skills
 
