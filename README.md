@@ -1,3 +1,5 @@
+![healthmule-ios — private Apple Health exports to Google Drive.](https://uinaf.dev/og/banner/healthmule-ios.png)
+
 # HealthMule
 
 An iPhone and Apple Watch app that exports a small, read-only set of Apple
